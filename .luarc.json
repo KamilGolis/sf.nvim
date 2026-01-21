@@ -1,0 +1,12 @@
+{
+  "runtime.version": "LuaJIT",
+  "workspace.library": [
+    "/usr/share/nvim/runtime/lua",
+    "/home/kgolis/.local/share/nvim/lazy/"
+    // You might need to add paths to specific plugins within the lazy directory
+    // if the language server doesn't automatically find their Lua modules, e.g.:
+    // "/home/kgolis/.local/share/nvim/lazy/plenary.nvim/lua",
+    // "/home/kgolis/.local/share/nvim/lazy/telescope.nvim/lua"
+  ],
+  "diagnostics.globals": ["vim"]
+}
