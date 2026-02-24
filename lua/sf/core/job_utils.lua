@@ -210,7 +210,7 @@ function M.notify_operation_result(success, context, details)
 
     local message = details or context.failure_message
     vim.notify(message, vim.log.levels.ERROR)
-    deb("Job failuer message", message)
+    deb("Job failure message", message)
   end
 end
 
