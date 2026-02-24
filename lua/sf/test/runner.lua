@@ -344,7 +344,7 @@ function TestRunner.show_last_results(options)
   
   deb("Test Results Job output JSON", result)
 
-  if not ok or not result or not result.result then
+  if not result or not result.result then
     vim.notify("Failed to parse test results file", vim.log.levels.ERROR)
     return
   end
