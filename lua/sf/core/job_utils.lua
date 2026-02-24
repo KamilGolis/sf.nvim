@@ -64,11 +64,14 @@ function M.create_cli_job(command, args, callbacks)
     args = args,
     on_exit = function(job, return_val)
       vim.schedule(function()
+        deb("CLI job exit", { command = command, return_val = return_val })
         if return_val == 0 then
           if callbacks.on_success then
             callbacks.on_success(job, return_val)
           end
         else
+          local stderr = job:stderr_result()
+          deb("CLI job error", { command = command, return_val = return_val, stderr = stderr })
           if callbacks.on_error then
             callbacks.on_error(job, return_val)
           end
@@ -131,14 +134,19 @@ end
 --- @return string|nil error_message Error message if validation fails
 --- @usage local ok, data, err = JobUtils.validate_json_response('{"result": {}}', {result = "table"})
 function M.validate_json_response(json_string, expected_structure)
+  deb("Validate JSON response", json_string)
+
   if not json_string or json_string == "" then
     return false, nil, "Empty JSON response"
   end
 
   local ok, parsed = pcall(vim.json.decode, json_string)
   if not ok then
+    deb("JSON parse error:", json_string)
     return false, nil, Const.SF_CLI_MESSAGES.JSON_PARSE_ERROR
   end
+  
+  deb("Parsed JSON:", parsed)
 
   -- If expected structure is provided, validate it
   if expected_structure then
@@ -180,6 +188,8 @@ function M.handle_cli_error(_, context, custom_error_message)
 
   -- Log the error for debugging
   vim.notify(error_message, vim.log.levels.ERROR)
+  deb("CLI Error", error_message)
+  trace()
 end
 
 --- Notifies operation result with consistent formatting
@@ -200,6 +210,7 @@ function M.notify_operation_result(success, context, details)
 
     local message = details or context.failure_message
     vim.notify(message, vim.log.levels.ERROR)
+    deb("Job failure message", message)
   end
 end
 
@@ -214,7 +225,10 @@ end
 --- @return string|nil error_message Error message if parsing fails
 --- @usage local ok, info, err = JobUtils.parse_version_info("@salesforce/cli/2.15.9 darwin-x64 node-v18.17.1")
 function M.parse_version_info(result)
+  deb("Parsing SF CLI version info:", result)
+  
   if not result or result == "" then
+    deb("Empty version output")
     return false, nil, "Empty version output"
   end
 
@@ -253,9 +267,11 @@ function M.parse_version_info(result)
 
   -- Validate that we found at least the current version
   if not version_info.current_version then
+    deb("Unable to parse version from output")
     return false, nil, "Unable to parse version information from SF CLI output"
   end
 
+  deb("Parsed version info:", version_info)
   return true, version_info, nil
 end
 

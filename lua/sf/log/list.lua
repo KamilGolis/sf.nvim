@@ -4,6 +4,7 @@
 local Snacks = require("snacks")
 
 local Config = require("sf.config")
+local PathUtils = require("sf.core.path_utils")
 local Const = require("sf.const")
 local Connector = require("sf.org.connect")
 local JobUtils = require("sf.core.job_utils")
@@ -18,7 +19,8 @@ local LogList = {}
 --- Get the path to store log list results
 --- @return string The path to store log list JSON
 local function get_log_list_path()
-    return ".sf/sf.nvim/logs/logList.json"
+    local config = Config:get_options()
+    return PathUtils.join(config.cache_path, "logs", "logList.json")
 end
 
 --- Process log list JSON response and convert to picker format
@@ -27,6 +29,8 @@ end
 --- @return table|nil logs Array of log items for picker, or nil if processing failed
 --- @return string|nil error_message Error message if processing fails
 local function process_log_list(json_response)
+    deb("Log list JSON response:", json_response)
+    
     -- Validate and parse the JSON response
     local success, parsed, error_message = JobUtils.validate_json_response(json_response, {
         status = "number",
@@ -34,11 +38,15 @@ local function process_log_list(json_response)
     })
 
     if not success then
+        deb("Failed to validate log list JSON:", error_message)
         return false, nil, error_message
     end
+    
+    deb("Parsed log list:", parsed)
 
     -- Check if the parsed result has the expected structure
     if not parsed or not parsed.result or parsed.status ~= 0 then
+        deb("Invalid log list structure or command failed")
         return false, nil, "Invalid log list response format or command failed"
     end
 
@@ -101,6 +109,7 @@ local function process_log_list(json_response)
         end
     end
 
+    deb("Processed log list entries:", { count = #logs })
     return true, logs, nil
 end
 
@@ -473,7 +482,11 @@ function LogList.list_logs(options)
         -- Create and start the job
         local job = JobUtils.create_cli_job(executable_path, args, {
             on_success = function(job, return_val)
+                deb("Log list job success", { return_val = return_val })
+                
                 local result = table.concat(job:result(), "\n")
+                
+                deb("Log list raw result:", result)
 
                 -- Save results to file
                 local file = io.open(result_file, "w")
@@ -529,7 +542,9 @@ function LogList.list_logs(options)
                 context.handle:report({ message = context.success_message, percentage = 100 })
                 context.handle:finish()
             end,
-            on_error = function(_, return_val)
+            on_error = function(job, return_val)
+                local stderr = job:stderr_result()
+                deb("Log list job error", { return_val = return_val, stderr = stderr })
                 JobUtils.handle_cli_error(return_val, context)
             end,
         })

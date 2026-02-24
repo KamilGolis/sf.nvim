@@ -1,6 +1,7 @@
 --- sf-nvim plugin for Neovim - Salesforce plugin
 -- @license MIT
 
+local PathUtils = require("sf.core.path_utils")
 local Utils = require("sf.core.utils")
 if not Utils.has_sfdx_project() then
   return
@@ -21,6 +22,12 @@ end
 
 vim.g.loaded_sf_nvim = true
 vim.g.sf_cli_checked = false
+
+-- Ensure cache directory exists on startup
+local cache_path = Config:get_options().cache_path
+if vim.fn.isdirectory(cache_path) == 0 then
+  vim.fn.mkdir(cache_path, "p")
+end
 
 --- Set autocommand for opening buffer and attaching diagnostics from store
 vim.api.nvim_create_autocmd("BufEnter", {
@@ -44,7 +51,7 @@ if default_path then
   indexes.index_files(default_path)
 else
   -- Fallback to hardcoded path if sfdx-project.json parsing fails
-  indexes.index_files("/force-app/main/default")
+  indexes.index_files(PathUtils.join(PathUtils.get_separator(), "force-app", "main", "default"))
 end
 
 --- Define the sf command with subcommands

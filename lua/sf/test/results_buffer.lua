@@ -1,6 +1,7 @@
 --- sf-nvim test results buffer module
 -- @license MIT
 
+local PathUtils = require("sf.core.path_utils")
 local Utils = require("sf.core.utils")
 
 local TestResultsBuffer = {}
@@ -242,14 +243,14 @@ function TestResultsBuffer.open_test_source(class_name, method_name, line_number
   -- Try to find the class file
   local sf_root = Utils.get_sf_root()
   local possible_paths = {
-    sf_root .. "force-app/main/default/classes/" .. class_name .. ".cls",
-    sf_root .. "src/classes/" .. class_name .. ".cls",
+    PathUtils.join(sf_root, "force-app", "main", "default", "classes", class_name .. ".cls"),
+    PathUtils.join(sf_root, "src", "classes", class_name .. ".cls"),
   }
 
   -- Check default package path from sfdx-project.json
   local default_path = Utils.get_default_package_path()
   if default_path then
-    table.insert(possible_paths, 1, sf_root .. default_path .. "/classes/" .. class_name .. ".cls")
+    table.insert(possible_paths, 1, PathUtils.join(sf_root, default_path, "classes", class_name .. ".cls"))
   end
 
   local class_file = nil

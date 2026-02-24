@@ -1,10 +1,10 @@
+local PathUtils = require("sf.core.path_utils")
 local Config = require("sf.config")
 local Connector = require("sf.org.connect")
 local Diagnostics = require("sf.core.diagnostics")
 local Indexes = require("sf.core.indexes")
 local Utils = require("sf.core.utils")
 local DeployUtils = require("sf.deploy.utils")
-local Const = require("sf.const")
 
 local deploy_job = nil
 
@@ -29,6 +29,8 @@ end
 function Metadata:deploy_metadata(force)
   Connector:check_cli(function()
     -- Validate pre-deployment conditions
+    deb("Starting Deploy Metadata function...")
+
     if
       not DeployUtils.handle_validation_result(
         DeployUtils.validate_deployment_preconditions(deploy_job, Connector, Utils)
@@ -38,7 +40,7 @@ function Metadata:deploy_metadata(force)
     end
 
     local options = Config:get_options()
-    local current_file = vim.fn.expand("%:p")
+    local current_file = PathUtils.normalize(vim.fn.expand("%:p"))
 
     -- Setup deployment environment and create context
     local context = DeployUtils.setup_deployment_environment(
@@ -68,6 +70,8 @@ end
 --- Uses generated callbacks for manifest preparation and deployment with standardized job creation patterns.
 --- @param force boolean|nil Whether to ignore conflicts during deployment
 function Metadata:deploy_changed_metadatas(force)
+  deb("Starting Deploy Changed Metadata function...")
+
   Connector:check_cli(function()
     -- Validate pre-deployment conditions
     if
@@ -109,6 +113,8 @@ end
 --- Uses generated callbacks for manifest preparation and deployment with proper error handling.
 --- @param force boolean|nil Whether to ignore conflicts during deployment
 function Metadata:deploy_selected_metadata(force)
+  deb("Starting Deploy Selected Metadata function...")
+
   Connector:check_cli(function()
     -- Validate pre-deployment conditions
     if

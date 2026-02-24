@@ -1,3 +1,6 @@
+local PathUtils = require("sf.core.path_utils")
+local Snacks = require("snacks")
+
 local M = {}
 
 --- Check if a job is running
@@ -17,7 +20,7 @@ end
 --- @return string The file name extracted from the full path
 --- @usage local filename = utils.get_file_name("classes/myClass.cls") -- returns "myClass.cls"
 function M.get_file_name(full_path)
-  return full_path:match("[^/]+$")
+  return PathUtils.get_filename(full_path)
 end
 
 --- Get sf project root directory by searching for .forceignore or sfdx-project.json files
@@ -44,9 +47,7 @@ function M.get_sf_root()
     error("File not in a sf project folder")
   end
 
-  if root:sub(-1) ~= "/" then
-    root = root .. "/"
-  end
+  root = PathUtils.ensure_trailing_separator(root)
 
   return root
 end
@@ -55,7 +56,8 @@ end
 --- @return boolean True if sfdx-project.json exists, false otherwise
 --- @usage local has_project = utils.has_sfdx_project()
 function M.has_sfdx_project()
-  return vim.fn.filereadable(vim.fn.getcwd() .. "/sfdx-project.json") == 1
+  local project_file = PathUtils.join(vim.fn.getcwd(), "sfdx-project.json")
+  return vim.fn.filereadable(project_file) == 1
 end
 
 --- Find a file in a directory and its subdirectories recursively
@@ -68,17 +70,15 @@ function M.find_file(path, target)
   -- if scanner is nil, then path is not a valid dir
   if scanner then
     local file, type = vim.loop.fs_scandir_next(scanner)
-    if path:sub(-1) ~= "/" then
-      path = path .. "/"
-    end
+    path = PathUtils.ensure_trailing_separator(path)
     while file do
       if type == "directory" then
-        local found = M.find_file(path .. file, target)
+        local found = M.find_file(PathUtils.join(path, file), target)
         if found then
           return found
         end
       elseif file == target then
-        return path .. file
+        return PathUtils.join(path, file)
       end
       -- get the next file and type
       file, type = vim.loop.fs_scandir_next(scanner)
@@ -90,7 +90,7 @@ end
 --- @return string|nil The path to the default package directory with /main/default appended, or nil if not found
 --- @usage local default_path = utils.get_default_package_path()
 function M.get_default_package_path()
-  local project_file = vim.fn.getcwd() .. "/sfdx-project.json"
+  local project_file = PathUtils.join(vim.fn.getcwd(), "sfdx-project.json")
 
   if vim.fn.filereadable(project_file) ~= 1 then
     return nil
@@ -102,25 +102,57 @@ function M.get_default_package_path()
   end
 
   local json_string = table.concat(file_content, "\n")
+  deb("sfdx-project.json content:", json_string)
+
   local ok, project_config = pcall(vim.json.decode, json_string)
 
-  if not ok or not project_config or not project_config.packageDirectories then
+  if not ok then
+    deb("Failed to parse sfdx-project.json")
+    return nil
+  end
+
+  deb("Parsed sfdx-project.json:", project_config)
+
+  if not project_config or not project_config.packageDirectories then
+    deb("No packageDirectories found in sfdx-project.json")
     return nil
   end
 
   -- Find the default package directory
   for _, package_dir in ipairs(project_config.packageDirectories) do
     if package_dir.default and package_dir.path then
-      return "/" .. package_dir.path .. "/main/default"
+      return PathUtils.join(PathUtils.get_separator(), package_dir.path, "main", "default")
     end
   end
 
   -- If no default found, use the first package directory
   if #project_config.packageDirectories > 0 and project_config.packageDirectories[1].path then
-    return "/" .. project_config.packageDirectories[1].path .. "/main/default"
+    return PathUtils.join(
+      PathUtils.get_separator(),
+      project_config.packageDirectories[1].path,
+      "main",
+      "default"
+    )
   end
 
   return nil
+end
+
+--- Log entity based on context (debug) mode
+function M.log(context, entity)
+  if context.options.debug and entity.title and entity.value then
+    Snacks.debug.log(entity.title, entity.value)
+    Snacks.debug.inspect(entity.title, entity.value)
+  end
+end
+
+function M.force_log(entity)
+  local context = {
+    options = {
+      debug = true,
+    },
+  }
+  M.log(context, entity)
 end
 
 return M
