@@ -448,7 +448,7 @@ function DeployUtils.create_manifest_preparation_callback(context, next_job)
   return function(j, return_val)
     if return_val == 0 then
       DeployUtils.notify_manifest_success(context)
-      -- Start the deployment job after manifest preparatio
+      -- Start the deployment job after manifest preparation
       next_job:start()
     else
       vim.schedule(function()
