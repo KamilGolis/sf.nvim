@@ -1,6 +1,7 @@
 local Snacks = require("snacks")
 
 local Config = require("sf.config")
+local PathUtils = require("sf.core.path_utils")
 local Const = require("sf.const")
 local JobUtils = require("sf.core.job_utils")
 
@@ -95,7 +96,7 @@ end
 --- @return string|nil error_message Error message if check fails
 --- @usage local has_org, username, err = OrgUtils.check_default_org()
 function M.check_default_org()
-  local config_path = ".sf/config.json"
+  local config_path = PathUtils.join(".", ".sf", "config.json")
   
   -- Check if config file exists
   if vim.fn.filereadable(config_path) ~= 1 then
@@ -109,18 +110,29 @@ function M.check_default_org()
   end
 
   local json_string = table.concat(file_content, "\n")
+  deb("SF CLI config content:", json_string)
+  
   local ok, config = pcall(vim.json.decode, json_string)
 
-  if not ok or not config then
+  if not ok then
+    deb("Failed to parse SF CLI config file")
+    return false, nil, "Failed to parse SF CLI config file"
+  end
+  
+  deb("Parsed SF CLI config:", config)
+
+  if not config then
     return false, nil, "Failed to parse SF CLI config file"
   end
 
   -- Check if target-org is set
   local target_org = config["target-org"]
   if not target_org or target_org == "" then
+    deb("No target-org found in SF CLI config")
     return false, nil, Const.SF_CLI_MESSAGES.NO_DEFAULT_ORG
   end
 
+  deb("Found target org:", target_org)
   return true, target_org, nil
 end
 

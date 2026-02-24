@@ -1,5 +1,6 @@
 --- Module for indexing files in a project directory
 --- @class Indexes
+local PathUtils = require("sf.core.path_utils")
 local M = {}
 
 --- Table to store the file index
@@ -19,7 +20,7 @@ end
 --- @param path string The relative path to the project directory
 --- @usage indexes.index_files("/force-app")
 function M.index_files(path)
-  local cwd = vim.loop.cwd() .. path
+  local cwd = PathUtils.normalize(PathUtils.join(vim.loop.cwd(), path))
 
   local function scan_directory(dir_path)
     local handle = vim.loop.fs_scandir(dir_path)
@@ -34,7 +35,7 @@ function M.index_files(path)
         break
       end
 
-      local full_path = dir_path .. "/" .. name
+      local full_path = PathUtils.normalize(PathUtils.join(dir_path, name))
       if type == "file" then
         file_index[name] = full_path
       elseif type == "directory" then
@@ -45,7 +46,10 @@ function M.index_files(path)
   end
 
   scan_directory(cwd)
-  vim.notify("Indexed " .. vim.tbl_count(file_index) .. " files in project directory: " .. cwd, vim.log.levels.INFO)
+  vim.notify(
+    "Indexed " .. vim.tbl_count(file_index) .. " files in project directory: " .. cwd,
+    vim.log.levels.INFO
+  )
 end
 
 return M

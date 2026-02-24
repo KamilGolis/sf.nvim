@@ -1,5 +1,4 @@
 local Path = require("plenary.path")
-local Snacks = require("snacks")
 
 local Process = require("sf.core.process")
 local Diagnostics = require("sf.core.diagnostics")
@@ -133,7 +132,7 @@ function DeployUtils.notify_parsing_failure(context)
     if context.deployment_type == "current_file" and context.current_file then
       vim.notify(
         "Failed to parse deployment result for file: "
-        .. vim.fn.fnamemodify(context.current_file, ":t"),
+          .. vim.fn.fnamemodify(context.current_file, ":t"),
         vim.log.levels.ERROR
       )
     else
@@ -261,14 +260,17 @@ end
 --- @param return_val number The return value from the job execution
 --- @return boolean success Whether the deployment was successful
 function DeployUtils.process_deployment_result(json_output, context, return_val)
+  deb("Deployment JSON output:", json_output)
+  
   local ok, deploy_result = pcall(vim.json.decode, json_output)
 
   -- Save the JSON output to file for debugging
-  local deploy_json_path = Path:new(context.options.cache_path, "deploy.json")
+  local deploy_json_path = Path:new(context.options.deploy_file)
 
-  if context.options.debug then
-    Snacks.debug.log("Deploy result", deploy_result)
-    Snacks.debug.log("Deploy result JSON", json_output)
+  if not ok then
+    deb("Failed to parse deployment JSON")
+  else
+    deb("Deployment result:", deploy_result)
   end
 
   if ok then
@@ -285,26 +287,23 @@ function DeployUtils.process_deployment_result(json_output, context, return_val)
 
     -- Check if deployment was successful
     if
-        deploy_result.result
-        and deploy_result.result.status == "Succeeded"
-        and deploy_result.result.success == true
+      deploy_result.result
+      and deploy_result.result.status == "Succeeded"
+      and deploy_result.result.success == true
     then
       DeployUtils.notify_deployment_success(context)
       return true
     else
       -- Deployment failed - process failures and create diagnostics
+      deb("Deployment failed result:", deploy_result)
       DeployUtils.notify_deployment_failure(context)
-
-      if context.options.debug then
-        Snacks.debug.log("Deployment failed", deploy_result)
-      end
 
       -- Process component failures and create diagnostics
       if
-          deploy_result.result
-          and deploy_result.result.details
-          and deploy_result.result.details.componentFailures
-          and deploy_result.result.files
+        deploy_result.result
+        and deploy_result.result.details
+        and deploy_result.result.details.componentFailures
+        and deploy_result.result.files
       then
         local diagnostic_results = DeployUtils.extract_component_failures(deploy_result)
         DeployUtils.create_diagnostic_entries(diagnostic_results)
@@ -336,14 +335,14 @@ function DeployUtils.extract_component_failures(deploy_result)
     end
 
     results[component_failure.fullName] =
-        vim.tbl_deep_extend("keep", results[component_failure.fullName], {
-          full_name = component_failure.fullName,
-          file_name = component_failure.fileName,
-          error_line_number = component_failure.lineNumber,
-          error_column_number = component_failure.columnNumber,
-          error_type = component_failure.problemType,
-          component_type = component_failure.componentType,
-        })
+      vim.tbl_deep_extend("keep", results[component_failure.fullName], {
+        full_name = component_failure.fullName,
+        file_name = component_failure.fileName,
+        error_line_number = component_failure.lineNumber,
+        error_column_number = component_failure.columnNumber,
+        error_type = component_failure.problemType,
+        component_type = component_failure.componentType,
+      })
   end
 
   -- Process file errors
@@ -356,6 +355,7 @@ function DeployUtils.extract_component_failures(deploy_result)
     end
   end
 
+  deb("Deployment diagnostics extract: ", results)
   return results
 end
 
@@ -415,18 +415,8 @@ function DeployUtils.create_job_chain_callback(context, next_job, cleanup_job, j
   return function(j, return_val)
     if return_val ~= 0 then
       vim.schedule(function()
-        if context.options.debug then
-          Snacks.debug.inspect(
-            "Failed to run job: " .. (job_name or "Unnamed Job"),
-            { j = j, return_val = return_val, context = context }
-          )
-          Snacks.debug.log(
-            "Failed to run job: " .. (job_name or "Unnamed Job"),
-            { j = j, return_val = return_val, context = context }
-          )
-        else
-          DeployUtils.notify_job_failure(context, job_name)
-        end
+        deb("Failed to run job:" .. (job_name or "Unnamed Job"), { j = j, return_val = return_val, context = context })
+        DeployUtils.notify_job_failure(context, job_name)
 
         if cleanup_job then
           cleanup_job:start()
@@ -434,16 +424,7 @@ function DeployUtils.create_job_chain_callback(context, next_job, cleanup_job, j
       end)
     else
       vim.schedule(function()
-        if context.options.debug then
-          Snacks.debug.inspect(
-            "Completed job: " .. (job_name or "Unnamed Job"),
-            { j = j, return_val = return_val, context = context }
-          )
-          Snacks.debug.log(
-            "Completed job: " .. (job_name or "Unnamed Job"),
-            { j = j, return_val = return_val, context = context }
-          )
-        end
+        deb("Completed job:" .. (job_name or "Unnamed Job"), { j = j, return_val = return_val, context = context })
 
         -- Start the next job after the current one finishes
         if next_job then
@@ -467,14 +448,11 @@ function DeployUtils.create_manifest_preparation_callback(context, next_job)
   return function(j, return_val)
     if return_val == 0 then
       DeployUtils.notify_manifest_success(context)
-      -- Start the deployment job after manifest preparation
+      -- Start the deployment job after manifest preparatio
       next_job:start()
     else
       vim.schedule(function()
-        if context.options.debug then
-          Snacks.debug.inspect("Manifest preparation failed", j:result())
-          Snacks.debug.log("Manifest preparation failed", j:result())
-        end
+        deb("Manifest preparation failed:", j:result())
         DeployUtils.notify_manifest_failure(context)
       end)
     end
@@ -509,19 +487,20 @@ end
 --- @param diagnostics table The diagnostics instance for clearing previous diagnostics
 --- @return DeploymentContext context The prepared deployment context
 function DeployUtils.setup_deployment_environment(
-    deployment_type,
-    current_file,
-    files,
-    options,
-    diagnostics
+  deployment_type,
+  current_file,
+  files,
+  options,
+  diagnostics
 )
   -- Clear previous diagnostics
   diagnostics:clear_diagnostics()
 
   -- Create deployment context with progress handle
   local context =
-      DeployUtils.create_deployment_context(deployment_type, current_file, files, options)
+    DeployUtils.create_deployment_context(deployment_type, current_file, files, options)
 
+  deb("Setup deployment context: ", context)
   return context
 end
 
@@ -605,8 +584,8 @@ function DeployUtils.prepare_quickfix_files_for_deployment(files)
   for _, file in ipairs(files) do
     local f = io.open(file, "a") -- Open file in append mode
     if f then
-      f:write("\n")              -- Write a new line at the end
-      f:close()                  -- Close the file
+      f:write("\n") -- Write a new line at the end
+      f:close() -- Close the file
     else
       return false, "Failed to open file for modification: " .. file
     end
@@ -636,9 +615,11 @@ function DeployUtils.create_deploy_job(args, context, options)
     on_exit = callback,
     on_stdout = function(_, data)
       -- Handle stdout if needed for progress reporting
+      deb("Create deploy job stdout: ", data)
     end,
     on_stderr = function(_, data)
       -- Handle stderr if needed for error reporting
+      deb("Create deploy job stderr: ", data)
     end,
   })
 end
@@ -684,12 +665,12 @@ end
 --- @param options table|nil Additional options for job configuration
 --- @return table job The created git operation job
 function DeployUtils.create_git_operation_job(
-    operation,
-    context,
-    next_job,
-    cleanup_job,
-    job_name,
-    options
+  operation,
+  context,
+  next_job,
+  cleanup_job,
+  job_name,
+  options
 )
   local Job = require("plenary.job")
   options = options or {}
@@ -778,6 +759,7 @@ end
 --- @return table job The created deployment job
 function DeployUtils.create_current_file_deploy_job(current_file, context, options, force)
   local args = Const.get_current_file_deploy_args(current_file, context.options.api_version, force)
+  deb("Create current file deploy job args: ", args)
   return DeployUtils.create_deploy_job(args, context, options)
 end
 
@@ -789,6 +771,7 @@ end
 --- @return table job The created deployment job
 function DeployUtils.create_manifest_deploy_job(manifest_path, context, options, force)
   local args = Const.get_manifest_deploy_args(manifest_path, context.options.api_version, force)
+  deb("Create manidest deploy job args: ", args)
   return DeployUtils.create_deploy_job(args, context, options)
 end
 
