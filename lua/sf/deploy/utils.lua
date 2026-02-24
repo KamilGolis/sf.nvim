@@ -771,7 +771,7 @@ end
 --- @return table job The created deployment job
 function DeployUtils.create_manifest_deploy_job(manifest_path, context, options, force)
   local args = Const.get_manifest_deploy_args(manifest_path, context.options.api_version, force)
-  deb("Create manidest deploy job args: ", args)
+  deb("Create manifest deploy job args: ", args)
   return DeployUtils.create_deploy_job(args, context, options)
 end
 
