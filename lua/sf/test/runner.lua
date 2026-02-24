@@ -134,10 +134,9 @@ local function process_test_results(json_output, test_name)
   
   deb("Test Results parsed:", result)
 
-  if not ok or not result or not result.result then
-    deb("Invalid test results structure")
+  if not result or not result.result then
+    deb("Failed to parse test results: invalid result structure")
     vim.notify("Failed to parse test results", vim.log.levels.ERROR)
-    deb("Failed to parse test results")
     return false
   end
 
