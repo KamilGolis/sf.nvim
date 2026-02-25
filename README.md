@@ -2,6 +2,8 @@
 
 A comprehensive Neovim plugin for Salesforce development that integrates the Salesforce CLI directly into your editor workflow.
 
+As a Salesforce developer, I’ve mostly used VS Code and WebStorm with Illuminated Cloud until now. However, I love Neovim, so I decided to build my own 'wrapper' for the Salesforce CLI. Initially, it was just a simple plugin that executed commands and displayed the output within Neovim. I didn't intend to publish it because it's still quite buggy, lacks features, and might not even work properly. But a recent computer crash convinced me to push it to GitHub just to have a backup. While there are already a few interesting Salesforce plugins for Neovim out there, none of them quite clicked for me, so I decided to build something of my own.
+
 <div align="center">
 
 ![Neovim](https://img.shields.io/badge/NeoVim-%2357A143.svg?&style=for-the-badge&logo=neovim&logoColor=white)
