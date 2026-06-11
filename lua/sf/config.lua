@@ -1,5 +1,5 @@
-local Snacks = require("snacks")
 local PathUtils = require("sf.core.path_utils")
+local Snacks = require("snacks")
 local Config = {}
 
 -- Initialize debug functions as no-ops by default
@@ -29,14 +29,12 @@ function Config:new()
   }
 
   -- Normalize cache_path to absolute path with OS separators (no trailing separator)
-  o.options.cache_path = PathUtils.remove_trailing_separator(
-    PathUtils.normalize(vim.fn.fnamemodify(o.options.cache_path, ":p"))
-  )
+  o.options.cache_path =
+    PathUtils.remove_trailing_separator(PathUtils.normalize(vim.fn.fnamemodify(o.options.cache_path, ":p")))
   -- Construct full paths using path utilities
   o.options.deploy_file = PathUtils.join(o.options.cache_path, o.options.deploy_file)
   o.options.test_results_file = PathUtils.join(o.options.cache_path, o.options.test_results_file)
-  o.options.coverage_results_file =
-    PathUtils.join(o.options.cache_path, o.options.coverage_results_file)
+  o.options.coverage_results_file = PathUtils.join(o.options.cache_path, o.options.coverage_results_file)
   o.options.delta_path = PathUtils.join(o.options.cache_path, o.options.delta_dir)
   -- Delta package manifest file
   o.options.delta_manifest_path = PathUtils.join(o.options.delta_path, "package", "package.xml")

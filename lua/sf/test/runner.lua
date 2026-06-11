@@ -1,12 +1,12 @@
 --- sf-nvim test runner module
 -- @license MIT
 
-local Job = require("plenary.job")
+local JobUtils = require("sf.core.job_utils")
 local Snacks = require("snacks")
 
-local Process = require("sf.core.process")
-local Const = require("sf.const")
 local Connector = require("sf.org.connect")
+local Const = require("sf.const")
+local Process = require("sf.core.process")
 local TestResultsBuffer = require("sf.test.results_buffer")
 
 local TestRunner = {}
@@ -123,7 +123,7 @@ end
 --- @return boolean True if tests passed, false if failed
 local function process_test_results(json_output, test_name)
   deb("Test results JSON output:", json_output)
-  
+
   local ok, result = pcall(vim.json.decode, json_output)
 
   if not ok then
@@ -131,7 +131,7 @@ local function process_test_results(json_output, test_name)
     vim.notify("Failed to parse test results", vim.log.levels.ERROR)
     return false
   end
-  
+
   deb("Test Results parsed:", result)
 
   if not result or not result.result then
@@ -178,7 +178,7 @@ function TestRunner.run_class_tests(class_name, options)
 
     local args = Const.get_apex_test_class_args(class_name)
 
-    local job = Job:new({
+    local job = JobUtils.create_system_job({
       command = sf_cli_path,
       args = args,
       on_start = function()
@@ -214,7 +214,7 @@ function TestRunner.run_class_tests(class_name, options)
 
             local stderr = j:stderr_result()
             deb("Test execution error", { stderr = stderr, return_val = return_val, stdout = stdout })
-            
+
             if options.debug then
               if stderr and #stderr > 0 then
                 deb("Test execution stderr (debug mode)", { stderr = stderr, return_val = return_val })
@@ -256,7 +256,7 @@ function TestRunner.run_method_test(class_name, method_name, options)
 
     local args = Const.get_apex_test_method_args(test_name)
 
-    local job = Job:new({
+    local job = JobUtils.create_system_job({
       command = sf_cli_path,
       args = args,
       on_start = function()
@@ -292,7 +292,7 @@ function TestRunner.run_method_test(class_name, method_name, options)
 
             local stderr = j:stderr_result()
             deb("Test execution error", { stderr = stderr, return_val = return_val, stdout = stdout })
-            
+
             if options.debug then
               if stderr and #stderr > 0 then
                 deb("Test execution stderr (debug mode)", { stderr = stderr, return_val = return_val })
@@ -320,7 +320,8 @@ function TestRunner.show_last_results(options)
   if vim.fn.filereadable(result_file) ~= 1 then
     vim.notify(
       "No tests have been executed yet. Run tests first with ':Sf test class' or ':Sf test method' to generate results.",
-      vim.log.levels.INFO)
+      vim.log.levels.INFO
+    )
     return
   end
 
@@ -333,7 +334,7 @@ function TestRunner.show_last_results(options)
 
   local json_string = table.concat(file_content, "\n")
   deb("Last test results file content:", json_string)
-  
+
   local ok, result = pcall(vim.json.decode, json_string)
 
   if not ok then
@@ -341,7 +342,7 @@ function TestRunner.show_last_results(options)
     vim.notify("Failed to parse test results file", vim.log.levels.ERROR)
     return
   end
-  
+
   deb("Test Results Job output JSON", result)
 
   if not result or not result.result then
@@ -439,7 +440,7 @@ function TestRunner.run_class_coverage(class_name, options)
 
     local args = Const.get_apex_test_class_args(class_name, true) -- true for coverage
 
-    local job = Job:new({
+    local job = JobUtils.create_system_job({
       command = sf_cli_path,
       args = args,
       on_start = function()
@@ -462,7 +463,8 @@ function TestRunner.run_class_coverage(class_name, options)
             handle:report({ message = "Processing coverage results...", percentage = 90 })
 
             local tests_passed = process_test_results(json_output, class_name)
-            local final_message = tests_passed and "Coverage completed successfully" or "Coverage completed with test failures"
+            local final_message = tests_passed and "Coverage completed successfully"
+              or "Coverage completed with test failures"
 
             handle:report({ message = final_message, percentage = 100 })
             vim.notify("Coverage execution completed for class: " .. class_name, vim.log.levels.INFO)
@@ -473,7 +475,7 @@ function TestRunner.run_class_coverage(class_name, options)
 
             local stderr = j:stderr_result()
             deb("Coverage execution error", { stderr = stderr, return_val = return_val, stdout = stdout })
-            
+
             if options.debug then
               if stderr and #stderr > 0 then
                 deb("Coverage execution stderr (debug mode)", { stderr = stderr, return_val = return_val })
@@ -515,7 +517,7 @@ function TestRunner.run_method_coverage(class_name, method_name, options)
 
     local args = Const.get_apex_test_method_args(test_name, true) -- true for coverage
 
-    local job = Job:new({
+    local job = JobUtils.create_system_job({
       command = sf_cli_path,
       args = args,
       on_start = function()
@@ -538,7 +540,8 @@ function TestRunner.run_method_coverage(class_name, method_name, options)
             handle:report({ message = "Processing coverage results...", percentage = 90 })
 
             local tests_passed = process_test_results(json_output, test_name)
-            local final_message = tests_passed and "Coverage completed successfully" or "Coverage completed with test failures"
+            local final_message = tests_passed and "Coverage completed successfully"
+              or "Coverage completed with test failures"
 
             handle:report({ message = final_message, percentage = 100 })
             vim.notify("Coverage execution completed: " .. test_name, vim.log.levels.INFO)
@@ -549,7 +552,7 @@ function TestRunner.run_method_coverage(class_name, method_name, options)
 
             local stderr = j:stderr_result()
             deb("Coverage execution error", { stderr = stderr, return_val = return_val, stdout = stdout })
-            
+
             if options.debug then
               if stderr and #stderr > 0 then
                 deb("Coverage execution stderr (debug mode)", { stderr = stderr, return_val = return_val })
@@ -614,7 +617,8 @@ function TestRunner.show_last_coverage_results(options)
   if vim.fn.filereadable(result_file) ~= 1 then
     vim.notify(
       "No coverage has been executed yet. Run coverage first with ':Sf coverage class' or ':Sf coverage method' to generate results.",
-      vim.log.levels.INFO)
+      vim.log.levels.INFO
+    )
     return
   end
 
@@ -627,7 +631,7 @@ function TestRunner.show_last_coverage_results(options)
 
   local json_string = table.concat(file_content, "\n")
   deb("Last coverage results file content:", json_string)
-  
+
   local ok, result = pcall(vim.json.decode, json_string)
 
   if not ok then
@@ -635,7 +639,7 @@ function TestRunner.show_last_coverage_results(options)
     vim.notify("Failed to parse coverage results file", vim.log.levels.ERROR)
     return
   end
-  
+
   deb("Coverage Results parsed:", result)
 
   if not result or not result.result then

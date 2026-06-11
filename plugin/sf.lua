@@ -11,8 +11,8 @@ local Config = require("sf.config")
 local Connector = require("sf.org.connect")
 local Deployment = require("sf.deploy.metadata")
 local Diagnostics = require("sf.core.diagnostics")
-local TestRunner = require("sf.test.runner")
 local LogList = require("sf.log.list")
+local TestRunner = require("sf.test.runner")
 
 local indexes = require("sf.core.indexes")
 

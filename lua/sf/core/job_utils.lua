@@ -1,4 +1,3 @@
-local Job = require("plenary.job")
 local Const = require("sf.const")
 local Process = require("sf.core.process")
 
@@ -52,31 +51,100 @@ function M.create_progress_context(title, success_message, failure_message)
   }
 end
 
+--- Creates a job using Neovim native vim.system (compat API)
+--- @param config table { command: string, args: string[], on_start?: fun(), on_stdout?: fun(err: string, data: string), on_stderr?: fun(err: string, data: string), on_exit: fun(self: table, code: number) }
+--- @return table { start: function, result: function, stderr_result: function }
+function M.create_system_job(config)
+  local self = {
+    _command = config.command,
+    _args = config.args or {},
+    _stdout = "",
+    _stderr = "",
+  }
+
+  function self.start()
+    if config.on_start then
+      vim.schedule(config.on_start)
+    end
+
+    local opts = { text = true }
+    if config.on_stdout then
+      opts.stdout = function(err, data)
+        if data then
+          self._stdout = self._stdout .. data
+        end
+        config.on_stdout(err, data)
+      end
+    else
+      opts.stdout = function(_, data)
+        if data then
+          self._stdout = self._stdout .. data
+        end
+      end
+    end
+    if config.on_stderr then
+      opts.stderr = function(err, data)
+        if data then
+          self._stderr = self._stderr .. data
+        end
+        config.on_stderr(err, data)
+      end
+    else
+      opts.stderr = function(_, data)
+        if data then
+          self._stderr = self._stderr .. data
+        end
+      end
+    end
+
+    local args = { self._command }
+    for _, a in ipairs(self._args) do
+      table.insert(args, a)
+    end
+
+    self._sys_obj = vim.system(args, opts, function(obj)
+      vim.schedule(function()
+        if config.on_exit then
+          config.on_exit(self, obj.code)
+        end
+      end)
+    end)
+    return self._sys_obj
+  end
+
+  function self.result()
+    return vim.split(self._stdout or "", "\n")
+  end
+
+  function self.stderr_result()
+    return vim.split(self._stderr or "", "\n")
+  end
+
+  return self
+end
+
 --- Creates a standardized SF CLI job with consistent error handling
 --- @param command string The SF CLI executable path
 --- @param args table Command arguments array
 --- @param callbacks table Table containing on_success and on_error callbacks
 --- @return table The created Job instance
---- @usage local job = JobUtils.create_cli_job("/usr/bin/sf", {"--version"}, {on_success = function() end})
 function M.create_cli_job(command, args, callbacks)
-  return Job:new({
+  return M.create_system_job({
     command = command,
     args = args,
     on_exit = function(job, return_val)
-      vim.schedule(function()
-        deb("CLI job exit", { command = command, return_val = return_val })
-        if return_val == 0 then
-          if callbacks.on_success then
-            callbacks.on_success(job, return_val)
-          end
-        else
-          local stderr = job:stderr_result()
-          deb("CLI job error", { command = command, return_val = return_val, stderr = stderr })
-          if callbacks.on_error then
-            callbacks.on_error(job, return_val)
-          end
+      deb("CLI job exit", { command = command, return_val = return_val })
+      if return_val == 0 then
+        if callbacks.on_success then
+          callbacks.on_success(job, return_val)
         end
-      end)
+      else
+        local stderr = job:stderr_result()
+        deb("CLI job error", { command = command, return_val = return_val, stderr = stderr })
+        if callbacks.on_error then
+          callbacks.on_error(job, return_val)
+        end
+      end
     end,
   })
 end
@@ -145,7 +213,7 @@ function M.validate_json_response(json_string, expected_structure)
     deb("JSON parse error:", json_string)
     return false, nil, Const.SF_CLI_MESSAGES.JSON_PARSE_ERROR
   end
-  
+
   deb("Parsed JSON:", parsed)
 
   -- If expected structure is provided, validate it
@@ -158,12 +226,7 @@ function M.validate_json_response(json_string, expected_structure)
       if expected_type ~= "any" and type(parsed[key]) ~= expected_type then
         return false,
           nil,
-          string.format(
-            "Invalid type for field %s: expected %s, got %s",
-            key,
-            expected_type,
-            type(parsed[key])
-          )
+          string.format("Invalid type for field %s: expected %s, got %s", key, expected_type, type(parsed[key]))
       end
     end
   end
@@ -226,7 +289,7 @@ end
 --- @usage local ok, info, err = JobUtils.parse_version_info("@salesforce/cli/2.15.9 darwin-x64 node-v18.17.1")
 function M.parse_version_info(result)
   deb("Parsing SF CLI version info:", result)
-  
+
   if not result or result == "" then
     deb("Empty version output")
     return false, nil, "Empty version output"
@@ -296,8 +359,7 @@ function M.format_version_message(version_info, executable_path)
 
   -- Add update information if available
   if version_info.has_update and version_info.available_version then
-    message = message
-      .. string.format(Const.SF_CLI_MESSAGES.VERSION_UPDATE_FORMAT, version_info.available_version)
+    message = message .. string.format(Const.SF_CLI_MESSAGES.VERSION_UPDATE_FORMAT, version_info.available_version)
   end
 
   return message

@@ -127,12 +127,7 @@ function M.get_default_package_path()
 
   -- If no default found, use the first package directory
   if #project_config.packageDirectories > 0 and project_config.packageDirectories[1].path then
-    return PathUtils.join(
-      PathUtils.get_separator(),
-      project_config.packageDirectories[1].path,
-      "main",
-      "default"
-    )
+    return PathUtils.join(PathUtils.get_separator(), project_config.packageDirectories[1].path, "main", "default")
   end
 
   return nil

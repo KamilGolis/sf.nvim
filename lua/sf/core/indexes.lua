@@ -46,10 +46,7 @@ function M.index_files(path)
   end
 
   scan_directory(cwd)
-  vim.notify(
-    "Indexed " .. vim.tbl_count(file_index) .. " files in project directory: " .. cwd,
-    vim.log.levels.INFO
-  )
+  vim.notify("Indexed " .. vim.tbl_count(file_index) .. " files in project directory: " .. cwd, vim.log.levels.INFO)
 end
 
 return M

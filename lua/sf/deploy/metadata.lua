@@ -1,10 +1,10 @@
-local PathUtils = require("sf.core.path_utils")
 local Config = require("sf.config")
 local Connector = require("sf.org.connect")
+local DeployUtils = require("sf.deploy.utils")
 local Diagnostics = require("sf.core.diagnostics")
 local Indexes = require("sf.core.indexes")
+local PathUtils = require("sf.core.path_utils")
 local Utils = require("sf.core.utils")
-local DeployUtils = require("sf.deploy.utils")
 
 local deploy_job = nil
 
@@ -43,13 +43,7 @@ function Metadata:deploy_metadata(force)
     local current_file = PathUtils.normalize(vim.fn.expand("%:p"))
 
     -- Setup deployment environment and create context
-    local context = DeployUtils.setup_deployment_environment(
-      "current_file",
-      current_file,
-      nil,
-      options,
-      Diagnostics
-    )
+    local context = DeployUtils.setup_deployment_environment("current_file", current_file, nil, options, Diagnostics)
 
     -- Notify deployment start
     DeployUtils.notify_deployment_start(context)
@@ -85,8 +79,7 @@ function Metadata:deploy_changed_metadatas(force)
     local options = Config:get_options()
 
     -- Setup deployment environment and create context
-    local context =
-      DeployUtils.setup_deployment_environment("changed_files", nil, nil, options, Diagnostics)
+    local context = DeployUtils.setup_deployment_environment("changed_files", nil, nil, options, Diagnostics)
 
     -- Notify deployment start
     DeployUtils.notify_deployment_start(context)
@@ -131,10 +124,7 @@ function Metadata:deploy_selected_metadata(force)
     if not quickfix_success then
       DeployUtils.handle_validation_result(false, quickfix_error)
       if missing_files and #missing_files > 0 then
-        vim.notify(
-          "Missing indexed files: " .. table.concat(missing_files, ", "),
-          vim.log.levels.WARN
-        )
+        vim.notify("Missing indexed files: " .. table.concat(missing_files, ", "), vim.log.levels.WARN)
       end
       return
     end
@@ -142,13 +132,7 @@ function Metadata:deploy_selected_metadata(force)
     local options = Config:get_options()
 
     -- Setup deployment environment and create context
-    local context = DeployUtils.setup_deployment_environment(
-      "selected_files",
-      nil,
-      found_files,
-      options,
-      Diagnostics
-    )
+    local context = DeployUtils.setup_deployment_environment("selected_files", nil, found_files, options, Diagnostics)
 
     -- Notify deployment start
     DeployUtils.notify_deployment_start(context)

@@ -48,14 +48,14 @@ local function parse_coverage_data()
 
   local json_string = table.concat(file_content, "\n")
   deb("Coverage file content:", json_string)
-  
+
   local ok, result = pcall(vim.json.decode, json_string)
 
   if not ok then
     deb("Failed to parse coverage JSON")
     return nil
   end
-  
+
   deb("Parsed coverage result:", result)
 
   if not result or not result.result or not result.result.coverage then
@@ -199,4 +199,3 @@ function Coverage.on_buffer_enter(bufnr)
 end
 
 return Coverage
-

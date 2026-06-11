@@ -1,9 +1,9 @@
 local Snacks = require("snacks")
 
 local Config = require("sf.config")
-local PathUtils = require("sf.core.path_utils")
 local Const = require("sf.const")
 local JobUtils = require("sf.core.job_utils")
+local PathUtils = require("sf.core.path_utils")
 
 local M = {}
 
@@ -97,7 +97,7 @@ end
 --- @usage local has_org, username, err = OrgUtils.check_default_org()
 function M.check_default_org()
   local config_path = PathUtils.join(".", ".sf", "config.json")
-  
+
   -- Check if config file exists
   if vim.fn.filereadable(config_path) ~= 1 then
     return false, nil, Const.SF_CLI_MESSAGES.NO_DEFAULT_ORG
@@ -111,14 +111,14 @@ function M.check_default_org()
 
   local json_string = table.concat(file_content, "\n")
   deb("SF CLI config content:", json_string)
-  
+
   local ok, config = pcall(vim.json.decode, json_string)
 
   if not ok then
     deb("Failed to parse SF CLI config file")
     return false, nil, "Failed to parse SF CLI config file"
   end
-  
+
   deb("Parsed SF CLI config:", config)
 
   if not config then
@@ -155,8 +155,7 @@ function M.set_target_org(org_data, context, callback)
     )
 
   -- Validate CLI installation
-  local cli_valid, executable_path, error_msg =
-    JobUtils.validate_cli_installation(Config:get_options().sf_cli_path)
+  local cli_valid, executable_path, error_msg = JobUtils.validate_cli_installation(Config:get_options().sf_cli_path)
   if not cli_valid or not executable_path then
     local error_message = error_msg or "SF CLI validation failed"
     JobUtils.handle_cli_error(1, progress_context, error_message)
@@ -174,10 +173,8 @@ function M.set_target_org(org_data, context, callback)
     on_success = function(job, return_val)
       JobUtils.handle_cli_result(job, return_val, progress_context, function()
         -- Notify success with org details
-        local success_message = string.format(
-          Const.SF_CLI_MESSAGES.ORG_SET_SUCCESS_FORMAT,
-          org_data.alias or org_data.username
-        )
+        local success_message =
+          string.format(Const.SF_CLI_MESSAGES.ORG_SET_SUCCESS_FORMAT, org_data.alias or org_data.username)
         vim.notify(success_message, vim.log.levels.INFO)
 
         if callback then

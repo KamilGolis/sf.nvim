@@ -38,8 +38,7 @@ local function check_sf_cli(callback)
   end
 
   -- Validate CLI installation using utility function
-  local cli_valid, executable_path, error_msg =
-    JobUtils.validate_cli_installation(Config:get_options().sf_cli_path)
+  local cli_valid, executable_path, error_msg = JobUtils.validate_cli_installation(Config:get_options().sf_cli_path)
   if not cli_valid or not executable_path then
     callback(false)
     vim.notify(error_msg or Const.SF_CLI_MESSAGES.NOT_FOUND, vim.log.levels.ERROR)
@@ -70,11 +69,7 @@ local function check_sf_cli(callback)
         callback(true)
         vim.g.sf_cli_checked = true
       else
-        JobUtils.handle_cli_error(
-          return_val,
-          context,
-          parse_error or Const.SF_CLI_MESSAGES.VERSION_UNKNOWN
-        )
+        JobUtils.handle_cli_error(return_val, context, parse_error or Const.SF_CLI_MESSAGES.VERSION_UNKNOWN)
         callback(false)
       end
     end,
@@ -114,8 +109,7 @@ function Connect:select_default_org()
   -- First, check if SF CLI is installed
   check_sf_cli(function(_)
     -- Validate CLI installation using utility function
-    local cli_valid, executable_path, error_msg =
-      JobUtils.validate_cli_installation(Config:get_options().sf_cli_path)
+    local cli_valid, executable_path, error_msg = JobUtils.validate_cli_installation(Config:get_options().sf_cli_path)
     if not cli_valid or not executable_path then
       vim.notify(error_msg or Const.SF_CLI_MESSAGES.NOT_FOUND, vim.log.levels.ERROR)
       return

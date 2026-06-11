@@ -5,8 +5,7 @@ local M = {}
 -- =============================================================================
 
 --- Regex patterns for parsing SF CLI version information
-M.UPDATE_WARNING_PATTERN =
-"›%s+Warning:%s+@salesforce/cli%s+update%s+available%s+from%s+([%d%.]+)%s+to%s+([%d%.]+)"
+M.UPDATE_WARNING_PATTERN = "›%s+Warning:%s+@salesforce/cli%s+update%s+available%s+from%s+([%d%.]+)%s+to%s+([%d%.]+)"
 M.VERSION_INFO_PATTERN = "@salesforce/cli/([%d%.]+)%s+([%S]+)%s+(node%-v[%d%.]+)"
 M.CURRENT_VERSION_PATTERN = "([%d%.]+)%s+to%s+([%d%.]+)"
 M.PLATFORM_PATTERN = "%s+([%S]+)%s+"
@@ -21,26 +20,26 @@ M.VERSION_NUMBER_PATTERN = "([%d%.]+)"
 M.ICONS = {
   -- Status icons
   SUCCESS = "✅",
-  ERROR = "❌", 
+  ERROR = "❌",
   WARNING = "⚠️ ",
   INFO = "ℹ️ ",
-  
+
   -- Application icons
   BROWSER = "🌐",
   API = "🔌",
   BATCH = "⚙️ ",
   MOBILE = "📱",
-  
+
   -- Performance icons
   FAST = "⚡",
   MEDIUM = "⏱️ ",
   SLOW = "🐌",
-  
+
   -- Size icons
   LARGE_FILE = "📊",
   MEDIUM_FILE = "📄",
   SMALL_FILE = "📝",
-  
+
   -- General icons
   LOG_ID = "🆔",
   USER = "👤",
