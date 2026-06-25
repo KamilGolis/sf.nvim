@@ -1,9 +1,5 @@
 local M = {}
 
--- =============================================================================
--- REGEX PATTERNS
--- =============================================================================
-
 --- Regex patterns for parsing SF CLI version information
 M.UPDATE_WARNING_PATTERN = "›%s+Warning:%s+@salesforce/cli%s+update%s+available%s+from%s+([%d%.]+)%s+to%s+([%d%.]+)"
 M.VERSION_INFO_PATTERN = "@salesforce/cli/([%d%.]+)%s+([%S]+)%s+(node%-v[%d%.]+)"
@@ -11,10 +7,6 @@ M.CURRENT_VERSION_PATTERN = "([%d%.]+)%s+to%s+([%d%.]+)"
 M.PLATFORM_PATTERN = "%s+([%S]+)%s+"
 M.NODE_VERSION_PATTERN = "(node%-v[%d%.]+)"
 M.VERSION_NUMBER_PATTERN = "([%d%.]+)"
-
--- =============================================================================
--- ICONS
--- =============================================================================
 
 --- Font icons for UI elements
 M.ICONS = {
@@ -57,10 +49,6 @@ M.ICONS = {
   LINK = "🔗",
 }
 
--- =============================================================================
--- STRING FORMATS
--- =============================================================================
-
 --- String format templates for displaying Salesforce org details
 M.ORG_DETAILS_FORMAT = {
   HEADER = "Selected Org Information:",
@@ -74,10 +62,6 @@ M.ORG_DETAILS_FORMAT = {
   IS_SANDBOX = "Is Sandbox: %s",
   API_VERSION = "API Version: %s",
 }
-
--- =============================================================================
--- SF CLI CONNECTION MESSAGES
--- =============================================================================
 
 --- Messages for SF CLI connection and org operations
 M.SF_CLI_MESSAGES = {
@@ -104,10 +88,6 @@ M.SF_CLI_MESSAGES = {
   LOG_LIST_EMPTY = "No debug logs found",
   NO_DEFAULT_ORG = "No default org set. Please set a default org first using ':Sf org set'",
 }
-
--- =============================================================================
--- COMMAND DEFINITIONS
--- =============================================================================
 
 --- Salesforce CLI commands and their arguments
 --- Supported commands:
@@ -219,10 +199,6 @@ M.SHELL = {
   },
 }
 
--- =============================================================================
--- UTILITY FUNCTIONS
--- =============================================================================
-
 --- Generates formatted lines for org details preview
 --- Generates formatted preview lines for org details display
 --- @param org table The org object containing details (alias, instanceUrl, username, etc.)
@@ -250,10 +226,6 @@ end
 local function split_cmd(cmd)
   return vim.split(cmd, " ")
 end
-
--- =============================================================================
--- COMMAND BUILDERS
--- =============================================================================
 
 --- Constructs arguments for SF CLI project generation command
 --- @param options table Configuration options containing temp_project_name, cache_path, and api_version
@@ -310,7 +282,7 @@ function M.get_current_file_deploy_args(current_file, api_version, force)
   local args = {}
 
   -- Add the base command
-  vim.list_extend(args, vim.split(M.SF_CLI.PROJECT.DEPLOY.CMD, " "))
+  vim.list_extend(args, split_cmd(M.SF_CLI.PROJECT.DEPLOY.CMD))
 
   -- Add the required arguments
   vim.list_extend(args, {
@@ -339,7 +311,7 @@ function M.get_manifest_deploy_args(manifest_path, api_version, force)
   local args = {}
 
   -- Add the base command
-  vim.list_extend(args, vim.split(M.SF_CLI.PROJECT.DEPLOY.CMD, " "))
+  vim.list_extend(args, split_cmd(M.SF_CLI.PROJECT.DEPLOY.CMD))
 
   -- Add the required arguments
   vim.list_extend(args, {
@@ -464,4 +436,38 @@ function M.get_apex_log_list_args(target_org)
   return args
 end
 
+--- Constructs arguments for SF CLI org list command
+--- @return table Complete argument list for sf org list --json
+function M.get_org_list_args()
+  local args = {}
+  vim.list_extend(args, split_cmd(M.SF_CLI.ORG.LIST.CMD))
+  vim.list_extend(args, { M.SF_CLI.ORG.LIST.ARGS.JSON })
+  return args
+end
+
+--- Constructs arguments for SF CLI config set target-org command
+--- @param username string The org username to set as target
+--- @return table Complete argument list for sf config set target-org [username]
+function M.get_config_set_args(username)
+  local args = {}
+  vim.list_extend(args, split_cmd(M.SF_CLI.ORG.CONFIG.SET.CMD))
+  vim.list_extend(args, { M.SF_CLI.ORG.CONFIG.SET.ARGS.TARGET_ORG, username })
+  return args
+end
+
+--- Constructs arguments for SF sgd source delta command
+--- @param output_dir string The output directory for delta files
+--- @return table Complete argument list for sf sgd source delta
+function M.get_sgd_delta_args(output_dir)
+  local args = {}
+  vim.list_extend(args, split_cmd(M.SF_CLI.SGD.SOURCE.DELTA.CMD))
+  vim.list_extend(args, {
+    M.SF_CLI.SGD.SOURCE.DELTA.ARGS.COMPARE,
+    M.SF_CLI.SGD.SOURCE.DELTA.ARGS.FROM,
+    M.SF_CLI.SGD.SOURCE.DELTA.ARGS.HEAD_REF,
+    M.SF_CLI.SGD.SOURCE.DELTA.ARGS.OUTPUT_DIR,
+    output_dir,
+  })
+  return args
+end
 return M

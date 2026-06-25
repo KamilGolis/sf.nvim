@@ -1,9 +1,41 @@
-local Process = require("sf.core.process")
+local Progress = require("sf.core.progress")
 
 local Const = require("sf.const")
 local Diagnostics = require("sf.core.diagnostics")
+local Log = require("sf.core.log")
 
 local DeployUtils = {}
+
+--- Progress state messages keyed by deployment phase
+local PROGRESS = {
+  start = { message = "Starting deployment...", percentage = 0 },
+  deploying = { message = "Deploying...", percentage = 50 },
+  deploying_selected = { message = "Deploying selected files...", percentage = 50 },
+  deploying_changed = { message = "Deploying...", percentage = 30 },
+  preparing_manifest = { message = "Preparing manifest...", percentage = 10 },
+  checking_result = { message = "Checking deployment result...", percentage = 90 },
+  success = { message = "Deployment successful", percentage = 100 },
+  failure = { message = "Deployment failed", percentage = 100 },
+  parsing_failure = { message = "Failed to parse deployment result", percentage = 100 },
+  conflict = { message = "Source conflicts detected", percentage = 100 },
+  manifest_success = { message = "Deploying...", percentage = 20 },
+}
+
+--- Report progress to the context handle
+function DeployUtils.report(context, state)
+  if context.handle and PROGRESS[state] then
+    context.handle:report(PROGRESS[state])
+  end
+end
+
+local function notify(context, state, msg, level)
+  DeployUtils.report(context, state)
+  if msg then
+    vim.schedule(function()
+      vim.notify(msg, level or vim.log.levels.INFO)
+    end)
+  end
+end
 
 --- Deployment context structure for consistent messaging across deployment methods
 --- @class DeploymentContext
@@ -41,7 +73,7 @@ function DeployUtils.create_deployment_context(deployment_type, current_file, fi
     title = "Metadata deployment"
   end
 
-  local handle = Process.create_progress_handle({ title = title })
+  local handle = Progress.create_handle({ title = title })
 
   return {
     deployment_type = deployment_type,
@@ -51,96 +83,6 @@ function DeployUtils.create_deployment_context(deployment_type, current_file, fi
     options = vim.tbl_deep_extend("force", {}, options), -- Create a deep copy of options
     metadata = {},
   }
-end
-
---- Notifies the user of deployment start with consistent messaging
---- @param context DeploymentContext The deployment context
-function DeployUtils.notify_deployment_start(context)
-  if context.handle then
-    context.handle:report({ message = "Starting deployment...", percentage = 0 })
-  end
-end
-
---- Notifies the user of successful deployment with context-aware messaging
---- @param context DeploymentContext The deployment context
-function DeployUtils.notify_deployment_success(context)
-  if context.handle then
-    context.handle:report({ message = "Deployment successful", percentage = 100 })
-  end
-
-  vim.schedule(function()
-    if context.deployment_type == "current_file" and context.current_file then
-      vim.notify("File deployed successfully: " .. vim.fn.fnamemodify(context.current_file, ":t"), vim.log.levels.INFO)
-    else
-      vim.notify("Deployment successfull", vim.log.levels.INFO)
-    end
-  end)
-end
-
---- Notifies the user of deployment failure with context-aware messaging
---- @param context DeploymentContext The deployment context
---- @param error_details table|nil Optional error details for enhanced messaging
-function DeployUtils.notify_deployment_failure(context, error_details)
-  if context.handle then
-    context.handle:report({ message = "Deployment failed", percentage = 100 })
-  end
-
-  vim.schedule(function()
-    if context.deployment_type == "current_file" and context.current_file then
-      vim.notify("Deployment failed for file: " .. vim.fn.fnamemodify(context.current_file, ":t"), vim.log.levels.ERROR)
-    else
-      vim.notify("Deployment failed", vim.log.levels.ERROR)
-    end
-  end)
-end
-
---- Notifies the user of CLI command failure with context-aware messaging
---- @param context DeploymentContext The deployment context
---- @param return_val number The return value from the failed command
-function DeployUtils.notify_cli_failure(context, return_val)
-  if context.handle then
-    context.handle:report({ message = "Deployment failed", percentage = 100 })
-  end
-
-  vim.schedule(function()
-    if context.deployment_type == "current_file" and context.current_file then
-      vim.notify("Deployment failed for file: " .. vim.fn.fnamemodify(context.current_file, ":t"), vim.log.levels.ERROR)
-    else
-      vim.notify("Deployment failed (status code " .. return_val .. ")", vim.log.levels.ERROR)
-    end
-  end)
-end
-
---- Notifies the user of JSON parsing failure with context-aware messaging
---- @param context DeploymentContext The deployment context
-function DeployUtils.notify_parsing_failure(context)
-  if context.handle then
-    context.handle:report({ message = "Failed to parse deployment result", percentage = 100 })
-  end
-
-  vim.schedule(function()
-    if context.deployment_type == "current_file" and context.current_file then
-      vim.notify(
-        "Failed to parse deployment result for file: " .. vim.fn.fnamemodify(context.current_file, ":t"),
-        vim.log.levels.ERROR
-      )
-    else
-      vim.notify("Failed to parse deployment result", vim.log.levels.ERROR)
-    end
-  end)
-end
-
---- Notifies the user of source conflict error with specific conflict details
---- @param context DeploymentContext The deployment context
---- @param conflict_message string The conflict message from SF CLI
-function DeployUtils.notify_source_conflict(context, conflict_message)
-  if context.handle then
-    context.handle:report({ message = "Source conflicts detected", percentage = 100 })
-  end
-
-  vim.schedule(function()
-    vim.notify("Source conflicts detected: " .. conflict_message, vim.log.levels.ERROR)
-  end)
 end
 
 --- Detects if the deployment result contains a SourceConflictError
@@ -156,100 +98,13 @@ function DeployUtils.detect_source_conflict(deploy_result)
   return false, nil
 end
 
---- Creates a progress reporter with standardized messaging patterns
---- @param context DeploymentContext The deployment context
---- @return table progress_reporter Object with methods for reporting progress
-function DeployUtils.create_progress_reporter(context)
-  return {
-    --- Reports deployment start progress
-    report_start = function()
-      context.handle:report({ message = "Starting deployment...", percentage = 0 })
-    end,
-
-    --- Reports manifest preparation progress
-    report_manifest_preparation = function()
-      context.handle:report({ message = "Preparing manifest...", percentage = 10 })
-    end,
-
-    --- Reports deployment in progress
-    report_deploying = function()
-      if context.deployment_type == "selected_files" then
-        context.handle:report({ message = "Deploying selected files...", percentage = 50 })
-      elseif context.deployment_type == "changed_files" then
-        context.handle:report({ message = "Deploying...", percentage = 30 })
-      else
-        context.handle:report({ message = "Deploying...", percentage = 50 })
-      end
-    end,
-
-    --- Reports result checking progress
-    report_checking_result = function()
-      context.handle:report({ message = "Checking deployment result...", percentage = 90 })
-    end,
-
-    --- Reports deployment success
-    report_success = function()
-      context.handle:report({ message = "Deployment successful", percentage = 100 })
-    end,
-
-    --- Reports deployment failure
-    report_failure = function()
-      context.handle:report({ message = "Deployment failed", percentage = 100 })
-    end,
-
-    --- Reports parsing failure
-    report_parsing_failure = function()
-      context.handle:report({ message = "Failed to parse deployment result", percentage = 100 })
-    end,
-
-    --- Finishes the progress handle
-    finish = function()
-      context.handle:finish()
-    end,
-  }
-end
-
---- Notifies the user of manifest preparation success
---- @param context DeploymentContext The deployment context
-function DeployUtils.notify_manifest_success(context)
-  vim.schedule(function()
-    vim.notify("Manifest prepared successfully", vim.log.levels.INFO)
-    if context.handle then
-      context.handle:report({ message = "Deploying...", percentage = 20 })
-    end
-  end)
-end
-
---- Notifies the user of manifest preparation failure
---- @param context DeploymentContext The deployment context
-function DeployUtils.notify_manifest_failure(context)
-  vim.schedule(function()
-    vim.notify("Failed to prepare manifest", vim.log.levels.ERROR)
-    if context.handle then
-      context.handle:finish()
-    end
-  end)
-end
-
---- Notifies the user of job failure with context-aware messaging
---- @param context DeploymentContext The deployment context
---- @param job_name string The name of the failed job
-function DeployUtils.notify_job_failure(context, job_name)
-  vim.schedule(function()
-    vim.notify("Job failed: " .. (job_name or "Unnamed Job"), vim.log.levels.ERROR)
-    if context.handle then
-      context.handle:finish()
-    end
-  end)
-end
-
 --- Processes deployment JSON result and handles success/failure scenarios
 --- @param json_output string The JSON output from the deployment command
 --- @param context DeploymentContext The deployment context
 --- @param return_val number The return value from the job execution
 --- @return boolean success Whether the deployment was successful
 function DeployUtils.process_deployment_result(json_output, context, return_val)
-  deb("Deployment JSON output:", json_output)
+  Log.deb("Deployment JSON output:", json_output)
 
   local ok, deploy_result = pcall(vim.json.decode, json_output)
 
@@ -257,9 +112,9 @@ function DeployUtils.process_deployment_result(json_output, context, return_val)
   local deploy_json_path = context.options.deploy_file
 
   if not ok then
-    deb("Failed to parse deployment JSON")
+    Log.deb("Failed to parse deployment JSON")
   else
-    deb("Deployment result:", deploy_result)
+    Log.deb("Deployment result:", deploy_result)
   end
 
   if ok then
@@ -270,22 +125,39 @@ function DeployUtils.process_deployment_result(json_output, context, return_val)
       f:write(json_output)
       f:close()
     end
-
-    -- Check for source conflict error first
     local is_conflict, conflict_message = DeployUtils.detect_source_conflict(deploy_result)
+
     if is_conflict then
-      DeployUtils.notify_source_conflict(context, conflict_message)
+      notify(context, "conflict", "Source conflicts detected: " .. conflict_message, vim.log.levels.ERROR)
       return false
     end
 
     -- Check if deployment was successful
     if deploy_result.result and deploy_result.result.status == "Succeeded" and deploy_result.result.success == true then
-      DeployUtils.notify_deployment_success(context)
+      if context.deployment_type == "current_file" and context.current_file then
+        notify(
+          context,
+          "success",
+          "File deployed successfully: " .. vim.fn.fnamemodify(context.current_file, ":t"),
+          vim.log.levels.INFO
+        )
+      else
+        notify(context, "success", "Deployment successfull", vim.log.levels.INFO)
+      end
       return true
     else
       -- Deployment failed - process failures and create diagnostics
-      deb("Deployment failed result:", deploy_result)
-      DeployUtils.notify_deployment_failure(context)
+      Log.deb("Deployment failed result:", deploy_result)
+      if context.deployment_type == "current_file" and context.current_file then
+        notify(
+          context,
+          "failure",
+          "Deployment failed for file: " .. vim.fn.fnamemodify(context.current_file, ":t"),
+          vim.log.levels.ERROR
+        )
+      else
+        notify(context, "failure", "Deployment failed", vim.log.levels.ERROR)
+      end
 
       -- Process component failures and create diagnostics
       if
@@ -302,11 +174,29 @@ function DeployUtils.process_deployment_result(json_output, context, return_val)
     end
   elseif return_val ~= 0 then
     -- CLI command failed
-    DeployUtils.notify_cli_failure(context, return_val)
+    if context.deployment_type == "current_file" and context.current_file then
+      notify(
+        context,
+        "failure",
+        "Deployment failed for file: " .. vim.fn.fnamemodify(context.current_file, ":t"),
+        vim.log.levels.ERROR
+      )
+    else
+      notify(context, "failure", "Deployment failed (status code " .. return_val .. ")", vim.log.levels.ERROR)
+    end
     return false
   else
     -- JSON parsing failed
-    DeployUtils.notify_parsing_failure(context)
+    if context.deployment_type == "current_file" and context.current_file then
+      notify(
+        context,
+        "parsing_failure",
+        "Failed to parse deployment result for file: " .. vim.fn.fnamemodify(context.current_file, ":t"),
+        vim.log.levels.ERROR
+      )
+    else
+      notify(context, "parsing_failure", "Failed to parse deployment result", vim.log.levels.ERROR)
+    end
     return false
   end
 end
@@ -343,7 +233,7 @@ function DeployUtils.extract_component_failures(deploy_result)
     end
   end
 
-  deb("Deployment diagnostics extract: ", results)
+  Log.deb("Deployment diagnostics extract: ", results)
   return results
 end
 
@@ -355,95 +245,27 @@ function DeployUtils.create_diagnostic_entries(results)
   end)
 end
 
---- Job callback generator options structure
---- @class JobCallbackOptions
---- @field context DeploymentContext The deployment context
---- @field next_job table|nil The next job to execute after success
---- @field cleanup_job table|nil The cleanup job to execute after failure
---- @field job_name string|nil The name of the job for logging purposes
---- @field success_message string|nil Custom success message
---- @field failure_message string|nil Custom failure message
-
---- Creates a parameterized deploy callback to replace duplicated deploy_job_callback logic
---- @param context DeploymentContext The deployment context
---- @param options table|nil Additional options for the callback
---- @return function callback The generated deploy callback function
-function DeployUtils.create_deploy_callback(context, options)
-  options = options or {}
-
+--- Create a job callback with configurable success/failure/cleanup behavior
+--- @param context table The deployment context
+--- @param opts table Configuration: { on_success = fn(j, return_val), on_failure = fn(j, return_val), cleanup = fn() }
+--- @return function callback The generated callback function
+function DeployUtils.create_callback(context, opts)
+  opts = opts or {}
   return function(j, return_val)
-    local progress_reporter = DeployUtils.create_progress_reporter(context)
-    progress_reporter.report_checking_result()
-
-    local stdout = j:result()
-    local json_output = table.concat(stdout, "\n")
-
-    local success = DeployUtils.process_deployment_result(json_output, context, return_val)
-
-    -- Cleanup and handle next job
-    if options.cleanup_callback then
-      options.cleanup_callback()
-    end
-
-    if options.next_job then
-      options.next_job:start()
-    else
-      context.handle:finish()
-    end
-  end
-end
-
---- Creates a job chain callback to replace duplicated run_next_job logic
---- @param context DeploymentContext The deployment context
---- @param next_job table|nil The next job to execute after success
---- @param cleanup_job table|nil The cleanup job to execute after failure
---- @param job_name string|nil The name of the job for logging purposes
---- @return function callback The generated job chain callback function
-function DeployUtils.create_job_chain_callback(context, next_job, cleanup_job, job_name)
-  return function(j, return_val)
-    if return_val ~= 0 then
-      vim.schedule(function()
-        deb("Failed to run job:" .. (job_name or "Unnamed Job"), { j = j, return_val = return_val, context = context })
-        DeployUtils.notify_job_failure(context, job_name)
-
-        if cleanup_job then
-          cleanup_job:start()
+    vim.schedule(function()
+      if return_val == 0 then
+        if opts.on_success then
+          opts.on_success(j, return_val)
         end
-      end)
-    else
-      vim.schedule(function()
-        deb("Completed job:" .. (job_name or "Unnamed Job"), { j = j, return_val = return_val, context = context })
-
-        -- Start the next job after the current one finishes
-        if next_job then
-          next_job:start()
-        else
-          -- If there's no next job, finish the handle
-          if context.handle then
-            context.handle:finish()
-          end
+      else
+        if opts.on_failure then
+          opts.on_failure(j, return_val)
         end
-      end)
-    end
-  end
-end
-
---- Creates a manifest preparation callback to replace duplicated prepare_manifest_callback logic
---- @param context DeploymentContext The deployment context
---- @param next_job table The next job to execute after successful manifest preparation
---- @return function callback The generated manifest preparation callback function
-function DeployUtils.create_manifest_preparation_callback(context, next_job)
-  return function(j, return_val)
-    if return_val == 0 then
-      DeployUtils.notify_manifest_success(context)
-      -- Start the deployment job after manifest preparation
-      next_job:start()
-    else
-      vim.schedule(function()
-        deb("Manifest preparation failed:", j:result())
-        DeployUtils.notify_manifest_failure(context)
-      end)
-    end
+      end
+      if opts.cleanup then
+        opts.cleanup()
+      end
+    end)
   end
 end
 
@@ -451,19 +273,13 @@ end
 --- @param deploy_job table|nil The current deploy job to check if running
 --- @param connector table The connector instance for CLI checking
 --- @param utils table The utils instance for job status checking
---- @return boolean success Whether validation passed
+--- Validate pre-deployment conditions using state registry
+--- @return boolean valid Whether pre-deployment conditions are met
 --- @return string|nil error_message Error message if validation failed
-function DeployUtils.validate_deployment_preconditions(deploy_job, connector, utils)
-  -- Validate required parameters
-  if not utils then
-    error("utils parameter is required for deployment precondition validation")
-  end
-
-  -- Check if another deployment is already running
-  if deploy_job and utils.is_job_running(deploy_job) then
+function DeployUtils.validate_deployment_preconditions()
+  if require("sf.core.state").is_busy("deploy") then
     return false, "A deployment is already in progress. Please wait for it to finish."
   end
-
   return true, nil
 end
 
@@ -481,7 +297,7 @@ function DeployUtils.setup_deployment_environment(deployment_type, current_file,
   -- Create deployment context with progress handle
   local context = DeployUtils.create_deployment_context(deployment_type, current_file, files, options)
 
-  deb("Setup deployment context: ", context)
+  Log.deb("Setup deployment context: ", context)
   return context
 end
 
@@ -581,23 +397,38 @@ function DeployUtils.create_deploy_job(args, context, options)
   local JobUtils = require("sf.core.job_utils")
   options = options or {}
 
-  local progress_reporter = DeployUtils.create_progress_reporter(context)
-  local callback = DeployUtils.create_deploy_callback(context, options)
+  local function handle_deploy_result(j, return_val)
+    DeployUtils.report(context, "checking_result")
+    local stdout = j:result()
+    local json_output = table.concat(stdout, "\n")
+    DeployUtils.process_deployment_result(json_output, context, return_val)
+    if options.next_job then
+      options.next_job:start()
+    else
+      context.handle:finish()
+    end
+  end
+
+  local callback = DeployUtils.create_callback(context, {
+    on_success = handle_deploy_result,
+    on_failure = handle_deploy_result,
+    cleanup = options.cleanup_callback,
+  })
 
   return JobUtils.create_system_job({
     command = context.options.sf_cli_path,
     args = args,
     on_start = function(_, _)
-      progress_reporter.report_deploying()
+      DeployUtils.report(context, "start")
     end,
     on_exit = callback,
     on_stdout = function(_, data)
       -- Handle stdout if needed for progress reporting
-      deb("Create deploy job stdout: ", data)
+      Log.deb("Create deploy job stdout: ", data)
     end,
     on_stderr = function(_, data)
       -- Handle stderr if needed for error reporting
-      deb("Create deploy job stderr: ", data)
+      Log.deb("Create deploy job stderr: ", data)
     end,
   })
 end
@@ -612,8 +443,20 @@ function DeployUtils.create_manifest_job(command, context, next_job, options)
   local JobUtils = require("sf.core.job_utils")
   options = options or {}
 
-  local progress_reporter = DeployUtils.create_progress_reporter(context)
-  local callback = DeployUtils.create_manifest_preparation_callback(context, next_job)
+  local callback = DeployUtils.create_callback(context, {
+    on_success = function(j, return_val)
+      notify(context, "manifest_success", "Manifest prepared successfully")
+      next_job:start()
+    end,
+    on_failure = function(j, return_val)
+      Log.deb("Manifest preparation failed:", j:result())
+      DeployUtils.report(context, "failure")
+      if context.handle then
+        context.handle:finish()
+      end
+      vim.notify("Failed to prepare manifest", vim.log.levels.ERROR)
+    end,
+  })
 
   -- Parse command and args
   local cmd_parts = {}
@@ -628,7 +471,7 @@ function DeployUtils.create_manifest_job(command, context, next_job, options)
     command = cmd,
     args = args,
     on_start = function(_, _)
-      progress_reporter.report_manifest_preparation()
+      DeployUtils.report(context, "preparing_manifest")
     end,
     on_exit = callback,
   })
@@ -640,87 +483,6 @@ end
 --- @param next_job table|nil The next job to execute after successful operation
 --- @param cleanup_job table|nil The cleanup job to execute after failure
 --- @param job_name string|nil The name of the job for logging purposes
---- @param options table|nil Additional options for job configuration
---- @return table job The created git operation job
-function DeployUtils.create_git_operation_job(operation, context, next_job, cleanup_job, job_name, options)
-  local JobUtils = require("sf.core.job_utils")
-  options = options or {}
-
-  local callback = DeployUtils.create_job_chain_callback(context, next_job, cleanup_job, job_name)
-
-  -- Parse operation into command and args
-  local cmd_parts = {}
-  for part in operation:gmatch("%S+") do
-    table.insert(cmd_parts, part)
-  end
-
-  local cmd = table.remove(cmd_parts, 1)
-  local args = cmd_parts
-
-  return JobUtils.create_system_job({
-    command = cmd,
-    args = args,
-    on_exit = callback,
-  })
-end
-
---- Extracts common job configuration patterns for standardized job creation
---- @param job_type string The type of job: "deploy", "manifest", "git"
---- @param context DeploymentContext The deployment context
---- @param options table|nil Additional configuration options
---- @return table config The standardized job configuration
-function DeployUtils.extract_job_config_patterns(job_type, context, options)
-  options = options or {}
-
-  local base_config = {
-    context = context,
-    options = context.options,
-  }
-
-  if job_type == "deploy" then
-    local deploy_args = {}
-    for _, part in ipairs(vim.split(Const.SF_CLI.PROJECT.DEPLOY.CMD, " ")) do
-      table.insert(deploy_args, part)
-    end
-    vim.list_extend(deploy_args, {
-      Const.SF_CLI.PROJECT.DEPLOY.ARGS.JSON,
-      Const.SF_CLI.PROJECT.DEPLOY.ARGS.API_VERSION,
-      context.options.api_version,
-    })
-
-    return vim.tbl_deep_extend("force", base_config, {
-      command = context.options.sf_cli_path,
-      base_args = deploy_args,
-      callback_generator = DeployUtils.create_deploy_callback,
-      progress_reporter = DeployUtils.create_progress_reporter(context),
-    })
-  elseif job_type == "manifest" then
-    local sgd_args = {}
-    for _, part in ipairs(vim.split(Const.SF_CLI.SGD.SOURCE.DELTA.CMD, " ")) do
-      table.insert(sgd_args, part)
-    end
-    vim.list_extend(sgd_args, {
-      Const.SF_CLI.SGD.SOURCE.DELTA.ARGS.COMPARE,
-      Const.SF_CLI.SGD.SOURCE.DELTA.ARGS.OUTPUT_DIR,
-      context.options.delta_path,
-    })
-
-    return vim.tbl_deep_extend("force", base_config, {
-      command = "sf",
-      base_args = sgd_args,
-      callback_generator = DeployUtils.create_manifest_preparation_callback,
-      progress_reporter = DeployUtils.create_progress_reporter(context),
-    })
-  elseif job_type == "git" then
-    return vim.tbl_deep_extend("force", base_config, {
-      command = "git",
-      base_args = {},
-      callback_generator = DeployUtils.create_job_chain_callback,
-    })
-  else
-    error("Unknown job type: " .. job_type)
-  end
-end
 
 --- Creates a standardized deployment job for current file deployment
 --- @param current_file string The path to the current file to deploy
@@ -730,7 +492,7 @@ end
 --- @return table job The created deployment job
 function DeployUtils.create_current_file_deploy_job(current_file, context, options, force)
   local args = Const.get_current_file_deploy_args(current_file, context.options.api_version, force)
-  deb("Create current file deploy job args: ", args)
+  Log.deb("Create current file deploy job args: ", args)
   return DeployUtils.create_deploy_job(args, context, options)
 end
 
@@ -742,7 +504,7 @@ end
 --- @return table job The created deployment job
 function DeployUtils.create_manifest_deploy_job(manifest_path, context, options, force)
   local args = Const.get_manifest_deploy_args(manifest_path, context.options.api_version, force)
-  deb("Create manifest deploy job args: ", args)
+  Log.deb("Create manifest deploy job args: ", args)
   return DeployUtils.create_deploy_job(args, context, options)
 end
 
@@ -755,8 +517,20 @@ function DeployUtils.create_changed_files_manifest_job(context, next_job, option
   local JobUtils = require("sf.core.job_utils")
   options = options or {}
 
-  local progress_reporter = DeployUtils.create_progress_reporter(context)
-  local callback = DeployUtils.create_manifest_preparation_callback(context, next_job)
+  local callback = DeployUtils.create_callback(context, {
+    on_success = function(j, return_val)
+      notify(context, "manifest_success", "Manifest prepared successfully")
+      next_job:start()
+    end,
+    on_failure = function(j, return_val)
+      Log.deb("Manifest preparation failed:", j:result())
+      DeployUtils.report(context, "failure")
+      if context.handle then
+        context.handle:finish()
+      end
+      vim.notify("Failed to prepare manifest", vim.log.levels.ERROR)
+    end,
+  })
 
   local command = Const.get_sgd_delta_command(context.options.delta_path)
   local bash_args = Const.get_bash_command_args(command)
@@ -765,7 +539,7 @@ function DeployUtils.create_changed_files_manifest_job(context, next_job, option
     command = Const.SHELL.BASH.CMD,
     args = bash_args,
     on_start = function(_, _)
-      progress_reporter.report_manifest_preparation()
+      DeployUtils.report(context, "preparing_manifest")
     end,
     on_exit = callback,
   })
@@ -779,74 +553,6 @@ end
 function DeployUtils.create_selected_files_manifest_job(context, next_job, options)
   local command = Const.get_sgd_delta_command(context.options.delta_path)
   return DeployUtils.create_manifest_job(command, context, next_job, options)
-end
-
---- Creates a job with standardized error handling and progress reporting
---- @param job_config table The job configuration including command, args, callbacks
---- @param context DeploymentContext The deployment context
---- @return table job The created job with standardized configuration
-function DeployUtils.create_standardized_job(job_config, context)
-  local JobUtils = require("sf.core.job_utils")
-
-  -- Ensure required fields are present
-  if not job_config.command then
-    error("Job configuration must include 'command' field")
-  end
-
-  -- Set default values
-  job_config.args = job_config.args or {}
-  job_config.on_start = job_config.on_start or function() end
-  job_config.on_stdout = job_config.on_stdout or function() end
-  job_config.on_stderr = job_config.on_stderr or function() end
-
-  -- Ensure on_exit callback exists
-  if not job_config.on_exit then
-    error("Job configuration must include 'on_exit' callback")
-  end
-
-  return JobUtils.create_system_job(job_config)
-end
-
---- Validates job creation parameters to ensure consistency
---- @param job_type string The type of job being created
---- @param context DeploymentContext The deployment context
---- @param required_options table List of required option keys
---- @return boolean valid Whether the parameters are valid
---- @return string|nil error_message Error message if validation failed
-function DeployUtils.validate_job_creation_params(job_type, context, required_options)
-  if not job_type or type(job_type) ~= "string" then
-    return false, "Job type must be a non-empty string"
-  end
-
-  if not context or type(context) ~= "table" then
-    return false, "Context must be a table"
-  end
-
-  if not context.options then
-    return false, "Context must include options"
-  end
-
-  if required_options then
-    for _, option_key in ipairs(required_options) do
-      if not context.options[option_key] then
-        return false, "Missing required option: " .. option_key
-      end
-    end
-  end
-
-  return true, nil
-end
-
---- Handles validation results with consistent error notification
---- @param success boolean Whether validation was successful
---- @param error_message string|nil Error message if validation failed
---- @return boolean success Whether validation passed (for easy chaining)
-function DeployUtils.handle_validation_result(success, error_message)
-  if not success and error_message then
-    vim.notify(error_message, vim.log.levels.WARN)
-    return false
-  end
-  return success
 end
 
 return DeployUtils

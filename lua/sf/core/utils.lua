@@ -1,19 +1,7 @@
+local Log = require("sf.core.log")
 local PathUtils = require("sf.core.path_utils")
-local Snacks = require("snacks")
 
 local M = {}
-
---- Check if a job is running
---- @param self table The job instance to check
---- @return boolean True if the job is running, false otherwise
---- @usage local is_running = utils.is_job_running(my_job)
-function M.is_job_running(self)
-  if self.handle and not vim.loop.is_closing(self.handle) and vim.loop.is_active(self.handle) then
-    return true
-  else
-    return false
-  end
-end
 
 --- Get the file name from a full path, extract file name from paths like "classes/myClass.cls"
 --- @param full_path string The full path of the file
@@ -66,10 +54,10 @@ end
 --- @return string|nil The full path to the found file, or nil if not found
 --- @usage local found_path = utils.find_file("/path/to/search", "target.txt")
 function M.find_file(path, target)
-  local scanner = vim.loop.fs_scandir(path)
+  local scanner = vim.uv.fs_scandir(path)
   -- if scanner is nil, then path is not a valid dir
   if scanner then
-    local file, type = vim.loop.fs_scandir_next(scanner)
+    local file, type = vim.uv.fs_scandir_next(scanner)
     path = PathUtils.ensure_trailing_separator(path)
     while file do
       if type == "directory" then
@@ -81,7 +69,7 @@ function M.find_file(path, target)
         return PathUtils.join(path, file)
       end
       -- get the next file and type
-      file, type = vim.loop.fs_scandir_next(scanner)
+      file, type = vim.uv.fs_scandir_next(scanner)
     end
   end
 end
@@ -102,19 +90,19 @@ function M.get_default_package_path()
   end
 
   local json_string = table.concat(file_content, "\n")
-  deb("sfdx-project.json content:", json_string)
+  Log.deb("sfdx-project.json content:", json_string)
 
   local ok, project_config = pcall(vim.json.decode, json_string)
 
   if not ok then
-    deb("Failed to parse sfdx-project.json")
+    Log.deb("Failed to parse sfdx-project.json")
     return nil
   end
 
-  deb("Parsed sfdx-project.json:", project_config)
+  Log.deb("Parsed sfdx-project.json:", project_config)
 
   if not project_config or not project_config.packageDirectories then
-    deb("No packageDirectories found in sfdx-project.json")
+    Log.deb("No packageDirectories found in sfdx-project.json")
     return nil
   end
 
@@ -131,23 +119,6 @@ function M.get_default_package_path()
   end
 
   return nil
-end
-
---- Log entity based on context (debug) mode
-function M.log(context, entity)
-  if context.options.debug and entity.title and entity.value then
-    Snacks.debug.log(entity.title, entity.value)
-    Snacks.debug.inspect(entity.title, entity.value)
-  end
-end
-
-function M.force_log(entity)
-  local context = {
-    options = {
-      debug = true,
-    },
-  }
-  M.log(context, entity)
 end
 
 return M

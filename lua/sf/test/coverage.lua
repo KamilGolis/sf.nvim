@@ -1,3 +1,5 @@
+local Log = require("sf.core.log")
+
 --- sf-nvim coverage display module
 -- @license MIT
 
@@ -47,23 +49,23 @@ local function parse_coverage_data()
   end
 
   local json_string = table.concat(file_content, "\n")
-  deb("Coverage file content:", json_string)
+  Log.deb("Coverage file content:", json_string)
 
   local ok, result = pcall(vim.json.decode, json_string)
 
   if not ok then
-    deb("Failed to parse coverage JSON")
+    Log.deb("Failed to parse coverage JSON")
     return nil
   end
 
-  deb("Parsed coverage result:", result)
+  Log.deb("Parsed coverage result:", result)
 
   if not result or not result.result or not result.result.coverage then
-    deb("Coverage result missing expected structure")
+    Log.deb("Coverage result missing expected structure")
     return nil
   end
 
-  deb("Coverage data:", result.result.coverage.coverage)
+  Log.deb("Coverage data:", result.result.coverage.coverage)
   return result.result.coverage.coverage
 end
 

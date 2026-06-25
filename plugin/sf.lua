@@ -54,114 +54,97 @@ else
   indexes.index_files(PathUtils.join(PathUtils.get_separator(), "force-app", "main", "default"))
 end
 
---- Define the sf command with subcommands
+local function make_test_options()
+  return {
+    sf_cli_path = Config:get_options().sf_cli_path or "sf",
+    debug = Config:get_options().debug or false,
+  }
+end
+
+local COMMANDS = {
+  org = {
+    set = function()
+      Connector:select_default_org()
+    end,
+  },
+  deploy = {
+    metadata = function(force)
+      Deployment:deploy_metadata(force)
+    end,
+    changed = function(force)
+      Deployment:deploy_changed_metadatas(force)
+    end,
+    selected = function(force)
+      Deployment:deploy_selected_metadata(force)
+    end,
+  },
+  test = {
+    class = function()
+      TestRunner.run_current_tests("class", make_test_options())
+    end,
+    method = function()
+      TestRunner.run_current_tests("method", make_test_options())
+    end,
+    result = function()
+      TestRunner.show_last_results(make_test_options())
+    end,
+  },
+  coverage = {
+    class = function()
+      TestRunner.run_coverage_at_cursor("class", make_test_options())
+    end,
+    method = function()
+      TestRunner.run_coverage_at_cursor("method", make_test_options())
+    end,
+    result = function()
+      TestRunner.show_last_coverage_results(make_test_options())
+    end,
+    on = function()
+      require("sf.test.coverage").enable()
+    end,
+    off = function()
+      require("sf.test.coverage").disable()
+    end,
+  },
+  log = {
+    list = function()
+      LogList.list_logs(make_test_options())
+    end,
+  },
+}
+
 vim.api.nvim_create_user_command("Sf", function(opts)
   local module = opts.fargs[1]
   local action = opts.fargs[2]
 
-  if module == "org" then
-    if action == "set" then
-      Connector:select_default_org()
-    else
-      vim.notify("Unknown subcommand: " .. (module or ""), vim.log.levels.ERROR)
-    end
+  if not module or not COMMANDS[module] then
+    vim.notify("Unknown subcommand: " .. (module or ""), vim.log.levels.ERROR)
+    return
   end
 
-  if module == "deploy" then
-    local force_flag = false
-    local third_arg = opts.fargs[3]
-
-    -- Check if "force" is specified as third argument
-    if third_arg == "force" then
-      force_flag = true
-    end
-
-    if action == "metadata" then
-      Deployment:deploy_metadata(force_flag)
-    elseif action == "changed" then
-      Deployment:deploy_changed_metadatas(force_flag)
-    elseif action == "selected" then
-      Deployment:deploy_selected_metadata(force_flag)
-    else
-      vim.notify("Unknown subcommand: " .. (action or ""), vim.log.levels.ERROR)
-    end
+  local actions = COMMANDS[module]
+  if not action or not actions[action] then
+    vim.notify("Unknown subcommand: " .. (action or ""), vim.log.levels.ERROR)
+    return
   end
 
-  if module == "test" then
-    local options = {
-      sf_cli_path = Config:get_options().sf_cli_path or "sf",
-      debug = Config:get_options().debug or false,
-    }
-
-    if action == "class" then
-      TestRunner.run_current_tests("class", options)
-    elseif action == "method" then
-      TestRunner.run_current_tests("method", options)
-    elseif action == "result" then
-      TestRunner.show_last_results(options)
-    else
-      vim.notify("Unknown test subcommand: " .. (action or ""), vim.log.levels.ERROR)
-    end
-  end
-
-  if module == "coverage" then
-    local options = {
-      sf_cli_path = Config:get_options().sf_cli_path or "sf",
-      debug = Config:get_options().debug or false,
-    }
-
-    if action == "class" then
-      TestRunner.run_coverage_at_cursor("class", options)
-    elseif action == "method" then
-      TestRunner.run_coverage_at_cursor("method", options)
-    elseif action == "result" then
-      TestRunner.show_last_coverage_results(options)
-    elseif action == "on" then
-      local Coverage = require("sf.test.coverage")
-      Coverage.enable()
-    elseif action == "off" then
-      local Coverage = require("sf.test.coverage")
-      Coverage.disable()
-    else
-      vim.notify("Unknown coverage subcommand: " .. (action or ""), vim.log.levels.ERROR)
-    end
-  end
-
-  if module == "log" then
-    local options = {
-      sf_cli_path = Config:get_options().sf_cli_path or "sf",
-      debug = Config:get_options().debug or false,
-    }
-
-    if action == "list" then
-      LogList.list_logs(options)
-    else
-      vim.notify("Unknown log subcommand: " .. (action or ""), vim.log.levels.ERROR)
-    end
-  end
+  local force_flag = opts.fargs[3] == "force"
+  actions[action](force_flag)
 end, {
   nargs = "+",
-  complete = function(ArgLead, CmdLine, CursorPos)
-    local commands = {
-      org = { "set" },
-      cli = {},
-      deploy = { "metadata", "changed", "selected" },
-      test = { "class", "method", "result" },
-      coverage = { "class", "method", "result", "on", "off" },
-      log = { "list" },
-    }
-
+  complete = function(ArgLead, CmdLine)
+    local commands = COMMANDS
     local args = vim.split(CmdLine, " ")
 
-    if #args <= 2 then -- First argument
+    if #args <= 2 then
       return vim.tbl_filter(function(cmd)
         return cmd:match("^" .. ArgLead)
       end, vim.tbl_keys(commands))
-    elseif #args == 3 and commands[args[2]] then -- Second argument
+    elseif #args == 3 and commands[args[2]] then
       return vim.tbl_filter(function(cmd)
         return cmd:match("^" .. ArgLead)
-      end, commands[args[2]])
-    elseif #args == 4 and args[2] == "deploy" and vim.tbl_contains(commands.deploy, args[3]) then -- Third argument for deploy commands
+      end, vim.tbl_keys(commands[args[2]]))
+    elseif #args == 4 and args[2] == "deploy" and vim.tbl_contains(vim.tbl_keys(commands.deploy), args[3]) then
       return vim.tbl_filter(function(cmd)
         return cmd:match("^" .. ArgLead)
       end, { "force" })

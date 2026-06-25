@@ -14,7 +14,7 @@ function Diagnostics:new()
   local o = {}
   setmetatable(o, self)
   self.__index = self
-  self.diagnostic_store = {}
+  o.diagnostic_store = {}
 
   return o
 end
@@ -64,7 +64,7 @@ end
 --- @usage diagnostics:set_diagnostics(error_results)
 function Diagnostics:set_diagnostics(source)
   local options = Config:get_options()
-  local home = vim.loop.os_homedir()
+  local home = vim.uv.os_homedir()
 
   for _, error in pairs(source) do
     if error.error_type ~= "Error" then

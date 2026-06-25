@@ -1,3 +1,5 @@
+local Log = require("sf.core.log")
+
 local Snacks = require("snacks")
 
 local Config = require("sf.config")
@@ -7,20 +9,12 @@ local PathUtils = require("sf.core.path_utils")
 
 local M = {}
 
--- =============================================================================
--- TYPE DEFINITIONS
--- =============================================================================
-
 --- Org picker item structure for standardized org selection UI
 --- @class OrgPickerItem
 --- @field text string Display text (alias)
 --- @field description string Org username
 --- @field details string Instance URL
 --- @field org_data table Full org data from SF CLI
-
--- =============================================================================
--- ORG DATA PROCESSING UTILITIES
--- =============================================================================
 
 --- Processes org list JSON response and converts it to picker-compatible format
 --- @param json_response string The JSON string from SF CLI org list command
@@ -56,10 +50,6 @@ function M.process_org_list(json_response)
   return true, orgs, nil
 end
 
--- =============================================================================
--- ORG SELECTION UI UTILITIES
--- =============================================================================
-
 --- Creates a standardized org selection picker using Snacks
 --- @param orgs table Array of OrgPickerItem objects
 --- @param callback function Callback function to handle org selection, receives selected item
@@ -86,10 +76,6 @@ function M.create_org_selection_picker(orgs, callback)
   })
 end
 
--- =============================================================================
--- ORG VALIDATION UTILITIES
--- =============================================================================
-
 --- Checks if a default org is set by reading the SF CLI config
 --- @return boolean success True if default org is set
 --- @return string|nil org_username The username of the default org, or nil if not set
@@ -110,16 +96,16 @@ function M.check_default_org()
   end
 
   local json_string = table.concat(file_content, "\n")
-  deb("SF CLI config content:", json_string)
+  Log.deb("SF CLI config content:", json_string)
 
   local ok, config = pcall(vim.json.decode, json_string)
 
   if not ok then
-    deb("Failed to parse SF CLI config file")
+    Log.deb("Failed to parse SF CLI config file")
     return false, nil, "Failed to parse SF CLI config file"
   end
 
-  deb("Parsed SF CLI config:", config)
+  Log.deb("Parsed SF CLI config:", config)
 
   if not config then
     return false, nil, "Failed to parse SF CLI config file"
@@ -128,17 +114,13 @@ function M.check_default_org()
   -- Check if target-org is set
   local target_org = config["target-org"]
   if not target_org or target_org == "" then
-    deb("No target-org found in SF CLI config")
+    Log.deb("No target-org found in SF CLI config")
     return false, nil, Const.SF_CLI_MESSAGES.NO_DEFAULT_ORG
   end
 
-  deb("Found target org:", target_org)
+  Log.deb("Found target org:", target_org)
   return true, target_org, nil
 end
-
--- =============================================================================
--- ORG CONFIGURATION UTILITIES
--- =============================================================================
 
 --- Sets the target org using SF CLI with progress reporting
 --- @param org_data table The org data object containing username and alias
@@ -164,11 +146,7 @@ function M.set_target_org(org_data, context, callback)
     end
     return
   end
-
-  -- Create and start the job to set target org
-  local args = vim.split(Const.SF_CLI.ORG.CONFIG.SET.CMD, " ")
-  table.insert(args, Const.SF_CLI.ORG.CONFIG.SET.ARGS.TARGET_ORG)
-  table.insert(args, org_data.username)
+  local args = Const.get_config_set_args(org_data.username)
   local job = JobUtils.create_cli_job(executable_path, args, {
     on_success = function(job, return_val)
       JobUtils.handle_cli_result(job, return_val, progress_context, function()

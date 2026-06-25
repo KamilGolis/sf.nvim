@@ -25,11 +25,9 @@ stylua .
 The plugin follows a domain-driven structure under `lua/sf/`:
 
 - **`core/`** - Shared utilities and infrastructure
-  - `utils.lua` - General helpers (get SF project root, file name extraction)
-  - `process.lua` - Process/job execution 
-  - `diagnostics.lua` - Diagnostic management and storage
-  - `indexes.lua` - File indexing for autocomplete and navigation
-  - `job_utils.lua` - Job state management
+  - `log.lua` - Debug logging module (replaces _G globals)
+  - `state.lua` - Job busy-state registry
+  - `progress.lua` - Progress handle creation (replaces the removed `process.lua`)
 
 - **`deploy/`** - Metadata deployment
   - `metadata.lua` - Main deployment orchestration (current file, changed files, selected)
@@ -75,7 +73,7 @@ The `:Sf` command uses a hierarchical subcommand structure:
 1. User calls `:Sf deploy metadata`
 2. `deploy/metadata.lua` validates preconditions (CLI available, no active job, default org set)
 3. Creates deployment context with file path, options, callbacks
-4. Executes SF CLI via `core/process.lua` 
+4. Executes SF CLI via `core/job_utils.lua`
 5. Parses JSON response, stores in cache (`.sf/sf.nvim/deploy.json`)
 6. Updates diagnostics via `core/diagnostics.lua`
 
@@ -83,7 +81,7 @@ The `:Sf` command uses a hierarchical subcommand structure:
 1. User calls `:Sf test class` or `:Sf coverage class`
 2. `test/runner.lua` extracts class/method name from current buffer
 3. Builds SF CLI command using `const.lua` builders
-4. Executes test via `core/process.lua`
+4. Executes test via `core/job_utils.lua`
 5. Parses results, stores in cache (`.sf/sf.nvim/test.json`, `.sf/sf.nvim/coverage.json`)
 6. `test/coverage.lua` displays inline coverage indicators via virtual text
 7. `test/results_buffer.lua` shows test results in split buffer
@@ -106,18 +104,38 @@ local args = Const.get_apex_test_class_args("TestClass", true) -- with_coverage 
 local args = Const.get_current_file_deploy_args(file_path, api_version, force)
 ```
 
+### Debug Logging (`core/log.lua`)
+
+Use the `Log` module instead of bare global calls:
+```lua
+local Log = require("sf.core.log")
+Log.deb(...)  -- debug log
+Log.log(...)  -- info log
+Log.trace()   -- backtrace
+```
+Configured once from `Config:setup()`. Never use bare `deb(...)`, `log(...)`, or `_G` globals.
+
+### Job State Registry (`core/state.lua`)
+
+Track in-flight jobs centrally instead of module-local variables:
+```lua
+local state = require("sf.core.state")
+state.start("deploy")  -- before job:start()
+state.finish("deploy") -- in cleanup callback
+if state.is_busy("deploy") then ... end
+```
+Supported kinds: `"deploy"`, `"test"`.
+
 ### Job Management Pattern
 
 Deployment and test jobs follow this pattern:
-1. Check if job is running (`deploy_job` or `test_job` module variable)
+1. Check if job is running: `state.is_busy(kind)`
 2. Clear previous diagnostics
-3. Create Snacks progress handle
-4. Start job via `core/process.lua` or `core/job_utils.lua`
-5. Store job reference
+3. Create Snacks progress handle via `core/progress`
+4. Start job via `core/job_utils.lua`
+5. `state.start(kind)` before `job:start()`
 6. Use callbacks for completion/failure
-7. Set job to nil on completion
-
-### Diagnostic Storage
+7. `state.finish(kind)` in cleanup callback, not `job = nil`
 
 Diagnostics are stored by filename (not full path) in `diagnostics.diagnostic_store`. The BufEnter autocmd in `plugin/sf.lua` applies stored diagnostics when files are opened.
 
@@ -143,7 +161,7 @@ The plugin requires:
 ### LuaJIT and Neovim API
 
 This is a Neovim plugin using LuaJIT runtime. Use:
-- `vim.loop` (libuv) for async I/O, not `os.execute`
+- `vim.uv` (libuv) for async I/O, not `os.execute`
 - `vim.fn` for Vim functions
 - `vim.api` for Neovim API
 - Module pattern with `M = {}` and `return M`

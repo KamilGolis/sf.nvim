@@ -6,8 +6,10 @@ local Snacks = require("snacks")
 
 local Connector = require("sf.org.connect")
 local Const = require("sf.const")
-local Process = require("sf.core.process")
+local Log = require("sf.core.log")
+local Progress = require("sf.core.progress")
 local TestResultsBuffer = require("sf.test.results_buffer")
+local state = require("sf.core.state")
 
 local TestRunner = {}
 
@@ -122,20 +124,20 @@ end
 --- @param test_name string The name of the test being executed
 --- @return boolean True if tests passed, false if failed
 local function process_test_results(json_output, test_name)
-  deb("Test results JSON output:", json_output)
+  Log.deb("Test results JSON output:", json_output)
 
   local ok, result = pcall(vim.json.decode, json_output)
 
   if not ok then
-    deb("Failed to parse test results JSON")
+    Log.deb("Failed to parse test results JSON")
     vim.notify("Failed to parse test results", vim.log.levels.ERROR)
     return false
   end
 
-  deb("Test Results parsed:", result)
+  Log.deb("Test Results parsed:", result)
 
   if not result or not result.result then
-    deb("Failed to parse test results: invalid result structure")
+    Log.deb("Failed to parse test results: invalid result structure")
     vim.notify("Failed to parse test results: invalid result structure", vim.log.levels.ERROR)
     return false
   end
@@ -143,7 +145,7 @@ local function process_test_results(json_output, test_name)
   local summary = result.result.summary
   if not summary then
     vim.notify("No test summary found in results", vim.log.levels.ERROR)
-    deb("No test summary found in results")
+    Log.deb("No test summary found in results")
     return false
   end
 
@@ -166,7 +168,7 @@ function TestRunner.run_class_tests(class_name, options)
       return
     end
 
-    local handle = Process.create_progress_handle({ title = "Running tests for " .. class_name })
+    local handle = Progress.create_handle({ title = "Running tests for " .. class_name })
     handle:report({ message = "Starting test execution...", percentage = 0 })
 
     local sf_cli_path = options.sf_cli_path or "sf"
@@ -189,7 +191,7 @@ function TestRunner.run_class_tests(class_name, options)
           local stdout = j:result()
           local json_output = table.concat(stdout, "\n")
 
-          deb("Test Results Job output JSON", json_output)
+          Log.deb("Test Results Job output JSON", json_output)
 
           -- Always write results to file, regardless of return code
           local file = io.open(result_file, "w")
@@ -213,19 +215,21 @@ function TestRunner.run_class_tests(class_name, options)
             vim.notify("Failed to execute tests for class: " .. class_name, vim.log.levels.ERROR)
 
             local stderr = j:stderr_result()
-            deb("Test execution error", { stderr = stderr, return_val = return_val, stdout = stdout })
+            Log.deb("Test execution error", { stderr = stderr, return_val = return_val, stdout = stdout })
 
             if options.debug then
               if stderr and #stderr > 0 then
-                deb("Test execution stderr (debug mode)", { stderr = stderr, return_val = return_val })
+                Log.deb("Test execution stderr (debug mode)", { stderr = stderr, return_val = return_val })
               end
             end
           end
           handle:finish()
+          state.finish("test")
         end)
       end,
     })
 
+    state.start("test")
     job:start()
   end)
 end
@@ -244,7 +248,7 @@ function TestRunner.run_method_test(class_name, method_name, options)
     end
 
     local test_name = class_name .. "." .. method_name
-    local handle = Process.create_progress_handle({ title = "Running test: " .. test_name })
+    local handle = Progress.create_handle({ title = "Running test: " .. test_name })
     handle:report({ message = "Starting test execution...", percentage = 0 })
 
     local sf_cli_path = options.sf_cli_path or "sf"
@@ -267,7 +271,7 @@ function TestRunner.run_method_test(class_name, method_name, options)
           local stdout = j:result()
           local json_output = table.concat(stdout, "\n")
 
-          deb("Test Results Job output JSON", json_output)
+          Log.deb("Test Results Job output JSON", json_output)
 
           -- Always write results to file, regardless of return code
           local file = io.open(result_file, "w")
@@ -291,19 +295,21 @@ function TestRunner.run_method_test(class_name, method_name, options)
             vim.notify("Failed to execute test: " .. test_name, vim.log.levels.ERROR)
 
             local stderr = j:stderr_result()
-            deb("Test execution error", { stderr = stderr, return_val = return_val, stdout = stdout })
+            Log.deb("Test execution error", { stderr = stderr, return_val = return_val, stdout = stdout })
 
             if options.debug then
               if stderr and #stderr > 0 then
-                deb("Test execution stderr (debug mode)", { stderr = stderr, return_val = return_val })
+                Log.deb("Test execution stderr (debug mode)", { stderr = stderr, return_val = return_val })
               end
             end
           end
           handle:finish()
+          state.finish("test")
         end)
       end,
     })
 
+    state.start("test")
     job:start()
   end)
 end
@@ -311,7 +317,7 @@ end
 --- Display the last executed test results from saved file
 --- @param options table|nil Additional options
 function TestRunner.show_last_results(options)
-  deb("Starting Show Latest Results function...")
+  Log.deb("Starting Show Latest Results function...")
   options = options or {}
 
   local result_file = get_test_result_path()
@@ -333,17 +339,17 @@ function TestRunner.show_last_results(options)
   end
 
   local json_string = table.concat(file_content, "\n")
-  deb("Last test results file content:", json_string)
+  Log.deb("Last test results file content:", json_string)
 
   local ok, result = pcall(vim.json.decode, json_string)
 
   if not ok then
-    deb("Failed to parse test results JSON from file")
+    Log.deb("Failed to parse test results JSON from file")
     vim.notify("Failed to parse test results file", vim.log.levels.ERROR)
     return
   end
 
-  deb("Test Results Job output JSON", result)
+  Log.deb("Test Results Job output JSON", result)
 
   if not result or not result.result then
     vim.notify("Failed to parse test results file", vim.log.levels.ERROR)
@@ -378,7 +384,11 @@ end
 --- @param test_type string Either "class" or "method"
 --- @param options table|nil Additional options
 function TestRunner.run_current_tests(test_type, options)
-  deb("Starting Run Current Tests function...")
+  if state.is_busy("test") then
+    vim.notify("A test is already running. Please wait for it to finish.", vim.log.levels.WARN)
+    return
+  end
+  Log.deb("Starting Run Current Tests function...")
 
   Connector:check_cli(function()
     options = options or {}
@@ -428,7 +438,7 @@ function TestRunner.run_class_coverage(class_name, options)
       return
     end
 
-    local handle = Process.create_progress_handle({ title = "Running coverage for " .. class_name })
+    local handle = Progress.create_handle({ title = "Running coverage for " .. class_name })
     handle:report({ message = "Starting test execution with coverage...", percentage = 0 })
 
     local sf_cli_path = options.sf_cli_path or "sf"
@@ -474,19 +484,21 @@ function TestRunner.run_class_coverage(class_name, options)
             vim.notify("Failed to execute coverage for class: " .. class_name, vim.log.levels.ERROR)
 
             local stderr = j:stderr_result()
-            deb("Coverage execution error", { stderr = stderr, return_val = return_val, stdout = stdout })
+            Log.deb("Coverage execution error", { stderr = stderr, return_val = return_val, stdout = stdout })
 
             if options.debug then
               if stderr and #stderr > 0 then
-                deb("Coverage execution stderr (debug mode)", { stderr = stderr, return_val = return_val })
+                Log.deb("Coverage execution stderr (debug mode)", { stderr = stderr, return_val = return_val })
               end
             end
           end
           handle:finish()
+          state.finish("test")
         end)
       end,
     })
 
+    state.start("test")
     job:start()
   end)
 end
@@ -505,7 +517,7 @@ function TestRunner.run_method_coverage(class_name, method_name, options)
     end
 
     local test_name = class_name .. "." .. method_name
-    local handle = Process.create_progress_handle({ title = "Running coverage for " .. test_name })
+    local handle = Progress.create_handle({ title = "Running coverage for " .. test_name })
     handle:report({ message = "Starting test execution with coverage...", percentage = 0 })
 
     local sf_cli_path = options.sf_cli_path or "sf"
@@ -551,19 +563,21 @@ function TestRunner.run_method_coverage(class_name, method_name, options)
             vim.notify("Failed to execute coverage: " .. test_name, vim.log.levels.ERROR)
 
             local stderr = j:stderr_result()
-            deb("Coverage execution error", { stderr = stderr, return_val = return_val, stdout = stdout })
+            Log.deb("Coverage execution error", { stderr = stderr, return_val = return_val, stdout = stdout })
 
             if options.debug then
               if stderr and #stderr > 0 then
-                deb("Coverage execution stderr (debug mode)", { stderr = stderr, return_val = return_val })
+                Log.deb("Coverage execution stderr (debug mode)", { stderr = stderr, return_val = return_val })
               end
             end
           end
           handle:finish()
+          state.finish("test")
         end)
       end,
     })
 
+    state.start("test")
     job:start()
   end)
 end
@@ -572,6 +586,10 @@ end
 --- @param test_type string Either "class" or "method"
 --- @param options table|nil Additional options
 function TestRunner.run_coverage_at_cursor(test_type, options)
+  if state.is_busy("test") then
+    vim.notify("A test is already running. Please wait for it to finish.", vim.log.levels.WARN)
+    return
+  end
   options = options or {}
 
   -- Check if current file is a test class
@@ -630,20 +648,20 @@ function TestRunner.show_last_coverage_results(options)
   end
 
   local json_string = table.concat(file_content, "\n")
-  deb("Last coverage results file content:", json_string)
+  Log.deb("Last coverage results file content:", json_string)
 
   local ok, result = pcall(vim.json.decode, json_string)
 
   if not ok then
-    deb("Failed to parse coverage results JSON from file")
+    Log.deb("Failed to parse coverage results JSON from file")
     vim.notify("Failed to parse coverage results file", vim.log.levels.ERROR)
     return
   end
 
-  deb("Coverage Results parsed:", result)
+  Log.deb("Coverage Results parsed:", result)
 
   if not result or not result.result then
-    deb("Coverage result missing expected structure")
+    Log.deb("Coverage result missing expected structure")
     vim.notify("Failed to parse coverage results file", vim.log.levels.ERROR)
     return
   end

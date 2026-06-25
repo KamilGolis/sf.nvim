@@ -20,17 +20,17 @@ end
 --- @param path string The relative path to the project directory
 --- @usage indexes.index_files("/force-app")
 function M.index_files(path)
-  local cwd = PathUtils.normalize(PathUtils.join(vim.loop.cwd(), path))
+  local cwd = PathUtils.normalize(PathUtils.join(vim.uv.cwd(), path))
 
   local function scan_directory(dir_path)
-    local handle = vim.loop.fs_scandir(dir_path)
+    local handle = vim.uv.fs_scandir(dir_path)
     if not handle then
       vim.notify("Failed to scan directory: " .. dir_path, vim.log.levels.ERROR)
       return
     end
 
     while true do
-      local name, type = vim.loop.fs_scandir_next(handle)
+      local name, type = vim.uv.fs_scandir_next(handle)
       if not name then
         break
       end

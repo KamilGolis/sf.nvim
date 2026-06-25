@@ -1,13 +1,6 @@
+local Log = require("sf.core.log")
 local PathUtils = require("sf.core.path_utils")
-local Snacks = require("snacks")
 local Config = {}
-
--- Initialize debug functions as no-ops by default
--- These will be replaced with actual implementations if debug mode is enabled in setup()
-_G.deb = function() end
-_G.trace = function() end
-_G.log = function() end
-_G.inspect = function() end
 
 --- Default configuration for plugin
 function Config:new()
@@ -28,19 +21,6 @@ function Config:new()
     debug_inspect = false, -- Show debug output on screen (requires debug = true)
   }
 
-  -- Normalize cache_path to absolute path with OS separators (no trailing separator)
-  o.options.cache_path =
-    PathUtils.remove_trailing_separator(PathUtils.normalize(vim.fn.fnamemodify(o.options.cache_path, ":p")))
-  -- Construct full paths using path utilities
-  o.options.deploy_file = PathUtils.join(o.options.cache_path, o.options.deploy_file)
-  o.options.test_results_file = PathUtils.join(o.options.cache_path, o.options.test_results_file)
-  o.options.coverage_results_file = PathUtils.join(o.options.cache_path, o.options.coverage_results_file)
-  o.options.delta_path = PathUtils.join(o.options.cache_path, o.options.delta_dir)
-  -- Delta package manifest file
-  o.options.delta_manifest_path = PathUtils.join(o.options.delta_path, "package", "package.xml")
-  -- Create a namespace for the plugin
-  o.options.namespace = vim.api.nvim_create_namespace("SFNVIM")
-
   return o
 end
 
@@ -52,53 +32,20 @@ function Config:setup(options)
   options = options or {}
 
   self.options = vim.tbl_deep_extend("keep", options, self.options)
+  -- Normalize cache_path to absolute and derive all paths from the resolved value
+  self.options.cache_path =
+    PathUtils.remove_trailing_separator(PathUtils.normalize(vim.fn.fnamemodify(self.options.cache_path, ":p")))
+  self.options.deploy_file = PathUtils.join(self.options.cache_path, self.options.deploy_file)
+  self.options.test_results_file = PathUtils.join(self.options.cache_path, self.options.test_results_file)
+  self.options.coverage_results_file = PathUtils.join(self.options.cache_path, self.options.coverage_results_file)
+  self.options.delta_path = PathUtils.join(self.options.cache_path, self.options.delta_dir)
+  self.options.delta_manifest_path = PathUtils.join(self.options.delta_path, "package", "package.xml")
+  self.options.namespace = vim.api.nvim_create_namespace("SFNVIM")
 
-  -- Update debug functions based on debug flag
+  Log.configure(self.options)
   if self.options.debug then
-    -- Always log to file when debug is enabled
-    _G.log = function(...)
-      Snacks.debug.log(...)
-    end
-
-    -- deb() logs to file, and optionally shows on screen
-    if self.options.debug_inspect then
-      -- Show on screen AND log to file
-      _G.deb = function(...)
-        Snacks.debug.inspect(...)
-        Snacks.debug.log(...)
-      end
-      _G.inspect = function(...)
-        Snacks.debug.inspect(...)
-      end
-    else
-      -- Only log to file, don't show on screen
-      _G.deb = function(...)
-        Snacks.debug.log(...)
-      end
-      _G.inspect = function(...)
-        -- No-op unless debug_inspect is enabled
-      end
-    end
-
-    _G.trace = function()
-      Snacks.debug.backtrace()
-    end
-
-    if vim.fn.has("nvim-0.11") == 1 then
-      vim._print = function(_, ...)
-        log(...)
-      end
-    else
-      vim.print = log
-    end
-
-    log("sf.nvim debug enabled", "inspect on screen:", self.options.debug_inspect)
-    deb("sf.nvim options", self.options)
-  else
-    _G.deb = function() end
-    _G.trace = function() end
-    _G.log = function() end
-    _G.inspect = function() end
+    Log.log("sf.nvim debug enabled", "inspect on screen:", self.options.debug_inspect)
+    Log.deb("sf.nvim options", self.options)
   end
 end
 

@@ -3,10 +3,6 @@ local Const = require("sf.const")
 local JobUtils = require("sf.core.job_utils")
 local OrgUtils = require("sf.org.utils")
 
--- =============================================================================
--- CONNECT CLASS DEFINITION
--- =============================================================================
-
 --- Connect class for managing Salesforce CLI operations and org connections
 --- @class Connect
 --- @field __index table The metatable index for the Connect class
@@ -22,10 +18,6 @@ function Connect:new()
 
   return o
 end
-
--- =============================================================================
--- PRIVATE UTILITY FUNCTIONS
--- =============================================================================
 
 --- Check if SF CLI is installed and get version information
 --- @param callback function Callback function to handle the result, receives boolean success parameter
@@ -82,10 +74,6 @@ local function check_sf_cli(callback)
   job:start()
 end
 
--- =============================================================================
--- PUBLIC API METHODS
--- =============================================================================
-
 --- Public method to check if SF CLI is installed and available
 --- @param callback function Callback function to execute if CLI is available (no parameters)
 --- @usage connect:check_cli(function() print("CLI is ready") end)
@@ -123,8 +111,7 @@ function Connect:select_default_org()
     )
 
     -- Create CLI job using utility function
-    local args = vim.split(Const.SF_CLI.ORG.LIST.CMD, " ")
-    table.insert(args, Const.SF_CLI.ORG.LIST.ARGS.JSON)
+    local args = Const.get_org_list_args()
     local job = JobUtils.create_cli_job(executable_path, args, {
       on_success = function(job, return_val)
         local result = table.concat(job:result(), "\n")
@@ -159,10 +146,6 @@ function Connect:select_default_org()
     job:start()
   end)
 end
-
--- =============================================================================
--- MODULE EXPORT
--- =============================================================================
 
 --- Create and return a singleton Connect instance for org connection operations
 --- @type Connect
