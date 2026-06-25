@@ -17,7 +17,8 @@ local retrieve_selected_log
 
 --- Display log picker with the given log items
 --- @param logs table Array of log items for the picker
-local function display_log_picker(logs)
+--- @param on_select function|nil Callback when a log is selected (receives item)
+local function display_log_picker(logs, on_select)
   if not logs or #logs == 0 then
     vim.notify("No debug logs found", vim.log.levels.INFO)
     return
@@ -33,13 +34,16 @@ local function display_log_picker(logs)
       return
     end
 
-    retrieve_selected_log(item)
+    if on_select then
+      on_select(item)
+    end
   end)
 end
-
---- Retrieve a selected debug log from the org and open it in a buffer
+--- Ensure a log file is available on disk for the given item.
+--- Downloads the log if not already cached locally.
 --- @param item table The selected picker item containing id and metadata
-retrieve_selected_log = function(item)
+--- @param on_ready function(item, log_file_path) Called with the path to the local log file
+function LogList.ensure_log_file(item, on_ready)
   local log_id = item.id
 
   if not log_id or log_id == "Unknown" then
@@ -92,8 +96,9 @@ retrieve_selected_log = function(item)
   local log_file = PathUtils.join(log_dir, log_id .. ".log")
 
   if vim.uv.fs_stat(log_file) then
-    vim.cmd("edit " .. vim.fn.fnameescape(log_file))
-    vim.notify("Log file opened from cache: " .. log_file, vim.log.levels.INFO)
+    vim.schedule(function()
+      on_ready(log_file)
+    end)
     return
   end
 
@@ -125,12 +130,11 @@ retrieve_selected_log = function(item)
         context.handle:report({ message = context.success_message, percentage = 100 })
         context.handle:finish()
 
-        -- Open the downloaded log file (must run on main event loop)
+        -- Call on_ready with the downloaded log file (must run on main event loop)
         local log_file = PathUtils.join(log_dir, log_id .. ".log")
 
         vim.schedule(function()
-          vim.cmd("edit " .. vim.fn.fnameescape(log_file))
-          vim.notify("Log file opened: " .. log_file, vim.log.levels.INFO)
+          on_ready(log_file)
         end)
       end,
       on_error = function(job, return_val)
@@ -144,10 +148,17 @@ retrieve_selected_log = function(item)
   end)
 end
 
---- Fetch and display Salesforce debug logs
---- @param options table|nil Additional options
+--- Retrieve a selected debug log and open it in a buffer.
+--- @param item table The selected picker item containing id and metadata
+retrieve_selected_log = function(item)
+  LogList.ensure_log_file(item, function(log_file)
+    vim.cmd("edit " .. vim.fn.fnameescape(log_file))
+    vim.notify("Log file opened: " .. log_file, vim.log.levels.INFO)
+  end)
+end
 function LogList.list_logs(options)
   options = options or {}
+  local on_select = options.on_select or retrieve_selected_log
 
   -- First check if SF CLI is installed
   Connector:check_cli(function()
@@ -218,7 +229,7 @@ function LogList.list_logs(options)
           return
         end
 
-        display_log_picker(logs)
+        display_log_picker(logs, on_select)
 
         -- Report success
         context.handle:report({ message = context.success_message, percentage = 100 })
@@ -234,17 +245,17 @@ function LogList.list_logs(options)
     job:start()
   end)
 end
-
---- Display cached debug logs from the local log list file.
---- If no cached file exists, falls back to fetching from org.
-function LogList.resume_logs()
+--- Pick a log from the cached log list and call on_select with the selected item.
+--- Falls back to fetching from org if no cached list exists.
+--- @param on_select function(item) Called when a log is selected from the picker
+function LogList.pick_cached_logs(on_select)
   local result_file = Utils.get_log_list_path()
 
   -- If no cached file exists, fall back to fetching from org
   local file_info = vim.uv.fs_stat(result_file)
 
   if not file_info then
-    LogList.list_logs()
+    LogList.list_logs({ on_select = on_select })
     return
   end
 
@@ -268,7 +279,7 @@ function LogList.resume_logs()
   local success, logs, error_message = Utils.process_log_list(result)
 
   if not success or not logs then
-    vim.notify(error_message or "Failed to process cached log list", vim.log.levels.ERROR)
+    vim.notify(error_message or "Failed to processed cached log list", vim.log.levels.ERROR)
     return
   end
 
@@ -277,7 +288,13 @@ function LogList.resume_logs()
     return
   end
 
-  display_log_picker(logs)
+  display_log_picker(logs, on_select)
+end
+
+--- Display cached debug logs from the local log list file.
+--- If no cached file exists, falls back to fetching from org.
+function LogList.resume_logs()
+  LogList.pick_cached_logs(retrieve_selected_log)
 end
 
 return LogList
