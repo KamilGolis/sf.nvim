@@ -5,8 +5,8 @@ local Diagnostics = require("sf.core.diagnostics")
 local Indexes = require("sf.core.indexes")
 local Log = require("sf.core.log")
 local PathUtils = require("sf.core.path_utils")
+local State = require("sf.core.state")
 local Utils = require("sf.core.utils")
-local state = require("sf.core.state")
 
 local Metadata = {}
 
@@ -32,6 +32,7 @@ function Metadata:deploy_metadata(force)
     Log.deb("Starting Deploy Metadata function...")
 
     local valid, err = DeployUtils.validate_deployment_preconditions()
+
     if not valid then
       if err then
         vim.notify(err, vim.log.levels.WARN)
@@ -50,10 +51,10 @@ function Metadata:deploy_metadata(force)
 
     local job = DeployUtils.create_current_file_deploy_job(current_file, context, {
       cleanup_callback = function()
-        state.finish("deploy")
+        State.finish("deploy")
       end,
     }, force)
-    state.start("deploy")
+    State.start("deploy")
     job:start()
   end)
 end
@@ -69,6 +70,7 @@ function Metadata:deploy_changed_metadatas(force)
   Connector:check_cli(function()
     -- Validate pre-deployment conditions
     local valid, err = DeployUtils.validate_deployment_preconditions()
+
     if not valid then
       if err then
         vim.notify(err, vim.log.levels.WARN)
@@ -86,7 +88,7 @@ function Metadata:deploy_changed_metadatas(force)
 
     local deploy_job = DeployUtils.create_manifest_deploy_job(options.delta_manifest_path, context, {
       cleanup_callback = function()
-        state.finish("deploy")
+        State.finish("deploy")
       end,
     }, force)
 
@@ -94,7 +96,7 @@ function Metadata:deploy_changed_metadatas(force)
     local prepare_manifest = DeployUtils.create_changed_files_manifest_job(context, deploy_job)
 
     -- Start the job sequence
-    state.start("deploy")
+    State.start("deploy")
     prepare_manifest:start()
   end)
 end
@@ -111,6 +113,7 @@ function Metadata:deploy_selected_metadata(force)
   Connector:check_cli(function()
     -- Validate pre-deployment conditions
     local valid, err = DeployUtils.validate_deployment_preconditions()
+
     if not valid then
       if err then
         vim.notify(err, vim.log.levels.WARN)
@@ -121,6 +124,7 @@ function Metadata:deploy_selected_metadata(force)
     -- Validate and process quickfix files using utility function
     local quickfix_success, found_files, missing_files, quickfix_error =
       DeployUtils.validate_quickfix_files(Config, Indexes, Utils)
+
     if not quickfix_success then
       if quickfix_error then
         vim.notify(quickfix_error, vim.log.levels.WARN)
@@ -141,6 +145,7 @@ function Metadata:deploy_selected_metadata(force)
 
     -- Prepare quickfix files for deployment using utility function
     local prep_success, prep_error = DeployUtils.prepare_quickfix_files_for_deployment(found_files)
+
     if not prep_success then
       vim.notify(prep_error, vim.log.levels.ERROR)
       context.handle:finish()
@@ -149,7 +154,7 @@ function Metadata:deploy_selected_metadata(force)
 
     local deploy_job = DeployUtils.create_manifest_deploy_job(options.delta_manifest_path, context, {
       cleanup_callback = function()
-        state.finish("deploy")
+        State.finish("deploy")
       end,
     }, force)
 
@@ -157,7 +162,7 @@ function Metadata:deploy_selected_metadata(force)
     local prepare_manifest = DeployUtils.create_selected_files_manifest_job(context, deploy_job)
 
     -- Start the job sequence
-    state.start("deploy")
+    State.start("deploy")
     prepare_manifest:start()
   end)
 end

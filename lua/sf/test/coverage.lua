@@ -107,6 +107,7 @@ local function display_coverage_signs(bufnr, class_coverage)
   -- Place signs for each line with coverage data
   for line_str, coverage_value in pairs(class_coverage.lines) do
     local line_num = tonumber(line_str)
+
     if line_num then
       local sign_name = coverage_value == 1 and "SfCovered" or "SfUncovered"
       vim.fn.sign_place(0, "sf_coverage", sign_name, bufnr, { lnum = line_num })
@@ -143,6 +144,7 @@ function Coverage.enable()
     if vim.api.nvim_buf_is_loaded(bufnr) then
       local file_path = vim.api.nvim_buf_get_name(bufnr)
       local class_name = get_class_name_from_path(file_path)
+
       if class_name then
         Coverage.show_coverage_for_buffer(bufnr, class_name)
       end
@@ -175,11 +177,13 @@ function Coverage.show_coverage_for_buffer(bufnr, class_name)
   end
 
   local coverage_data = parse_coverage_data()
+
   if not coverage_data then
     return
   end
 
   local class_coverage = find_class_coverage(coverage_data, class_name)
+
   if class_coverage then
     display_coverage_signs(bufnr, class_coverage)
   end

@@ -40,4 +40,5 @@ luac.out
 *.x86_64
 *.hex
 
-
+# Sample data directory
+data/
