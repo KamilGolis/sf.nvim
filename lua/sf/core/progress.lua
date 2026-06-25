@@ -17,6 +17,7 @@ local function check_lsp_status_available()
   if has_lsp_status == nil then
     has_lsp_status = type(vim.lsp.status) == "function"
   end
+
   return has_lsp_status
 end
 
@@ -40,21 +41,25 @@ local function create_rpc_client(_dispatchers, _config)
         })
         return true, 0
       end
+
       if method == "shutdown" then
         callback(nil, vim.NIL)
         return true, 0
       end
+      --
       -- Unknown request: return error
       callback({
         code = -32601,
         message = "Method not found: " .. tostring(method),
       })
+
       return true, 0
     end,
     notify = function(method, _params)
       if method == "exit" then
         closing = true
       end
+
       return true
     end,
     is_closing = function()
@@ -135,12 +140,15 @@ function M.create_handle(params)
   return {
     report = function(report_params)
       local value = { kind = "report" }
+
       if report_params.message then
         value.message = report_params.message
       end
+
       if report_params.percentage ~= nil then
         value.percentage = report_params.percentage
       end
+
       pcall(vim.lsp.handlers["$/progress"], nil, {
         token = token,
         value = value,

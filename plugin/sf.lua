@@ -7,6 +7,7 @@ if not Utils.has_sfdx_project() then
   return
 end
 
+local Cleanup = require("sf.log.cleanup")
 local Config = require("sf.config")
 local Connector = require("sf.org.connect")
 local Deployment = require("sf.deploy.metadata")
@@ -109,6 +110,12 @@ local COMMANDS = {
   log = {
     list = function()
       LogList.list_logs(make_test_options())
+    end,
+    resume = function()
+      LogList.resume_logs()
+    end,
+    cleanup = function()
+      Cleanup.cleanup_logs()
     end,
   },
 }

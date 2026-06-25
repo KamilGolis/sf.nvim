@@ -123,6 +123,7 @@ function Connect:select_default_org()
 
         -- Use new JSON validation and org processing utilities
         local success, orgs, error_message = OrgUtils.process_org_list(result)
+
         if not success or not orgs then
           JobUtils.handle_cli_error(return_val, context, error_message)
           return

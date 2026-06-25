@@ -86,6 +86,10 @@ M.SF_CLI_MESSAGES = {
   LOG_LIST_SUCCESS = "Debug logs fetched successfully",
   LOG_LIST_FAILED = "Failed to fetch debug logs",
   LOG_LIST_EMPTY = "No debug logs found",
+  LOG_RETRIEVE_TITLE = "Fetching Salesforce debug log",
+  LOG_RETRIEVE_SUCCESS = "Debug log retrieved successfully",
+  LOG_RETRIEVE_FAILED = "Failed to retrieve debug log",
+  LOG_NOT_IN_CACHE = "Selected log not found in cached list. Refreshing...",
   NO_DEFAULT_ORG = "No default org set. Please set a default org first using ':Sf org set'",
 }
 
@@ -165,14 +169,22 @@ M.SF_CLI = {
         },
       },
     },
-    LIST = {
-      LOG = {
+    LOG = {
+      LIST = {
         CMD = "apex list log",
         ARGS = {
           JSON = "--json",
           TARGET_ORG = "-o",
         },
       },
+      GET = {
+        CMD = "apex get log",
+        ARGS = {
+          LOG_DIR = "-d",
+          LOG_ID = "-i",
+        },
+      },
+      ANALYZE = {},
     },
   },
 }
@@ -419,20 +431,40 @@ function M.get_apex_log_list_args(target_org)
   local args = {}
 
   -- Add the base command
-  local cmd_parts = split_cmd(M.SF_CLI.APEX.LIST.LOG.CMD)
+  local cmd_parts = split_cmd(M.SF_CLI.APEX.LOG.LIST.CMD)
   for _, part in ipairs(cmd_parts) do
     table.insert(args, part)
   end
 
   -- Add JSON flag
-  table.insert(args, M.SF_CLI.APEX.LIST.LOG.ARGS.JSON)
+  table.insert(args, M.SF_CLI.APEX.LOG.LIST.ARGS.JSON)
 
   -- Add target org if provided
   if target_org then
-    table.insert(args, M.SF_CLI.APEX.LIST.LOG.ARGS.TARGET_ORG)
+    table.insert(args, M.SF_CLI.APEX.LOG.LIST.ARGS.TARGET_ORG)
     table.insert(args, target_org)
   end
 
+  return args
+end
+
+--- Constructs arguments for SF CLI Apex log retrieval command
+--- @param log_dir string The directory to store the downloaded log file
+--- @param log_id string The ID of the log to retrieve
+--- @return table Complete argument list for sf apex get log command
+--- @usage local args = Const.get_apex_log_get_args("/tmp/logs", "07L9b00000M4vUTEAZ")
+function M.get_apex_log_get_args(log_dir, log_id)
+  local args = {}
+  local cmd_parts = split_cmd(M.SF_CLI.APEX.LOG.GET.CMD)
+
+  for _, part in ipairs(cmd_parts) do
+    table.insert(args, part)
+  end
+
+  table.insert(args, M.SF_CLI.APEX.LOG.GET.ARGS.LOG_DIR)
+  table.insert(args, log_dir)
+  table.insert(args, M.SF_CLI.APEX.LOG.GET.ARGS.LOG_ID)
+  table.insert(args, log_id)
   return args
 end
 

@@ -1,10 +1,9 @@
-local Log = require("sf.core.log")
-
 local Snacks = require("snacks")
 
 local Config = require("sf.config")
 local Const = require("sf.const")
 local JobUtils = require("sf.core.job_utils")
+local Log = require("sf.core.log")
 local PathUtils = require("sf.core.path_utils")
 
 local M = {}
