@@ -26,13 +26,11 @@ As a Salesforce developer, I’ve mostly used VS Code and WebStorm with Illumina
 
 ## 📋 Requirements
 
-- [Neovim](https://neovim.io/) >= 0.9.0
+- [Neovim](https://neovim.io/) >= 0.11.0
 - [Salesforce CLI](https://developer.salesforce.com/tools/salesforcecli) (`sf` command)
 - [Snacks.nvim](https://github.com/folke/snacks.nvim) - For UI components
-- [plenary.nvim](https://github.com/nvim-lua/plenary.nvim) - For async operations
 - **Optional:** [sgd plugin](https://github.com/scolladon/sfdx-git-delta) - For delta deployments of changed files
 - **Optional:** Progress is displayed via Neovim's built-in LSP statusline indicator. Add `%{%v:lua.vim.lsp.status()%}` to your statusline if not already present.
-
 
 ## 📦 Installation
 
@@ -43,7 +41,6 @@ As a Salesforce developer, I’ve mostly used VS Code and WebStorm with Illumina
   "kamilgolis/sf.nvim",
   dependencies = {
     "folke/snacks.nvim",
-    "nvim-lua/plenary.nvim",
   },
   config = function()
     require("sf").setup({
@@ -60,7 +57,6 @@ use {
   "kamilgolis/sf.nvim",
   requires = {
     "folke/snacks.nvim",
-    "nvim-lua/plenary.nvim",
   },
   config = function()
     require("sf").setup({
@@ -217,48 +213,6 @@ vim.keymap.set("n", "<leader>sl", ":Sf log list<CR>", { desc = "List debug logs"
 vim.keymap.set("n", "<leader>sr", ":Sf test result<CR>", { desc = "Show test results" })
 ```
 
-## 🏗️ Architecture
-
-### Project Structure
-
-```
-sf.nvim/
-├── lua/
-│   └── sf/
-│       ├── core/          # Core utilities
-│       │   ├── diagnostics.lua
-│       │   ├── indexes.lua
-│       │   ├── job_utils.lua
-│       │   ├── path_utils.lua
-│       │   ├── process.lua
-│       │   └── utils.lua
-│       ├── deploy/        # Deployment functionality
-│       │   ├── metadata.lua
-│       │   └── utils.lua
-│       ├── test/          # Testing functionality
-│       │   ├── coverage.lua
-│       │   ├── results_buffer.lua
-│       │   └── runner.lua
-│       ├── org/           # Org management
-│       │   ├── connect.lua
-│       │   └── utils.lua
-│       ├── log/           # Debug log management
-│       │   └── list.lua
-│       ├── config.lua     # Configuration
-│       ├── const.lua      # Constants
-│       └── init.lua       # Plugin entry point
-└── plugin/
-    └── sf.lua             # Plugin commands and autocommands
-```
-
-### Key Modules
-
-- **core/**: Shared utilities (path handling, job management, diagnostics)
-- **deploy/**: Metadata deployment orchestration
-- **test/**: Apex test execution and coverage display
-- **org/**: Org connection management
-- **log/**: Debug log listing and viewing
-
 ## 🎨 Features in Detail
 
 ### Metadata Deployment
@@ -276,7 +230,7 @@ sf.nvim/
 - **Results Buffer**: Beautiful UI showing test results with stack traces
 - **Code Coverage**: Visual indicators in the gutter showing covered/uncovered lines
 
-### Debug Logs
+### Debug Logs (in progress)
 
 - **Interactive Picker**: Browse logs with rich metadata
 - **Preview Panel**: View log details before selection
@@ -290,15 +244,7 @@ When enabled (`:Sf coverage on`), coverage signs appear in the gutter:
 
 ## 🛠️ Development
 
-### Running Tests
-
-```bash
-# Check code style
-stylua --check .
-
-# Format code
-stylua .
-```
+PRs are welcome.
 
 ### Code Style
 
@@ -316,7 +262,7 @@ See `stylua.toml` for complete configuration.
 **Error:** `Salesforce CLI (sf) not found in PATH`
 
 **Solution:**
-- Ensure SF CLI is installed: `npm install -g @salesforce/cli`
+- Ensure SF CLI is installed: `npm install -g @salesforce/cli` and it is in PATH
 - On Windows, use `sf_cli_path = "sf.cmd"` in your configuration
 
 ### No Default Org
@@ -359,7 +305,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## 🙏 Acknowledgments
 
 - [Snacks.nvim](https://github.com/folke/snacks.nvim) - For beautiful UI components
-- [plenary.nvim](https://github.com/nvim-lua/plenary.nvim) - For async operations
 - [Salesforce CLI](https://developer.salesforce.com/tools/salesforcecli) - The backbone of this plugin
 
 ## 📚 Related Projects
