@@ -9,7 +9,7 @@ local TestResultsBuffer = {}
 --- Parse a stack trace line to extract class name, method name, and line number
 --- @param stack_line string The stack trace line to parse
 --- @return string|nil class_name The class name if found
---- @return string|nil method_name The method name if found  
+--- @return string|nil method_name The method name if found
 --- @return number|nil line_number The line number if found
 function TestResultsBuffer.parse_stack_trace_line(stack_line)
   -- Pattern for: Class.ClassName.methodName: line 77, column 1
@@ -17,19 +17,19 @@ function TestResultsBuffer.parse_stack_trace_line(stack_line)
   if class_name and method_name and line_number then
     return class_name, method_name, tonumber(line_number)
   end
-  
+
   -- Pattern for: ClassName.methodName: line 77, column 1 (without "Class." prefix)
   class_name, method_name, line_number = stack_line:match("([^%.]+)%.([^:]+):%s*line%s*(%d+)")
   if class_name and method_name and line_number then
     return class_name, method_name, tonumber(line_number)
   end
-  
+
   -- Pattern for: ClassName: line 77, column 1 (class level error)
   class_name, line_number = stack_line:match("([^:]+):%s*line%s*(%d+)")
   if class_name and line_number then
     return class_name, nil, tonumber(line_number)
   end
-  
+
   return nil, nil, nil
 end
 
@@ -68,9 +68,15 @@ function TestResultsBuffer.show_results(test_results, test_name)
   local test_line_map = {} -- Maps line numbers to test information
 
   -- Header
-  table.insert(lines, "═══════════════════════════════════════════════════════════════")
+  table.insert(
+    lines,
+    "═══════════════════════════════════════════════════════════════"
+  )
   table.insert(lines, "                        SF TEST RESULTS")
-  table.insert(lines, "═══════════════════════════════════════════════════════════════")
+  table.insert(
+    lines,
+    "═══════════════════════════════════════════════════════════════"
+  )
   table.insert(lines, "")
 
   -- Test execution info
@@ -85,7 +91,10 @@ function TestResultsBuffer.show_results(test_results, test_name)
 
   -- Summary section
   table.insert(lines, "SUMMARY")
-  table.insert(lines, "───────────────────────────────────────────────────────────────")
+  table.insert(
+    lines,
+    "───────────────────────────────────────────────────────────────"
+  )
   table.insert(lines, string.format("Outcome: %s", summary.outcome or "Unknown"))
   table.insert(lines, string.format("Tests Run: %d", summary.testsRan or 0))
   table.insert(lines, string.format("Passed: %d (%s)", summary.passing or 0, summary.passRate or "0%"))
@@ -96,7 +105,10 @@ function TestResultsBuffer.show_results(test_results, test_name)
   -- Individual test results
   if #tests > 0 then
     table.insert(lines, "TEST DETAILS")
-    table.insert(lines, "───────────────────────────────────────────────────────────────")
+    table.insert(
+      lines,
+      "───────────────────────────────────────────────────────────────"
+    )
     table.insert(lines, "")
 
     for i, test in ipairs(tests) do
@@ -105,15 +117,18 @@ function TestResultsBuffer.show_results(test_results, test_name)
 
       -- Test header
       local status_icon = test.Outcome == "Pass" and "✓" or "✗"
-      local test_full_name = test.FullName or (test.ApexClass and test.ApexClass.Name .. "." .. test.MethodName) or test.MethodName or "Unknown"
-      
+      local test_full_name = test.FullName
+        or (test.ApexClass and test.ApexClass.Name .. "." .. test.MethodName)
+        or test.MethodName
+        or "Unknown"
+
       table.insert(lines, string.format("%s %s", status_icon, test_full_name))
-      
+
       -- Store test information for navigation
       test_line_map[test_name_line] = {
         class_name = test.ApexClass and test.ApexClass.Name or nil,
         method_name = test.MethodName,
-        full_name = test_full_name
+        full_name = test_full_name,
       }
 
       -- Test details
@@ -139,7 +154,7 @@ function TestResultsBuffer.show_results(test_results, test_name)
           for _, stack_line in ipairs(stack_lines) do
             local line_num = #lines + 1
             table.insert(lines, "     " .. stack_line)
-            
+
             -- Check if this stack trace line contains line number information
             local class_name, method_name, line_number = TestResultsBuffer.parse_stack_trace_line(stack_line)
             if class_name and line_number then
@@ -147,7 +162,7 @@ function TestResultsBuffer.show_results(test_results, test_name)
                 class_name = class_name,
                 method_name = method_name,
                 line_number = line_number,
-                is_stack_trace = true
+                is_stack_trace = true,
               }
             end
           end
@@ -159,7 +174,10 @@ function TestResultsBuffer.show_results(test_results, test_name)
   end
 
   -- Footer
-  table.insert(lines, "───────────────────────────────────────────────────────────────")
+  table.insert(
+    lines,
+    "───────────────────────────────────────────────────────────────"
+  )
   table.insert(lines, "Press 'gf' or <Enter> on test names to open source files")
   table.insert(lines, "Press 'gf' or <Enter> on stack trace lines to jump to specific line numbers")
   table.insert(lines, "Press 'q' to close this buffer")
@@ -189,14 +207,14 @@ function TestResultsBuffer.setup_keymaps(buf, test_line_map)
   vim.api.nvim_buf_set_keymap(buf, "n", "q", ":bdelete<CR>", {
     noremap = true,
     silent = true,
-    desc = "Close test results buffer"
+    desc = "Close test results buffer",
   })
 
   -- Navigate to test source with 'gf' or <CR>
   local function goto_test_source()
     local line_num = vim.api.nvim_win_get_cursor(0)[1]
     local test_info = test_line_map[line_num]
-    
+
     if test_info and test_info.class_name then
       if test_info.is_stack_trace and test_info.line_number then
         -- Navigate to specific line from stack trace
@@ -212,14 +230,14 @@ function TestResultsBuffer.setup_keymaps(buf, test_line_map)
     noremap = true,
     silent = true,
     callback = goto_test_source,
-    desc = "Go to test source file"
+    desc = "Go to test source file",
   })
 
   vim.api.nvim_buf_set_keymap(buf, "n", "<CR>", "", {
     noremap = true,
     silent = true,
     callback = goto_test_source,
-    desc = "Go to test source file"
+    desc = "Go to test source file",
   })
 end
 
@@ -282,7 +300,7 @@ function TestResultsBuffer.open_test_source(class_name, method_name, line_number
     local method_patterns = {
       "\\v(public|private|protected|global)\\s+(static\\s+)?(testMethod\\s+)?\\w*\\s*" .. method_name .. "\\s*\\(",
       "\\v@isTest.*\\n.*" .. method_name .. "\\s*\\(",
-      "\\v" .. method_name .. "\\s*\\("
+      "\\v" .. method_name .. "\\s*\\(",
     }
 
     for _, pattern in ipairs(method_patterns) do
@@ -308,7 +326,7 @@ function TestResultsBuffer.open_results_window(buf)
   -- Open in a new split
   vim.cmd("split")
   vim.api.nvim_win_set_buf(0, buf)
-  
+
   -- Resize window to show content better
   local lines = vim.api.nvim_buf_line_count(buf)
   local max_height = math.floor(vim.o.lines * 0.6)

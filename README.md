@@ -31,6 +31,8 @@ As a Salesforce developer, I’ve mostly used VS Code and WebStorm with Illumina
 - [Snacks.nvim](https://github.com/folke/snacks.nvim) - For UI components
 - [plenary.nvim](https://github.com/nvim-lua/plenary.nvim) - For async operations
 - **Optional:** [sgd plugin](https://github.com/scolladon/sfdx-git-delta) - For delta deployments of changed files
+- **Optional:** Progress is displayed via Neovim's built-in LSP statusline indicator. Add `%{%v:lua.vim.lsp.status()%}` to your statusline if not already present.
+
 
 ## 📦 Installation
 

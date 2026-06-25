@@ -3,10 +3,6 @@ local Const = require("sf.const")
 local JobUtils = require("sf.core.job_utils")
 local OrgUtils = require("sf.org.utils")
 
--- =============================================================================
--- CONNECT CLASS DEFINITION
--- =============================================================================
-
 --- Connect class for managing Salesforce CLI operations and org connections
 --- @class Connect
 --- @field __index table The metatable index for the Connect class
@@ -23,10 +19,6 @@ function Connect:new()
   return o
 end
 
--- =============================================================================
--- PRIVATE UTILITY FUNCTIONS
--- =============================================================================
-
 --- Check if SF CLI is installed and get version information
 --- @param callback function Callback function to handle the result, receives boolean success parameter
 --- @usage check_sf_cli(function(success) print("CLI check:", success) end)
@@ -38,8 +30,7 @@ local function check_sf_cli(callback)
   end
 
   -- Validate CLI installation using utility function
-  local cli_valid, executable_path, error_msg =
-    JobUtils.validate_cli_installation(Config:get_options().sf_cli_path)
+  local cli_valid, executable_path, error_msg = JobUtils.validate_cli_installation(Config:get_options().sf_cli_path)
   if not cli_valid or not executable_path then
     callback(false)
     vim.notify(error_msg or Const.SF_CLI_MESSAGES.NOT_FOUND, vim.log.levels.ERROR)
@@ -70,11 +61,7 @@ local function check_sf_cli(callback)
         callback(true)
         vim.g.sf_cli_checked = true
       else
-        JobUtils.handle_cli_error(
-          return_val,
-          context,
-          parse_error or Const.SF_CLI_MESSAGES.VERSION_UNKNOWN
-        )
+        JobUtils.handle_cli_error(return_val, context, parse_error or Const.SF_CLI_MESSAGES.VERSION_UNKNOWN)
         callback(false)
       end
     end,
@@ -86,10 +73,6 @@ local function check_sf_cli(callback)
 
   job:start()
 end
-
--- =============================================================================
--- PUBLIC API METHODS
--- =============================================================================
 
 --- Public method to check if SF CLI is installed and available
 --- @param callback function Callback function to execute if CLI is available (no parameters)
@@ -114,8 +97,7 @@ function Connect:select_default_org()
   -- First, check if SF CLI is installed
   check_sf_cli(function(_)
     -- Validate CLI installation using utility function
-    local cli_valid, executable_path, error_msg =
-      JobUtils.validate_cli_installation(Config:get_options().sf_cli_path)
+    local cli_valid, executable_path, error_msg = JobUtils.validate_cli_installation(Config:get_options().sf_cli_path)
     if not cli_valid or not executable_path then
       vim.notify(error_msg or Const.SF_CLI_MESSAGES.NOT_FOUND, vim.log.levels.ERROR)
       return
@@ -129,8 +111,7 @@ function Connect:select_default_org()
     )
 
     -- Create CLI job using utility function
-    local args = vim.split(Const.SF_CLI.ORG.LIST.CMD, " ")
-    table.insert(args, Const.SF_CLI.ORG.LIST.ARGS.JSON)
+    local args = Const.get_org_list_args()
     local job = JobUtils.create_cli_job(executable_path, args, {
       on_success = function(job, return_val)
         local result = table.concat(job:result(), "\n")
@@ -165,10 +146,6 @@ function Connect:select_default_org()
     job:start()
   end)
 end
-
--- =============================================================================
--- MODULE EXPORT
--- =============================================================================
 
 --- Create and return a singleton Connect instance for org connection operations
 --- @type Connect

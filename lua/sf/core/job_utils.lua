@@ -1,12 +1,8 @@
-local Job = require("plenary.job")
 local Const = require("sf.const")
-local Process = require("sf.core.process")
+local Log = require("sf.core.log")
+local Progress = require("sf.core.progress")
 
 local M = {}
-
--- =============================================================================
--- TYPE DEFINITIONS
--- =============================================================================
 
 --- Progress context structure for standardized progress reporting
 --- @class ProgressContext
@@ -31,10 +27,6 @@ local M = {}
 --- @field node_version string|nil The Node.js version information
 --- @field has_update boolean Whether an update is available
 
--- =============================================================================
--- PROGRESS AND JOB UTILITIES
--- =============================================================================
-
 --- Creates a standardized progress context for SF CLI operations
 --- @param title string The title for the progress dialog
 --- @param success_message string Message to display on successful completion
@@ -42,7 +34,7 @@ local M = {}
 --- @return ProgressContext The progress context with handle
 --- @usage local context = JobUtils.create_progress_context("Checking CLI", "Success", "Failed")
 function M.create_progress_context(title, success_message, failure_message)
-  local handle = Process.create_progress_handle({ title = title })
+  local handle = Progress.create_handle({ title = title })
 
   return {
     title = title,
@@ -52,31 +44,100 @@ function M.create_progress_context(title, success_message, failure_message)
   }
 end
 
+--- Creates a job using Neovim native vim.system (compat API)
+--- @param config table { command: string, args: string[], on_start?: fun(), on_stdout?: fun(err: string, data: string), on_stderr?: fun(err: string, data: string), on_exit: fun(self: table, code: number) }
+--- @return table { start: function, result: function, stderr_result: function }
+function M.create_system_job(config)
+  local self = {
+    _command = config.command,
+    _args = config.args or {},
+    _stdout = "",
+    _stderr = "",
+  }
+
+  function self.start()
+    if config.on_start then
+      vim.schedule(config.on_start)
+    end
+
+    local opts = { text = true }
+    if config.on_stdout then
+      opts.stdout = function(err, data)
+        if data then
+          self._stdout = self._stdout .. data
+        end
+        config.on_stdout(err, data)
+      end
+    else
+      opts.stdout = function(_, data)
+        if data then
+          self._stdout = self._stdout .. data
+        end
+      end
+    end
+    if config.on_stderr then
+      opts.stderr = function(err, data)
+        if data then
+          self._stderr = self._stderr .. data
+        end
+        config.on_stderr(err, data)
+      end
+    else
+      opts.stderr = function(_, data)
+        if data then
+          self._stderr = self._stderr .. data
+        end
+      end
+    end
+
+    local args = { self._command }
+    for _, a in ipairs(self._args) do
+      table.insert(args, a)
+    end
+
+    self._sys_obj = vim.system(args, opts, function(obj)
+      vim.schedule(function()
+        if config.on_exit then
+          config.on_exit(self, obj.code)
+        end
+      end)
+    end)
+    return self._sys_obj
+  end
+
+  function self.result()
+    return vim.split(self._stdout or "", "\n")
+  end
+
+  function self.stderr_result()
+    return vim.split(self._stderr or "", "\n")
+  end
+
+  return self
+end
+
 --- Creates a standardized SF CLI job with consistent error handling
 --- @param command string The SF CLI executable path
 --- @param args table Command arguments array
 --- @param callbacks table Table containing on_success and on_error callbacks
 --- @return table The created Job instance
---- @usage local job = JobUtils.create_cli_job("/usr/bin/sf", {"--version"}, {on_success = function() end})
 function M.create_cli_job(command, args, callbacks)
-  return Job:new({
+  return M.create_system_job({
     command = command,
     args = args,
     on_exit = function(job, return_val)
-      vim.schedule(function()
-        deb("CLI job exit", { command = command, return_val = return_val })
-        if return_val == 0 then
-          if callbacks.on_success then
-            callbacks.on_success(job, return_val)
-          end
-        else
-          local stderr = job:stderr_result()
-          deb("CLI job error", { command = command, return_val = return_val, stderr = stderr })
-          if callbacks.on_error then
-            callbacks.on_error(job, return_val)
-          end
+      Log.deb("CLI job exit", { command = command, return_val = return_val })
+      if return_val == 0 then
+        if callbacks.on_success then
+          callbacks.on_success(job, return_val)
         end
-      end)
+      else
+        local stderr = job:stderr_result()
+        Log.deb("CLI job error", { command = command, return_val = return_val, stderr = stderr })
+        if callbacks.on_error then
+          callbacks.on_error(job, return_val)
+        end
+      end
     end,
   })
 end
@@ -106,10 +167,6 @@ function M.handle_cli_result(job, return_val, context, success_callback, error_c
   end
 end
 
--- =============================================================================
--- VALIDATION UTILITIES
--- =============================================================================
-
 --- Validates SF CLI installation and returns executable path
 --- @param cli_path string The configured SF CLI path
 --- @return boolean success True if CLI is installed and executable
@@ -134,7 +191,7 @@ end
 --- @return string|nil error_message Error message if validation fails
 --- @usage local ok, data, err = JobUtils.validate_json_response('{"result": {}}', {result = "table"})
 function M.validate_json_response(json_string, expected_structure)
-  deb("Validate JSON response", json_string)
+  Log.deb("Validate JSON response", json_string)
 
   if not json_string or json_string == "" then
     return false, nil, "Empty JSON response"
@@ -142,11 +199,11 @@ function M.validate_json_response(json_string, expected_structure)
 
   local ok, parsed = pcall(vim.json.decode, json_string)
   if not ok then
-    deb("JSON parse error:", json_string)
+    Log.deb("JSON parse error:", json_string)
     return false, nil, Const.SF_CLI_MESSAGES.JSON_PARSE_ERROR
   end
-  
-  deb("Parsed JSON:", parsed)
+
+  Log.deb("Parsed JSON:", parsed)
 
   -- If expected structure is provided, validate it
   if expected_structure then
@@ -158,22 +215,13 @@ function M.validate_json_response(json_string, expected_structure)
       if expected_type ~= "any" and type(parsed[key]) ~= expected_type then
         return false,
           nil,
-          string.format(
-            "Invalid type for field %s: expected %s, got %s",
-            key,
-            expected_type,
-            type(parsed[key])
-          )
+          string.format("Invalid type for field %s: expected %s, got %s", key, expected_type, type(parsed[key]))
       end
     end
   end
 
   return true, parsed, nil
 end
-
--- =============================================================================
--- ERROR HANDLING UTILITIES
--- =============================================================================
 
 --- Handles CLI errors with standardized error reporting
 --- @param _ number The exit code from the CLI command (unused but kept for API consistency)
@@ -188,8 +236,8 @@ function M.handle_cli_error(_, context, custom_error_message)
 
   -- Log the error for debugging
   vim.notify(error_message, vim.log.levels.ERROR)
-  deb("CLI Error", error_message)
-  trace()
+  Log.deb("CLI Error", error_message)
+  Log.trace()
 end
 
 --- Notifies operation result with consistent formatting
@@ -210,13 +258,9 @@ function M.notify_operation_result(success, context, details)
 
     local message = details or context.failure_message
     vim.notify(message, vim.log.levels.ERROR)
-    deb("Job failure message", message)
+    Log.deb("Job failure message", message)
   end
 end
-
--- =============================================================================
--- VERSION PARSING UTILITIES
--- =============================================================================
 
 --- Parses SF CLI version information from command output
 --- @param result string The raw output from SF CLI --version command
@@ -225,10 +269,10 @@ end
 --- @return string|nil error_message Error message if parsing fails
 --- @usage local ok, info, err = JobUtils.parse_version_info("@salesforce/cli/2.15.9 darwin-x64 node-v18.17.1")
 function M.parse_version_info(result)
-  deb("Parsing SF CLI version info:", result)
-  
+  Log.deb("Parsing SF CLI version info:", result)
+
   if not result or result == "" then
-    deb("Empty version output")
+    Log.deb("Empty version output")
     return false, nil, "Empty version output"
   end
 
@@ -267,11 +311,11 @@ function M.parse_version_info(result)
 
   -- Validate that we found at least the current version
   if not version_info.current_version then
-    deb("Unable to parse version from output")
+    Log.deb("Unable to parse version from output")
     return false, nil, "Unable to parse version information from SF CLI output"
   end
 
-  deb("Parsed version info:", version_info)
+  Log.deb("Parsed version info:", version_info)
   return true, version_info, nil
 end
 
@@ -296,8 +340,7 @@ function M.format_version_message(version_info, executable_path)
 
   -- Add update information if available
   if version_info.has_update and version_info.available_version then
-    message = message
-      .. string.format(Const.SF_CLI_MESSAGES.VERSION_UPDATE_FORMAT, version_info.available_version)
+    message = message .. string.format(Const.SF_CLI_MESSAGES.VERSION_UPDATE_FORMAT, version_info.available_version)
   end
 
   return message
