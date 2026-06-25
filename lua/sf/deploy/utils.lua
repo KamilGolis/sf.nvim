@@ -3,6 +3,7 @@ local Progress = require("sf.core.progress")
 local Const = require("sf.const")
 local Diagnostics = require("sf.core.diagnostics")
 local Log = require("sf.core.log")
+local State = require("sf.core.state")
 
 local DeployUtils = {}
 
@@ -30,6 +31,7 @@ end
 
 local function notify(context, state, msg, level)
   DeployUtils.report(context, state)
+
   if msg then
     vim.schedule(function()
       vim.notify(msg, level or vim.log.levels.INFO)
@@ -63,6 +65,7 @@ function DeployUtils.create_deployment_context(deployment_type, current_file, fi
   end
 
   local title
+
   if deployment_type == "current_file" and current_file then
     title = vim.fn.fnamemodify(current_file, ":t")
   elseif deployment_type == "changed_files" then
@@ -121,6 +124,7 @@ function DeployUtils.process_deployment_result(json_output, context, return_val)
     -- Save the JSON output to file
     vim.fn.mkdir(context.options.cache_path, "p")
     local f = io.open(deploy_json_path, "w")
+
     if f then
       f:write(json_output)
       f:close()
@@ -144,10 +148,12 @@ function DeployUtils.process_deployment_result(json_output, context, return_val)
       else
         notify(context, "success", "Deployment successfull", vim.log.levels.INFO)
       end
+
       return true
     else
       -- Deployment failed - process failures and create diagnostics
       Log.deb("Deployment failed result:", deploy_result)
+
       if context.deployment_type == "current_file" and context.current_file then
         notify(
           context,
@@ -184,6 +190,7 @@ function DeployUtils.process_deployment_result(json_output, context, return_val)
     else
       notify(context, "failure", "Deployment failed (status code " .. return_val .. ")", vim.log.levels.ERROR)
     end
+
     return false
   else
     -- JSON parsing failed
@@ -197,6 +204,7 @@ function DeployUtils.process_deployment_result(json_output, context, return_val)
     else
       notify(context, "parsing_failure", "Failed to parse deployment result", vim.log.levels.ERROR)
     end
+
     return false
   end
 end
@@ -251,6 +259,7 @@ end
 --- @return function callback The generated callback function
 function DeployUtils.create_callback(context, opts)
   opts = opts or {}
+
   return function(j, return_val)
     vim.schedule(function()
       if return_val == 0 then
@@ -277,9 +286,10 @@ end
 --- @return boolean valid Whether pre-deployment conditions are met
 --- @return string|nil error_message Error message if validation failed
 function DeployUtils.validate_deployment_preconditions()
-  if require("sf.core.state").is_busy("deploy") then
+  if State.is_busy("deploy") then
     return false, "A deployment is already in progress. Please wait for it to finish."
   end
+
   return true, nil
 end
 
@@ -298,6 +308,7 @@ function DeployUtils.setup_deployment_environment(deployment_type, current_file,
   local context = DeployUtils.create_deployment_context(deployment_type, current_file, files, options)
 
   Log.deb("Setup deployment context: ", context)
+
   return context
 end
 
@@ -350,6 +361,7 @@ function DeployUtils.validate_quickfix_files(config, indexes, utils)
 
   if #found == 0 then
     local error_msg = "No valid, indexed files found in the quickfix list."
+
     if #missing_files > 0 then
       error_msg = error_msg .. " Missing indexed files: " .. table.concat(missing_files, ", ")
     end
@@ -377,6 +389,7 @@ end
 function DeployUtils.prepare_quickfix_files_for_deployment(files)
   for _, file in ipairs(files) do
     local f = io.open(file, "a") -- Open file in append mode
+
     if f then
       f:write("\n") -- Write a new line at the end
       f:close() -- Close the file
@@ -402,6 +415,7 @@ function DeployUtils.create_deploy_job(args, context, options)
     local stdout = j:result()
     local json_output = table.concat(stdout, "\n")
     DeployUtils.process_deployment_result(json_output, context, return_val)
+
     if options.next_job then
       options.next_job:start()
     else
@@ -451,15 +465,18 @@ function DeployUtils.create_manifest_job(command, context, next_job, options)
     on_failure = function(j, return_val)
       Log.deb("Manifest preparation failed:", j:result())
       DeployUtils.report(context, "failure")
+
       if context.handle then
         context.handle:finish()
       end
+
       vim.notify("Failed to prepare manifest", vim.log.levels.ERROR)
     end,
   })
 
   -- Parse command and args
   local cmd_parts = {}
+
   for part in command:gmatch("%S+") do
     table.insert(cmd_parts, part)
   end
@@ -477,13 +494,6 @@ function DeployUtils.create_manifest_job(command, context, next_job, options)
   })
 end
 
---- Creates a git operation job with standardized configuration
---- @param operation string The git operation to perform (e.g., "commit", "reset")
---- @param context DeploymentContext The deployment context
---- @param next_job table|nil The next job to execute after successful operation
---- @param cleanup_job table|nil The cleanup job to execute after failure
---- @param job_name string|nil The name of the job for logging purposes
-
 --- Creates a standardized deployment job for current file deployment
 --- @param current_file string The path to the current file to deploy
 --- @param context DeploymentContext The deployment context
@@ -493,6 +503,7 @@ end
 function DeployUtils.create_current_file_deploy_job(current_file, context, options, force)
   local args = Const.get_current_file_deploy_args(current_file, context.options.api_version, force)
   Log.deb("Create current file deploy job args: ", args)
+
   return DeployUtils.create_deploy_job(args, context, options)
 end
 
@@ -505,6 +516,7 @@ end
 function DeployUtils.create_manifest_deploy_job(manifest_path, context, options, force)
   local args = Const.get_manifest_deploy_args(manifest_path, context.options.api_version, force)
   Log.deb("Create manifest deploy job args: ", args)
+
   return DeployUtils.create_deploy_job(args, context, options)
 end
 
@@ -528,6 +540,7 @@ function DeployUtils.create_changed_files_manifest_job(context, next_job, option
       if context.handle then
         context.handle:finish()
       end
+
       vim.notify("Failed to prepare manifest", vim.log.levels.ERROR)
     end,
   })
@@ -552,6 +565,7 @@ end
 --- @return table job The created manifest preparation job
 function DeployUtils.create_selected_files_manifest_job(context, next_job, options)
   local command = Const.get_sgd_delta_command(context.options.delta_path)
+
   return DeployUtils.create_manifest_job(command, context, next_job, options)
 end
 

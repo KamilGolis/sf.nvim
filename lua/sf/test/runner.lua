@@ -1,15 +1,13 @@
 --- sf-nvim test runner module
 -- @license MIT
 
-local JobUtils = require("sf.core.job_utils")
-local Snacks = require("snacks")
-
 local Connector = require("sf.org.connect")
 local Const = require("sf.const")
+local JobUtils = require("sf.core.job_utils")
 local Log = require("sf.core.log")
 local Progress = require("sf.core.progress")
+local State = require("sf.core.state")
 local TestResultsBuffer = require("sf.test.results_buffer")
-local state = require("sf.core.state")
 
 local TestRunner = {}
 
@@ -21,6 +19,7 @@ local function get_node_at_cursor()
   local row, col = cursor[1] - 1, cursor[2]
 
   local parser = vim.treesitter.get_parser(bufnr, "apex")
+
   if not parser then
     return nil
   end
@@ -64,8 +63,10 @@ local function find_method_name(node)
         end
       end
     end
+
     node = node:parent()
   end
+
   return nil
 end
 
@@ -74,6 +75,7 @@ end
 local function is_test_class()
   local bufnr = vim.api.nvim_get_current_buf()
   local parser = vim.treesitter.get_parser(bufnr, "apex")
+
   if not parser then
     return false
   end
@@ -195,6 +197,7 @@ function TestRunner.run_class_tests(class_name, options)
 
           -- Always write results to file, regardless of return code
           local file = io.open(result_file, "w")
+
           if file then
             file:write(json_output)
             file:close()
@@ -224,12 +227,12 @@ function TestRunner.run_class_tests(class_name, options)
             end
           end
           handle:finish()
-          state.finish("test")
+          State.finish("test")
         end)
       end,
     })
 
-    state.start("test")
+    State.start("test")
     job:start()
   end)
 end
@@ -304,12 +307,12 @@ function TestRunner.run_method_test(class_name, method_name, options)
             end
           end
           handle:finish()
-          state.finish("test")
+          State.finish("test")
         end)
       end,
     })
 
-    state.start("test")
+    State.start("test")
     job:start()
   end)
 end
@@ -358,18 +361,21 @@ function TestRunner.show_last_results(options)
 
   -- Determine test name from results
   local test_name = "Last Test Results"
+
   if result.result.tests and #result.result.tests > 0 then
     local first_test = result.result.tests[1]
     if first_test.ApexClass and first_test.ApexClass.Name then
       test_name = first_test.ApexClass.Name
       -- If all tests are from the same class, use class name
       local all_same_class = true
+
       for _, test in ipairs(result.result.tests) do
         if not test.ApexClass or test.ApexClass.Name ~= first_test.ApexClass.Name then
           all_same_class = false
           break
         end
       end
+
       if not all_same_class then
         test_name = "Multiple Classes"
       end
@@ -384,10 +390,11 @@ end
 --- @param test_type string Either "class" or "method"
 --- @param options table|nil Additional options
 function TestRunner.run_current_tests(test_type, options)
-  if state.is_busy("test") then
+  if State.is_busy("test") then
     vim.notify("A test is already running. Please wait for it to finish.", vim.log.levels.WARN)
     return
   end
+
   Log.deb("Starting Run Current Tests function...")
 
   Connector:check_cli(function()
@@ -400,12 +407,14 @@ function TestRunner.run_current_tests(test_type, options)
     end
 
     local node = get_node_at_cursor()
+
     if not node then
       vim.notify("Could not analyze current position", vim.log.levels.ERROR)
       return
     end
 
     local class_name = find_class_name(node)
+
     if not class_name then
       vim.notify("Could not find class name", vim.log.levels.ERROR)
       return
@@ -415,10 +424,12 @@ function TestRunner.run_current_tests(test_type, options)
       TestRunner.run_class_tests(class_name, options)
     elseif test_type == "method" then
       local method_name = find_method_name(node)
+
       if not method_name then
         vim.notify("Could not find method name at cursor position", vim.log.levels.ERROR)
         return
       end
+
       TestRunner.run_method_test(class_name, method_name, options)
     else
       vim.notify("Invalid test type: " .. test_type, vim.log.levels.ERROR)
@@ -463,6 +474,7 @@ function TestRunner.run_class_coverage(class_name, options)
 
           -- Always write results to file, regardless of return code
           local file = io.open(result_file, "w")
+
           if file then
             file:write(json_output)
             file:close()
@@ -493,12 +505,12 @@ function TestRunner.run_class_coverage(class_name, options)
             end
           end
           handle:finish()
-          state.finish("test")
+          State.finish("test")
         end)
       end,
     })
 
-    state.start("test")
+    State.start("test")
     job:start()
   end)
 end
@@ -542,6 +554,7 @@ function TestRunner.run_method_coverage(class_name, method_name, options)
 
           -- Always write results to file, regardless of return code
           local file = io.open(result_file, "w")
+
           if file then
             file:write(json_output)
             file:close()
@@ -572,12 +585,12 @@ function TestRunner.run_method_coverage(class_name, method_name, options)
             end
           end
           handle:finish()
-          state.finish("test")
+          State.finish("test")
         end)
       end,
     })
 
-    state.start("test")
+    State.start("test")
     job:start()
   end)
 end
@@ -586,10 +599,11 @@ end
 --- @param test_type string Either "class" or "method"
 --- @param options table|nil Additional options
 function TestRunner.run_coverage_at_cursor(test_type, options)
-  if state.is_busy("test") then
+  if State.is_busy("test") then
     vim.notify("A test is already running. Please wait for it to finish.", vim.log.levels.WARN)
     return
   end
+
   options = options or {}
 
   -- Check if current file is a test class
@@ -599,12 +613,14 @@ function TestRunner.run_coverage_at_cursor(test_type, options)
   end
 
   local node = get_node_at_cursor()
+
   if not node then
     vim.notify("Could not analyze current position", vim.log.levels.ERROR)
     return
   end
 
   local class_name = find_class_name(node)
+
   if not class_name then
     vim.notify("Could not find class name", vim.log.levels.ERROR)
     return
@@ -614,10 +630,12 @@ function TestRunner.run_coverage_at_cursor(test_type, options)
     TestRunner.run_class_coverage(class_name, options)
   elseif test_type == "method" then
     local method_name = find_method_name(node)
+
     if not method_name then
       vim.notify("Could not find method name at cursor position", vim.log.levels.ERROR)
       return
     end
+
     TestRunner.run_method_coverage(class_name, method_name, options)
   else
     vim.notify("Invalid coverage type: " .. test_type, vim.log.levels.ERROR)
@@ -642,6 +660,7 @@ function TestRunner.show_last_coverage_results(options)
 
   -- Read and parse the results file
   local file_content = vim.fn.readfile(result_file)
+
   if not file_content or #file_content == 0 then
     vim.notify("Coverage results file is empty", vim.log.levels.ERROR)
     return

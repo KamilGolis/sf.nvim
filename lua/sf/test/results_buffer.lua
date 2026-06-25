@@ -14,18 +14,21 @@ local TestResultsBuffer = {}
 function TestResultsBuffer.parse_stack_trace_line(stack_line)
   -- Pattern for: Class.ClassName.methodName: line 77, column 1
   local class_name, method_name, line_number = stack_line:match("Class%.([^%.]+)%.([^:]+):%s*line%s*(%d+)")
+
   if class_name and method_name and line_number then
     return class_name, method_name, tonumber(line_number)
   end
 
   -- Pattern for: ClassName.methodName: line 77, column 1 (without "Class." prefix)
   class_name, method_name, line_number = stack_line:match("([^%.]+)%.([^:]+):%s*line%s*(%d+)")
+
   if class_name and method_name and line_number then
     return class_name, method_name, tonumber(line_number)
   end
 
   -- Pattern for: ClassName: line 77, column 1 (class level error)
   class_name, line_number = stack_line:match("([^:]+):%s*line%s*(%d+)")
+
   if class_name and line_number then
     return class_name, nil, tonumber(line_number)
   end
@@ -84,9 +87,11 @@ function TestResultsBuffer.show_results(test_results, test_name)
   if summary.testStartTime then
     table.insert(lines, "Start Time: " .. summary.testStartTime)
   end
+
   if summary.testExecutionTime then
     table.insert(lines, "Execution Time: " .. summary.testExecutionTime)
   end
+
   table.insert(lines, "")
 
   -- Summary section
@@ -142,6 +147,7 @@ function TestResultsBuffer.show_results(test_results, test_name)
           table.insert(lines, "   Error Message:")
           -- Split message into multiple lines if needed
           local message_lines = vim.split(test.Message, "\n")
+
           for _, msg_line in ipairs(message_lines) do
             table.insert(lines, "     " .. msg_line)
           end
@@ -151,12 +157,14 @@ function TestResultsBuffer.show_results(test_results, test_name)
           table.insert(lines, "   Stack Trace:")
           -- Split stack trace into multiple lines
           local stack_lines = vim.split(test.StackTrace, "\n")
+
           for _, stack_line in ipairs(stack_lines) do
             local line_num = #lines + 1
             table.insert(lines, "     " .. stack_line)
 
             -- Check if this stack trace line contains line number information
             local class_name, method_name, line_number = TestResultsBuffer.parse_stack_trace_line(stack_line)
+
             if class_name and line_number then
               test_line_map[line_num] = {
                 class_name = class_name,
@@ -254,6 +262,7 @@ function TestResultsBuffer.open_test_source(class_name, method_name, line_number
   -- Close the results buffer first to avoid split view
   local current_buf = vim.api.nvim_get_current_buf()
   local buf_name = vim.api.nvim_buf_get_name(current_buf)
+
   if buf_name:match("SF Test Results") then
     vim.cmd("bdelete")
   end
@@ -267,11 +276,13 @@ function TestResultsBuffer.open_test_source(class_name, method_name, line_number
 
   -- Check default package path from sfdx-project.json
   local default_path = Utils.get_default_package_path()
+
   if default_path then
     table.insert(possible_paths, 1, PathUtils.join(sf_root, default_path, "classes", class_name .. ".cls"))
   end
 
   local class_file = nil
+
   for _, path in ipairs(possible_paths) do
     if vim.fn.filereadable(path) == 1 then
       class_file = path

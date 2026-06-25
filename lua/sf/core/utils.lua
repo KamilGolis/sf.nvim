@@ -55,10 +55,12 @@ end
 --- @usage local found_path = utils.find_file("/path/to/search", "target.txt")
 function M.find_file(path, target)
   local scanner = vim.uv.fs_scandir(path)
+
   -- if scanner is nil, then path is not a valid dir
   if scanner then
     local file, type = vim.uv.fs_scandir_next(scanner)
     path = PathUtils.ensure_trailing_separator(path)
+
     while file do
       if type == "directory" then
         local found = M.find_file(PathUtils.join(path, file), target)
@@ -85,6 +87,7 @@ function M.get_default_package_path()
   end
 
   local file_content = vim.fn.readfile(project_file)
+
   if not file_content or #file_content == 0 then
     return nil
   end

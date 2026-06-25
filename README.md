@@ -18,7 +18,7 @@ As a Salesforce developer, I’ve mostly used VS Code and WebStorm with Illumina
 - 🧪 **Apex Test Execution** - Run tests at class or method level with detailed results
 - 📊 **Code Coverage** - Visual coverage indicators with detailed statistics
 - 🔌 **Org Management** - Easy switching between Salesforce orgs
-- 📝 **Debug Logs** - List and view debug logs with rich UI
+- 📝 **Debug Logs** - List, resume, fetch, and clean up debug logs with rich UI
 - 🔍 **Diagnostics** - Inline error display for deployment failures
 - 💾 **Cross-platform** - Works on Windows, macOS, and Linux
 - ⚡ **Fast** - Asynchronous operations with progress indicators
@@ -101,6 +101,8 @@ require("sf").setup({
 | `deploy_file` | `string` | `"deploy.json"` | Filename for deployment results |
 | `test_results_file` | `string` | `"test.json"` | Filename for test results |
 | `coverage_results_file` | `string` | `"coverage.json"` | Filename for coverage results |
+| `log_list_file` | `string` | `"logList.json"` | Filename for cached log list |
+| `log_dir` | `string` | `"logs"` | Directory for downloaded debug logs |
 | `delta_dir` | `string` | `"delta"` | Directory for delta package |
 | `debug` | `boolean` | `false` | Enable debug logging to file |
 | `debug_inspect` | `boolean` | `false` | Show debug output on screen |
@@ -169,7 +171,9 @@ All commands are available under the `:Sf` command with subcommands:
 ### Debug Logs
 
 ```vim
-:Sf log list    " List debug logs with interactive picker
+:Sf log list       " Fetch and list debug logs from org
+:Sf log resume     " Show cached debug logs from logList.json (falls back to list)
+:Sf log cleanup    " Delete cached log files and logList.json
 ```
 
 ## 📖 Usage Examples
@@ -210,6 +214,7 @@ vim.keymap.set("n", "<leader>sm", ":Sf test method<CR>", { desc = "Run test meth
 vim.keymap.set("n", "<leader>sc", ":Sf coverage class<CR>", { desc = "Run coverage" })
 vim.keymap.set("n", "<leader>sC", ":Sf coverage on<CR>", { desc = "Toggle coverage display" })
 vim.keymap.set("n", "<leader>sl", ":Sf log list<CR>", { desc = "List debug logs" })
+vim.keymap.set("n", "<leader>sR", ":Sf log resume<CR>", { desc = "Resume cached log list" })
 vim.keymap.set("n", "<leader>sr", ":Sf test result<CR>", { desc = "Show test results" })
 ```
 
@@ -230,11 +235,15 @@ vim.keymap.set("n", "<leader>sr", ":Sf test result<CR>", { desc = "Show test res
 - **Results Buffer**: Beautiful UI showing test results with stack traces
 - **Code Coverage**: Visual indicators in the gutter showing covered/uncovered lines
 
-### Debug Logs (in progress)
+### Debug Logs
 
 - **Interactive Picker**: Browse logs with rich metadata
 - **Preview Panel**: View log details before selection
 - **Formatted Display**: User, timestamp, duration, size, status
+- **Log Retrieval**: Select a log to download and open it in a buffer
+- **Local Cache**: Previously downloaded logs open instantly from cache
+- **Resume**: Re-open the last log list from cache without re-fetching
+- **Cleanup**: Remove cached logs and log list file
 
 ### Coverage Display
 

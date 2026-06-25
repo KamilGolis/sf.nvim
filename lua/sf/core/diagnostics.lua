@@ -1,6 +1,7 @@
 --- Module for handling diagnostics in the SF plugin
 --- @class Diagnostics
 local Config = require("sf.config")
+local Log = require("sf.core.log")
 local Utils = require("sf.core.utils")
 
 local indexes = require("sf.core.indexes")
@@ -36,19 +37,22 @@ function Diagnostics:create_diagnostic(source, severity)
     severity = vim.diagnostic.severity.ERROR
   end
 
-  Snacks.debug.log("Diagnostics - Source:", source)
+  Log.deb("Diagnostics - Source:", source)
 
   local diagnostic = {}
 
   diagnostic.severity = severity
   diagnostic.message = source.error_message
   diagnostic.source = "sf"
+
   if source.error_line_number == nil then
     source.error_line_number = 1
   end
+
   if source.error_column_number == nil then
     source.error_column_number = 1
   end
+
   diagnostic.lnum = tonumber(source.error_line_number) - 1
   diagnostic.col = tonumber(source.error_column_number) - 1
   -- Diagnostic end line and column are set to max values
@@ -85,7 +89,7 @@ function Diagnostics:set_diagnostics(source)
   for file_path, diagnostics in pairs(self.diagnostic_store) do
     local buf = vim.fn.bufnr(file_path, true)
 
-    Snacks.debug.log("Diagnostics - Buffer number:", buf)
+    Log.deb("Diagnostics - Buffer number:", buf)
 
     if buf ~= -1 then
       -- Set diagnostics for the buffer

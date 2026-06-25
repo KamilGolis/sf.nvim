@@ -16,6 +16,8 @@ function Config:new()
     deploy_file = "deploy.json", -- Default filename for storing deploy info
     test_results_file = "test.json", -- Default filename for storing test results
     coverage_results_file = "coverage.json", -- Default filename for storing coverage results
+    log_list_file = "logList.json", -- Default filename for storing log list results
+    log_dir = "logs", -- Default directory for downloaded debug logs
     delta_dir = "delta", -- Default directory for delta package
     debug = false, -- Debug mode (enables logging to file)
     debug_inspect = false, -- Show debug output on screen (requires debug = true)
@@ -38,6 +40,8 @@ function Config:setup(options)
   self.options.deploy_file = PathUtils.join(self.options.cache_path, self.options.deploy_file)
   self.options.test_results_file = PathUtils.join(self.options.cache_path, self.options.test_results_file)
   self.options.coverage_results_file = PathUtils.join(self.options.cache_path, self.options.coverage_results_file)
+  self.options.log_list_file = PathUtils.join(self.options.cache_path, self.options.log_list_file)
+  self.options.log_dir = PathUtils.join(self.options.cache_path, self.options.log_dir)
   self.options.delta_path = PathUtils.join(self.options.cache_path, self.options.delta_dir)
   self.options.delta_manifest_path = PathUtils.join(self.options.delta_path, "package", "package.xml")
   self.options.namespace = vim.api.nvim_create_namespace("SFNVIM")
