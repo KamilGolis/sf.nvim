@@ -7,6 +7,7 @@ if not Utils.has_sfdx_project() then
   return
 end
 
+local Analyze = require("sf.log.analyze")
 local Cleanup = require("sf.log.cleanup")
 local Config = require("sf.config")
 local Connector = require("sf.org.connect")
@@ -117,9 +118,13 @@ local COMMANDS = {
     cleanup = function()
       Cleanup.cleanup_logs()
     end,
+    analysis = {
+      basic = function()
+        Analyze.basic()
+      end,
+    },
   },
 }
-
 vim.api.nvim_create_user_command("Sf", function(opts)
   local module = opts.fargs[1]
   local action = opts.fargs[2]
@@ -135,8 +140,18 @@ vim.api.nvim_create_user_command("Sf", function(opts)
     return
   end
 
-  local force_flag = opts.fargs[3] == "force"
-  actions[action](force_flag)
+  local handler = actions[action]
+  if type(handler) == "table" then
+    local sub = opts.fargs[3]
+    if not sub or not handler[sub] then
+      vim.notify("Unknown subcommand: " .. (sub or ""), vim.log.levels.ERROR)
+      return
+    end
+    handler[sub]()
+  else
+    local force_flag = opts.fargs[3] == "force"
+    handler(force_flag)
+  end
 end, {
   nargs = "+",
   complete = function(ArgLead, CmdLine)
@@ -151,6 +166,10 @@ end, {
       return vim.tbl_filter(function(cmd)
         return cmd:match("^" .. ArgLead)
       end, vim.tbl_keys(commands[args[2]]))
+    elseif #args == 4 and commands[args[2]] and type(commands[args[2]][args[3]]) == "table" then
+      return vim.tbl_filter(function(cmd)
+        return cmd:match("^" .. ArgLead)
+      end, vim.tbl_keys(commands[args[2]][args[3]]))
     elseif #args == 4 and args[2] == "deploy" and vim.tbl_contains(vim.tbl_keys(commands.deploy), args[3]) then
       return vim.tbl_filter(function(cmd)
         return cmd:match("^" .. ArgLead)

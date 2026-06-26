@@ -18,7 +18,7 @@ As a Salesforce developer, I’ve mostly used VS Code and WebStorm with Illumina
 - 🧪 **Apex Test Execution** - Run tests at class or method level with detailed results
 - 📊 **Code Coverage** - Visual coverage indicators with detailed statistics
 - 🔌 **Org Management** - Easy switching between Salesforce orgs
-- 📝 **Debug Logs** - List, resume, fetch, and clean up debug logs with rich UI
+- 📝 **Debug Logs** - List, fetch, and analyze debug logs with rich per-token highlighting and tree view
 - 🔍 **Diagnostics** - Inline error display for deployment failures
 - 💾 **Cross-platform** - Works on Windows, macOS, and Linux
 - ⚡ **Fast** - Asynchronous operations with progress indicators
@@ -171,9 +171,10 @@ All commands are available under the `:Sf` command with subcommands:
 ### Debug Logs
 
 ```vim
-:Sf log list       " Fetch and list debug logs from org
-:Sf log resume     " Show cached debug logs from logList.json (falls back to list)
-:Sf log cleanup    " Delete cached log files and logList.json
+:Sf log list             " Fetch and list debug logs from org
+:Sf log resume           " Show cached debug logs from logList.json (falls back to list)
+:Sf log analysis basic   " Analyze a selected log with basic tree view and per-token highlighting
+:Sf log cleanup          " Delete cached log files and logList.json
 ```
 
 ## 📖 Usage Examples
@@ -236,12 +237,13 @@ vim.keymap.set("n", "<leader>sr", ":Sf test result<CR>", { desc = "Show test res
 - **Code Coverage**: Visual indicators in the gutter showing covered/uncovered lines
 
 ### Debug Logs
-
 - **Interactive Picker**: Browse logs with rich metadata
 - **Preview Panel**: View log details before selection
 - **Formatted Display**: User, timestamp, duration, size, status
 - **Log Retrieval**: Select a log to download and open it in a buffer
 - **Local Cache**: Previously downloaded logs open instantly from cache
+- **Rich Per-Token Highlighting**: Tags, line numbers (`[1]`, `[EXTERNAL]`), and event names are colored distinctly for visual scanning — no sidecar files needed
+- **Tree View**: Rendered log entries are indented to show the call hierarchy with entry/exit nesting
 - **Resume**: Re-open the last log list from cache without re-fetching
 - **Cleanup**: Remove cached logs and log list file
 

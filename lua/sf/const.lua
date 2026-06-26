@@ -184,7 +184,10 @@ M.SF_CLI = {
           LOG_ID = "-i",
         },
       },
-      ANALYZE = {},
+      ANALYZE = {
+        INDENT_UNIT = "  ",
+        BUF_FILETYPE = "sflog",
+      },
     },
   },
 }

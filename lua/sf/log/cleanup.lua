@@ -41,14 +41,14 @@ function Cleanup.cleanup_logs()
       list_deleted = pcall(vim.fn.delete, log_list_file)
     end
 
-    vim.notify(
-      string.format(
-        "Log cleanup complete: %d log file(s) removed%s",
-        deleted_count,
-        list_deleted and ", log list removed" or ""
-      ),
-      vim.log.levels.INFO
-    )
+    local message_parts = {}
+    table.insert(message_parts, string.format("%d log file(s) removed", deleted_count))
+
+    if list_deleted then
+      table.insert(message_parts, "log list removed")
+    end
+
+    vim.notify("Log cleanup complete: " .. table.concat(message_parts, ", "), vim.log.levels.INFO)
   end)
 end
 
