@@ -47,6 +47,8 @@ local SIGNAL_PREFIXES = {
   "SOSL_EXECUTE_",
   "DML_",
   "STACK_FRAME_",
+  "VALIDATION_",
+  "WF_",
 }
 
 --- Determine the highlight group for a given tag.
