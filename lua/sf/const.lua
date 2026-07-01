@@ -66,31 +66,44 @@ M.ORG_DETAILS_FORMAT = {
 --- Messages for SF CLI connection and org operations
 M.SF_CLI_MESSAGES = {
   NOT_FOUND = "SF CLI not found. Please install it.",
-  VERSION_CHECK_TITLE = "Checking SF CLI version",
-  VERSION_CHECK_FAILED = "Failed to execute SF CLI command",
-  VERSION_FOUND_FORMAT = "SF CLI is installed at %s. Version: %s, Platform: %s, Node: %s",
-  VERSION_UPDATE_FORMAT = "\nUpdate available: %s",
-  VERSION_UNKNOWN = "SF CLI found, but unable to determine version",
-  ORG_LIST_TITLE = "Refreshing Salesforce org list",
-  ORG_LIST_FAILED = "Failed to fetch org list",
-  ORG_LIST_EMPTY = "orgs.json file is empty",
-  ORG_LIST_SUCCESS = "Org list fetched successfully",
-  ORG_SET_TITLE = "Setting default org",
-  ORG_SET_SUCCESS = "Default org set successfully",
-  ORG_SET_FAILED = "Failed to set default org",
-  ORG_SET_SUCCESS_FORMAT = "Default org set to: %s",
-  ORG_SET_ERROR = "Error: Failed to set default org",
-  JSON_PARSE_ERROR = "Failed to parse orgs.json or invalid format",
+  VERSION_CHECK_TITLE = "Checking SF CLI version.",
+  VERSION_CHECK_FAILED = "Failed to execute SF CLI command.",
+  VERSION_FOUND_FORMAT = "SF CLI is installed at %s. Version: %s, Platform: %s, Node: %s.",
+  VERSION_UPDATE_FORMAT = "\nUpdate available: %s.",
+  VERSION_UNKNOWN = "SF CLI found, but unable to determine version.",
+  ORG_LIST_TITLE = "Refreshing Salesforce org list.",
+  ORG_LIST_FAILED = "Failed to fetch org list.",
+  ORG_LIST_EMPTY = "orgs.json file is empty.",
+  ORG_LIST_SUCCESS = "Org list fetched successfully.",
+  ORG_SET_TITLE = "Setting default org.",
+  ORG_SET_SUCCESS = "Default org set successfully.",
+  ORG_SET_FAILED = "Failed to set default org.",
+  ORG_SET_SUCCESS_FORMAT = "Default org set to: %s.",
+  ORG_SET_ERROR = "Error: Failed to set default org.",
+  JSON_PARSE_ERROR = "Failed to parse orgs.json or invalid format.",
   -- Log list messages
-  LOG_LIST_TITLE = "Fetching Salesforce debug logs",
-  LOG_LIST_SUCCESS = "Debug logs fetched successfully",
-  LOG_LIST_FAILED = "Failed to fetch debug logs",
-  LOG_LIST_EMPTY = "No debug logs found",
-  LOG_RETRIEVE_TITLE = "Fetching Salesforce debug log",
-  LOG_RETRIEVE_SUCCESS = "Debug log retrieved successfully",
-  LOG_RETRIEVE_FAILED = "Failed to retrieve debug log",
+  LOG_LIST_TITLE = "Fetching Salesforce debug logs.",
+  LOG_LIST_SUCCESS = "Debug logs fetched successfully.",
+  LOG_LIST_FAILED = "Failed to fetch debug logs.",
+  LOG_LIST_EMPTY = "No debug logs found.",
+  LOG_RETRIEVE_TITLE = "Fetching Salesforce debug log.",
+  LOG_RETRIEVE_SUCCESS = "Debug log retrieved successfully.",
+  LOG_RETRIEVE_FAILED = "Failed to retrieve debug log.",
   LOG_NOT_IN_CACHE = "Selected log not found in cached list. Refreshing...",
-  NO_DEFAULT_ORG = "No default org set. Please set a default org first using ':Sf org set'",
+  NO_DEFAULT_ORG = "No default org set. Please set a default org first using ':Sf org set'.",
+  -- Schema refresh messages
+  SCHEMA_REFRESH_TITLE = "Refreshing org metadata types.",
+  SCHEMA_REFRESH_SUCCESS = "Metadata types fetched successfully.",
+  SCHEMA_REFRESH_FAILED = "Failed to fetch metadata types.",
+  -- Schema retrieve messages
+  SCHEMA_RETRIEVE_TITLE = "Retrieving metadata info.",
+  SCHEMA_RETRIEVE_SUCCESS = "Metadata info retrieved successfully.",
+  SCHEMA_RETRIEVE_FAILED = "Failed to retrieve metadata info.",
+  -- Retrieve messages
+  RETRIEVE_TITLE = "Retrieving metadata from org.",
+  RETRIEVE_SUCCESS = "Metadata retrieved successfully.",
+  RETRIEVE_FAILED = "Failed to retrieve metadata.",
+  RETRIEVE_MANIFEST_CREATED = "Generated manifest for %d items.",
 }
 
 --- Salesforce CLI commands and their arguments
@@ -126,6 +139,14 @@ M.SF_CLI = {
         IGNORE_CONFLICTS = "--ignore-conflicts",
       },
     },
+    RETRIEVE = {
+      CMD = "project retrieve start",
+      ARGS = {
+        METADATA = "-m",
+        MANIFEST = "-x",
+        JSON = "--json",
+      },
+    },
   },
   SGD = {
     SOURCE = {
@@ -153,6 +174,19 @@ M.SF_CLI = {
         ARGS = {
           TARGET_ORG = "target-org",
         },
+      },
+    },
+    LIST_METADATA_TYPES = {
+      CMD = "org list metadata-types",
+      ARGS = {
+        JSON = "--json",
+      },
+    },
+    LIST_METADATA = {
+      CMD = "org list metadata",
+      ARGS = {
+        METADATA_TYPE = "-m",
+        JSON = "--json",
       },
     },
   },
@@ -490,6 +524,29 @@ function M.get_config_set_args(username)
   return args
 end
 
+--- Constructs arguments for SF CLI org list metadata-types command
+--- @return table Complete argument list for sf org list metadata-types --json
+function M.get_org_list_metadata_types_args()
+  local args = {}
+  vim.list_extend(args, split_cmd(M.SF_CLI.ORG.LIST_METADATA_TYPES.CMD))
+  vim.list_extend(args, { M.SF_CLI.ORG.LIST_METADATA_TYPES.ARGS.JSON })
+  return args
+end
+
+--- Constructs arguments for SF CLI org list metadata command
+--- @param xml_name string The metadata type xmlName (e.g. "ApexClass")
+--- @return table Complete argument list for sf org list metadata -m <xmlName> --json
+function M.get_org_list_metadata_args(xml_name)
+  local args = {}
+  vim.list_extend(args, split_cmd(M.SF_CLI.ORG.LIST_METADATA.CMD))
+  vim.list_extend(args, {
+    M.SF_CLI.ORG.LIST_METADATA.ARGS.METADATA_TYPE,
+    xml_name,
+    M.SF_CLI.ORG.LIST_METADATA.ARGS.JSON,
+  })
+  return args
+end
+
 --- Constructs arguments for SF sgd source delta command
 --- @param output_dir string The output directory for delta files
 --- @return table Complete argument list for sf sgd source delta
@@ -503,6 +560,31 @@ function M.get_sgd_delta_args(output_dir)
     M.SF_CLI.SGD.SOURCE.DELTA.ARGS.OUTPUT_DIR,
     output_dir,
   })
+  return args
+end
+
+--- Constructs arguments for sf project retrieve start using individual -m flags.
+--- Each item is formatted as "<xmlName>:<fullName>" (e.g. "ApexClass:MyClass").
+--- @param items table Array of { fullName = "...", type_name = "..." } items
+--- @return table Complete argument list
+function M.get_project_retrieve_args(items)
+  local args = {}
+  vim.list_extend(args, split_cmd(M.SF_CLI.PROJECT.RETRIEVE.CMD))
+  for _, item in ipairs(items) do
+    vim.list_extend(args, { M.SF_CLI.PROJECT.RETRIEVE.ARGS.METADATA, item.type_name .. ":" .. item.fullName })
+  end
+  vim.list_extend(args, { M.SF_CLI.PROJECT.RETRIEVE.ARGS.JSON })
+  return args
+end
+
+--- Constructs arguments for sf project retrieve start using a manifest file.
+--- @param manifest_path string Path to the manifest XML file
+--- @return table Complete argument list
+function M.get_project_retrieve_manifest_args(manifest_path)
+  local args = {}
+  vim.list_extend(args, split_cmd(M.SF_CLI.PROJECT.RETRIEVE.CMD))
+  vim.list_extend(args, { M.SF_CLI.PROJECT.RETRIEVE.ARGS.MANIFEST, manifest_path })
+  vim.list_extend(args, { M.SF_CLI.PROJECT.RETRIEVE.ARGS.JSON })
   return args
 end
 return M

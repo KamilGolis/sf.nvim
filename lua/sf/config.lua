@@ -19,6 +19,8 @@ function Config:new()
     log_list_file = "logList.json", -- Default filename for storing log list results
     log_dir = "logs", -- Default directory for downloaded debug logs
     delta_dir = "delta", -- Default directory for delta package
+    metadata_types_file = "metadata-types.json", -- Default filename for metadata types schema
+    metadatas_dir = "metadatas", -- Default directory for retrieved metadata files
     debug = false, -- Debug mode (enables logging to file)
     debug_inspect = false, -- Show debug output on screen (requires debug = true)
   }
@@ -42,6 +44,8 @@ function Config:setup(options)
   self.options.coverage_results_file = PathUtils.join(self.options.cache_path, self.options.coverage_results_file)
   self.options.log_list_file = PathUtils.join(self.options.cache_path, self.options.log_list_file)
   self.options.log_dir = PathUtils.join(self.options.cache_path, self.options.log_dir)
+  self.options.metadata_types_file = PathUtils.join(self.options.cache_path, self.options.metadata_types_file)
+  self.options.metadatas_dir = PathUtils.join(self.options.cache_path, self.options.metadatas_dir)
   self.options.delta_path = PathUtils.join(self.options.cache_path, self.options.delta_dir)
   self.options.delta_manifest_path = PathUtils.join(self.options.delta_path, "package", "package.xml")
   self.options.namespace = vim.api.nvim_create_namespace("SFNVIM")
