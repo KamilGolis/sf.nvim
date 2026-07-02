@@ -18,7 +18,7 @@ function Picker.create_type_picker(items, on_confirm)
     items = items,
     layout = { preset = "vscode" },
     format = function(item, _)
-      return { { item.xml_name .. " (in " .. item.directory_name .. ")", } }
+      return { { item.xml_name .. " (in " .. item.directory_name .. ")" } }
     end,
     confirm = function(picker, item)
       picker:close()

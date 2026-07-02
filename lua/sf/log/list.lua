@@ -25,7 +25,7 @@ local function display_log_picker(logs, on_select)
   end
 
   -- Debug: Log the number of processed logs
-  vim.notify(string.format("Processing %d logs for picker", #logs), vim.log.levels.INFO)
+  Log.deb("Processing %d logs for picker", #logs)
 
   -- Create picker for log selection with error handling
   Picker.create_log_selection_picker(logs, function(item)
@@ -295,51 +295,6 @@ end
 --- If no cached file exists, falls back to fetching from org.
 function LogList.resume_logs()
   LogList.pick_cached_logs(retrieve_selected_log)
-end
-
---- Display cached debug logs from the local log list file.
---- If no cached file exists, falls back to fetching from org.
-function LogList.resume_logs()
-  local result_file = Utils.get_log_list_path()
-
-  -- If no cached file exists, fall back to fetching from org
-  local file_info = vim.uv.fs_stat(result_file)
-
-  if not file_info then
-    LogList.list_logs()
-    return
-  end
-
-  -- Read the cached file
-  local file = io.open(result_file, "r")
-
-  if not file then
-    vim.notify("Cannot read cached log list file", vim.log.levels.ERROR)
-    return
-  end
-
-  local result = file:read("*a")
-  file:close()
-
-  if not result or result == "" then
-    vim.notify("Cached log list file is empty", vim.log.levels.WARN)
-    return
-  end
-
-  -- Process the cached log list
-  local success, logs, error_message = Utils.process_log_list(result)
-
-  if not success or not logs then
-    vim.notify(error_message or "Failed to process cached log list", vim.log.levels.ERROR)
-    return
-  end
-
-  if #logs == 0 then
-    vim.notify("No debug logs found in cached file", vim.log.levels.WARN)
-    return
-  end
-
-  display_log_picker(logs)
 end
 
 return LogList

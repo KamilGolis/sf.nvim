@@ -19,7 +19,11 @@ function Schema.refresh(on_complete)
 
     if not has_default_org then
       vim.notify(org_error or Const.SF_CLI_MESSAGES.NO_DEFAULT_ORG, vim.log.levels.ERROR)
-      if on_complete then on_complete(false) end
+
+      if on_complete then
+        on_complete(false)
+      end
+
       return
     end
 
@@ -27,7 +31,11 @@ function Schema.refresh(on_complete)
 
     if not cli_valid or not executable_path then
       vim.notify(error_msg or Const.SF_CLI_MESSAGES.NOT_FOUND, vim.log.levels.ERROR)
-      if on_complete then on_complete(false) end
+
+      if on_complete then
+        on_complete(false)
+      end
+
       return
     end
 
@@ -56,7 +64,11 @@ function Schema.refresh(on_complete)
 
         if not ok then
           JobUtils.handle_cli_error(return_val, context, "Invalid JSON response: " .. (json_err or "unknown error"))
-          if on_complete then on_complete(false) end
+
+          if on_complete then
+            on_complete(false)
+          end
+
           return
         end
 
@@ -68,20 +80,28 @@ function Schema.refresh(on_complete)
           Log.deb("Schema saved to:", result_file)
         else
           JobUtils.handle_cli_error(return_val, context, "Failed to write schema file: " .. result_file)
-          if on_complete then on_complete(false) end
+
+          if on_complete then
+            on_complete(false)
+          end
+
           return
         end
 
         context.handle:report({ message = context.success_message, percentage = 100 })
         context.handle:finish()
-        if on_complete then on_complete(true) end
+        if on_complete then
+          on_complete(true)
+        end
       end,
       on_error = function(job, return_val)
         local stderr = job:stderr_result()
 
         Log.deb("Schema refresh job error", { return_val = return_val, stderr = stderr })
         JobUtils.handle_cli_error(return_val, context)
-        if on_complete then on_complete(false) end
+        if on_complete then
+          on_complete(false)
+        end
       end,
     })
 

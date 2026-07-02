@@ -5,6 +5,7 @@ local Const = require("sf.const")
 local JobUtils = require("sf.core.job_utils")
 local Log = require("sf.core.log")
 local PathUtils = require("sf.core.path_utils")
+local Utils = require("sf.core.utils")
 
 local M = {}
 
@@ -81,7 +82,13 @@ end
 --- @return string|nil error_message Error message if check fails
 --- @usage local has_org, username, err = OrgUtils.check_default_org()
 function M.check_default_org()
-  local config_path = PathUtils.join(".", ".sf", "config.json")
+  local sf_root = Utils.get_sf_root()
+
+  if not sf_root then
+    return false, nil, "Not in a Salesforce project directory"
+  end
+
+  local config_path = PathUtils.join(sf_root, ".sf", "config.json")
 
   -- Check if config file exists
   if vim.fn.filereadable(config_path) ~= 1 then
@@ -137,6 +144,7 @@ function M.set_target_org(org_data, context, callback)
 
   -- Validate CLI installation
   local cli_valid, executable_path, error_msg = JobUtils.validate_cli_installation(Config:get_options().sf_cli_path)
+
   if not cli_valid or not executable_path then
     local error_message = error_msg or "SF CLI validation failed"
     JobUtils.handle_cli_error(1, progress_context, error_message)
@@ -145,7 +153,9 @@ function M.set_target_org(org_data, context, callback)
     end
     return
   end
+
   local args = Const.get_config_set_args(org_data.username)
+
   local job = JobUtils.create_cli_job(executable_path, args, {
     on_success = function(job, return_val)
       JobUtils.handle_cli_result(job, return_val, progress_context, function()

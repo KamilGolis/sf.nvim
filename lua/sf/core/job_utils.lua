@@ -51,8 +51,8 @@ function M.create_system_job(config)
   local self = {
     _command = config.command,
     _args = config.args or {},
-    _stdout = "",
-    _stderr = "",
+    _stdout = {},
+    _stderr = {},
   }
 
   function self.start()
@@ -64,28 +64,28 @@ function M.create_system_job(config)
     if config.on_stdout then
       opts.stdout = function(err, data)
         if data then
-          self._stdout = self._stdout .. data
+          table.insert(self._stdout, data)
         end
         config.on_stdout(err, data)
       end
     else
       opts.stdout = function(_, data)
         if data then
-          self._stdout = self._stdout .. data
+          table.insert(self._stdout, data)
         end
       end
     end
     if config.on_stderr then
       opts.stderr = function(err, data)
         if data then
-          self._stderr = self._stderr .. data
+          table.insert(self._stderr, data)
         end
         config.on_stderr(err, data)
       end
     else
       opts.stderr = function(_, data)
         if data then
-          self._stderr = self._stderr .. data
+          table.insert(self._stderr, data)
         end
       end
     end
@@ -106,13 +106,12 @@ function M.create_system_job(config)
   end
 
   function self.result()
-    return vim.split(self._stdout or "", "\n")
+    return vim.split(table.concat(self._stdout, "") or "", "\n")
   end
 
   function self.stderr_result()
-    return vim.split(self._stderr or "", "\n")
+    return vim.split(table.concat(self._stderr, "") or "", "\n")
   end
-
   return self
 end
 

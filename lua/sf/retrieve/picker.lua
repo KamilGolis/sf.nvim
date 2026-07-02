@@ -1,8 +1,8 @@
 --- sf-nvim retrieve picker module
 -- @license MIT
 
-local Snacks = require("snacks")
 local Const = require("sf.const")
+local Snacks = require("snacks")
 
 local Picker = {}
 
@@ -26,13 +26,20 @@ function Picker.create_items_picker(items, xml_name, on_confirm)
     multiselect = true,
     format = function(item, _)
       local type_val = item.type or "Unknown"
-      if #type_val > 20 then type_val = type_val:sub(1, 17) .. "..." end
+
+      if #type_val > 20 then
+        type_val = type_val:sub(1, 17) .. "..."
+      end
 
       local name_val = item.fullName or "Unknown"
-      if #name_val > 40 then name_val = name_val:sub(1, 37) .. "..." end
+      if #name_val > 40 then
+        name_val = name_val:sub(1, 37) .. "..."
+      end
 
       local id_val = item.id or "Unknown"
-      if #id_val > 18 then id_val = id_val:sub(1, 15) .. "..." end
+      if #id_val > 18 then
+        id_val = id_val:sub(1, 15) .. "..."
+      end
 
       return {
         { string.format("%-20s ", type_val), "SnacksPickerComment" },
