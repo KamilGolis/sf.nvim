@@ -19,6 +19,8 @@ As a Salesforce developer, I’ve mostly used VS Code and WebStorm with Illumina
 - 📊 **Code Coverage** - Visual coverage indicators with detailed statistics
 - 🔌 **Org Management** - Easy switching between Salesforce orgs
 - 📝 **Debug Logs** - List, fetch, and analyze debug logs with rich per-token highlighting and tree view
+- 📦 **Schema Management** - Refresh org metadata type index and retrieve type details
+- ⬇️  **Metadata Retrieval** - Retrieve metadata individually or by type from org
 - 🔍 **Diagnostics** - Inline error display for deployment failures
 - 💾 **Cross-platform** - Works on Windows, macOS, and Linux
 - ⚡ **Fast** - Asynchronous operations with progress indicators
@@ -82,6 +84,10 @@ require("sf").setup({
   -- Cache directory for storing deployment/test results
   cache_path = "./.sf/sf.nvim",
   
+  -- Schema and metadata retrieval
+  metadata_types_file = "metadata-types.json",
+  metadatas_dir = "metadatas",
+  
   -- Debug mode - enables logging to file
   debug = false,
   
@@ -104,6 +110,8 @@ require("sf").setup({
 | `log_list_file` | `string` | `"logList.json"` | Filename for cached log list |
 | `log_dir` | `string` | `"logs"` | Directory for downloaded debug logs |
 | `delta_dir` | `string` | `"delta"` | Directory for delta package |
+| `metadata_types_file` | `string` | `"metadata-types.json"` | Filename for cached metadata types schema |
+| `metadatas_dir` | `string` | `"metadatas"` | Directory for retrieved metadata files |
 | `debug` | `boolean` | `false` | Enable debug logging to file |
 | `debug_inspect` | `boolean` | `false` | Show debug output on screen |
 
@@ -137,6 +145,21 @@ All commands are available under the `:Sf` command with subcommands:
 
 ```vim
 :Sf org set          " Select and set default org via picker
+```
+
+### Schema
+
+```vim
+:Sf schema refresh   " Refresh org metadata type list
+:Sf schema retrieve  " Select and retrieve metadata of a type
+:Sf schema cleanup   " Delete cached schema files (like metadata-types.json and all files under metadatas directory)
+```
+
+### Metadata Retrieval
+
+```vim
+:Sf retrieve metadata   " Select type, then pick items to retrieve
+:Sf retrieve type       " Select type, retrieve all items at once
 ```
 
 ### Deployment
@@ -217,6 +240,9 @@ vim.keymap.set("n", "<leader>sC", ":Sf coverage on<CR>", { desc = "Toggle covera
 vim.keymap.set("n", "<leader>sl", ":Sf log list<CR>", { desc = "List debug logs" })
 vim.keymap.set("n", "<leader>sR", ":Sf log resume<CR>", { desc = "Resume cached log list" })
 vim.keymap.set("n", "<leader>sr", ":Sf test result<CR>", { desc = "Show test results" })
+vim.keymap.set("n", "<leader>ss", ":Sf schema retrieve<CR>", { desc = "Retrieve metadata info" })
+vim.keymap.set("n", "<leader>srm", ":Sf retrieve metadata<CR>", { desc = "Retrieve selected metadata" })
+vim.keymap.set("n", "<leader>srt", ":Sf retrieve type<CR>", { desc = "Retrieve all of type" })
 ```
 
 ## 🎨 Features in Detail
@@ -252,6 +278,17 @@ vim.keymap.set("n", "<leader>sr", ":Sf test result<CR>", { desc = "Show test res
 When enabled (`:Sf coverage on`), coverage signs appear in the gutter:
 - ● Green: Line is covered
 - ● Red: Line is not covered
+
+### Schema Management
+
+- **Refresh**: Pull the latest metadata type index from the org via `Sf schema refresh`
+- **Retrieve Info**: Select a type via picker to download its full metadata listing (saved as JSON)
+
+### Metadata Retrieval
+
+- **Select Items**: Multi-select individual metadata items via picker with preview details
+- **Retrieve by Type**: Retrieve all items of a selected type in one command
+- **Manifest Mode**: For >10 items, generates a `retrieve-manifest.xml` automatically for efficiency
 
 ## 🛠️ Development
 

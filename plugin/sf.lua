@@ -14,6 +14,10 @@ local Connector = require("sf.org.connect")
 local Deployment = require("sf.deploy.metadata")
 local Diagnostics = require("sf.core.diagnostics")
 local LogList = require("sf.log.list")
+local RetrieveMetadata = require("sf.retrieve.metadata")
+local SchemaRefresh = require("sf.schema.refresh")
+local SchemaRetrieve = require("sf.schema.retrieve")
+local SchemaCleanup = require("sf.schema.cleanup")
 local TestRunner = require("sf.test.runner")
 
 local indexes = require("sf.core.indexes")
@@ -67,6 +71,17 @@ local COMMANDS = {
   org = {
     set = function()
       Connector:select_default_org()
+    end,
+  },
+  schema = {
+    refresh = function()
+      SchemaRefresh.refresh()
+    end,
+    retrieve = function()
+      SchemaRetrieve.retrieve()
+    end,
+    cleanup = function()
+      SchemaCleanup.cleanup_schema()
     end,
   },
   deploy = {
@@ -123,6 +138,14 @@ local COMMANDS = {
         Analyze.basic()
       end,
     },
+  },
+  retrieve = {
+    metadata = function()
+      RetrieveMetadata.retrieve_selected()
+    end,
+    type = function()
+      RetrieveMetadata.retrieve_all_of_type()
+    end,
   },
 }
 vim.api.nvim_create_user_command("Sf", function(opts)
