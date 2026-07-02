@@ -2,6 +2,7 @@
 -- @license MIT
 
 local Snacks = require("snacks")
+local Const = require("sf.const")
 
 local Picker = {}
 
@@ -24,10 +25,22 @@ function Picker.create_items_picker(items, xml_name, on_confirm)
     },
     multiselect = true,
     format = function(item, _)
+      local type_val = item.type or "Unknown"
+      if #type_val > 20 then type_val = type_val:sub(1, 17) .. "..." end
+
+      local name_val = item.fullName or "Unknown"
+      if #name_val > 40 then name_val = name_val:sub(1, 37) .. "..." end
+
+      local id_val = item.id or "Unknown"
+      if #id_val > 18 then id_val = id_val:sub(1, 15) .. "..." end
+
       return {
-        { item.type .. ": ", "SnacksPickerComment" },
-        { item.fullName .. " ", "SnacksPickerNormal" },
-        { "(id:" .. item.id .. ")", "SnacksPickerComment" },
+        { string.format("%-20s ", type_val), "SnacksPickerComment" },
+        { " ", "SnacksPickerComment" },
+        { string.format("%-40s ", name_val), "SnacksPickerNormal" },
+        { " ", "SnacksPickerComment" },
+        { "ID:", "SnacksPickerComment" },
+        { string.format("%-18s ", id_val), "SnacksPickerComment" },
       }
     end,
     confirm = function(picker, item)
@@ -53,17 +66,21 @@ function Picker.create_items_picker(items, xml_name, on_confirm)
       end
 
       local details = {
-        "                     Metadata Details",
+        "                     " .. Const.ICONS.METADATA .. " Metadata Details",
         "===========================================================",
         "",
-        " Type:       " .. (item.type or "Unknown"),
-        " Full Name:  " .. (item.fullName or "Unknown"),
-        " ID:         " .. (item.id or "Unknown"),
-        " File:       " .. (item.file_name or "Unknown"),
-        " Created by: " .. (item.created_by or "Unknown"),
-        " Created:    " .. (item.created_date or "Unknown"),
-        " Modified:   " .. (item.last_modified or "Unknown"),
-        " State:      " .. (item.manageable_state or "Unknown"),
+        Const.ICONS.TYPE .. " Type:          " .. (item.type or "Unknown"),
+        Const.ICONS.LOG_INFO .. " Full Name:     " .. (item.fullName or "Unknown"),
+        Const.ICONS.LOG_ID .. " ID:            " .. (item.id or "Unknown"),
+        Const.ICONS.FILE .. " File:          " .. (item.file_name or "Unknown"),
+        "",
+        "                    " .. Const.ICONS.TECHNICAL .. " Audit Info",
+        "===========================================================",
+        "",
+        Const.ICONS.USER .. " Created By:    " .. (item.created_by or "Unknown"),
+        Const.ICONS.TIME .. " Created:       " .. (item.created_date or "Unknown"),
+        Const.ICONS.DURATION .. " Modified:      " .. (item.last_modified or "Unknown"),
+        Const.ICONS.STATE .. " State:         " .. (item.manageable_state or "Unknown"),
       }
 
       vim.bo[ctx.buf].modifiable = true

@@ -16,7 +16,7 @@ local Retrieve = {}
 --- Present a picker of metadata types from the cached schema file.
 --- On selection, fetch the selected metadata type from the org and save to disk.
 --- Automatically refreshes the schema if the cached file is missing.
-function Retrieve.retrieve(on_type_selected)
+function Retrieve.retrieve(on_type_selected, skip_fetch)
   local schema_file = Config:get_options().metadata_types_file
 
   if vim.fn.filereadable(schema_file) == 0 then
@@ -70,7 +70,11 @@ function Retrieve.retrieve(on_type_selected)
   end)
 
   Picker.create_type_picker(items, function(item)
-    Retrieve.fetch_metadata(item.xml_name, on_type_selected)
+    if skip_fetch then
+      if on_type_selected then on_type_selected(item.xml_name) end
+    else
+      Retrieve.fetch_metadata(item.xml_name, on_type_selected)
+    end
   end)
 end
 
@@ -78,7 +82,7 @@ end
 --- @param xml_name string The metadata type xmlName (e.g. "ApexClass")
 function Retrieve.fetch_metadata(xml_name, on_type_selected)
   Connector:check_cli(function()
-    local has_default_org, _, org_error = OrgUtils.check_default_org()
+    local has_default_org, target_org, org_error = OrgUtils.check_default_org()
 
     if not has_default_org then
       vim.notify(org_error or Const.SF_CLI_MESSAGES.NO_DEFAULT_ORG, vim.log.levels.ERROR)
@@ -103,7 +107,7 @@ function Retrieve.fetch_metadata(xml_name, on_type_selected)
     vim.fn.mkdir(output_dir, "p")
 
     local output_file = PathUtils.join(output_dir, xml_name .. ".json")
-    local args = Const.get_org_list_metadata_args(xml_name)
+    local args = Const.get_org_list_metadata_args(xml_name, target_org)
 
     local job = JobUtils.create_cli_job(executable_path, args, {
       on_success = function(job, return_val)

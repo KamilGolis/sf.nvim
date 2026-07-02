@@ -152,6 +152,7 @@ All commands are available under the `:Sf` command with subcommands:
 ```vim
 :Sf schema refresh   " Refresh org metadata type list
 :Sf schema retrieve  " Select and retrieve metadata of a type
+:Sf schema cleanup   " Delete cached schema files (like metadata-types.json and all files under metadatas directory)
 ```
 
 ### Metadata Retrieval

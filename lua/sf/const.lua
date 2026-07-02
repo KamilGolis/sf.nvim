@@ -11,42 +11,44 @@ M.VERSION_NUMBER_PATTERN = "([%d%.]+)"
 --- Font icons for UI elements
 M.ICONS = {
   -- Status icons
-  SUCCESS = "✅",
-  ERROR = "❌",
-  WARNING = "⚠️ ",
-  INFO = "ℹ️ ",
+  SUCCESS = "\u{f00c}",
+  ERROR = "\u{f00d}",
+  WARNING = "\u{f071}",
+  INFO = "\u{f05a}",
 
   -- Application icons
-  BROWSER = "🌐",
-  API = "🔌",
-  BATCH = "⚙️ ",
-  MOBILE = "📱",
+  BROWSER = "\u{f0ac}",
+  API = "\u{f1e6}",
+  BATCH = "\u{f085}",
+  MOBILE = "\u{f10a}",
 
   -- Performance icons
-  FAST = "⚡",
-  MEDIUM = "⏱️ ",
-  SLOW = "🐌",
+  FAST = "\u{f0e7}",
+  MEDIUM = "\u{f252}",
+  SLOW = "\u{f0e4}",
 
   -- Size icons
-  LARGE_FILE = "📊",
-  MEDIUM_FILE = "📄",
-  SMALL_FILE = "📝",
+  LARGE_FILE = "\u{f0f6}",
+  MEDIUM_FILE = "\u{f016}",
+  SMALL_FILE = "\u{f0c5}",
 
   -- General icons
-  LOG_ID = "🆔",
-  USER = "👤",
-  TIME = "📅",
-  DURATION = "⏰",
-  SIZE = "📏",
-  OPERATION = "⚡",
-  REQUEST = "📡",
-  LOCATION = "📍",
-  URL = "🌐",
-  METADATA = "📊",
-  TYPE = "🏷️ ",
-  LOG_INFO = "📋",
-  TECHNICAL = "🔧",
-  LINK = "🔗",
+  LOG_ID = "\u{f2c2}",
+  USER = "\u{f007}",
+  TIME = "\u{f073}",
+  DURATION = "\u{f017}",
+  SIZE = "\u{f0ae}",
+  OPERATION = "\u{f021}",
+  REQUEST = "\u{f233}",
+  LOCATION = "\u{f041}",
+  URL = "\u{f0ac}",
+  METADATA = "\u{f1c0}",
+  TYPE = "\u{f02b}",
+  LOG_INFO = "\u{f0f6}",
+  TECHNICAL = "\u{f0ad}",
+  STATE = "\u{f013}",
+  FILE = "\u{f07b}",
+  LINK = "\u{f0c1}",
 }
 
 --- String format templates for displaying Salesforce org details
@@ -104,15 +106,27 @@ M.SF_CLI_MESSAGES = {
   RETRIEVE_SUCCESS = "Metadata retrieved successfully.",
   RETRIEVE_FAILED = "Failed to retrieve metadata.",
   RETRIEVE_MANIFEST_CREATED = "Generated manifest for %d items.",
+  RETRIEVE_CONFLICT = "Source conflicts detected during retrieval.",
+  RETRIEVE_WARNING = "Retrieval completed with warnings.",
 }
 
 --- Salesforce CLI commands and their arguments
 --- Supported commands:
---- - sf project generate --name [name] --output-dir [path] --api-version [version] --template empty
---- - sf project deploy start --source-dir [path] --json --api-version [version] --verbose
---- - sf sgd source delta -c --from "HEAD" --output-dir [path]
+--- - sf --version
+--- - sf project generate -n [name] -d [path] --api-version [version] -t empty
+--- - sf project deploy start -d [source] --json -a [version] [--verbose] [-c]
+--- - sf project deploy start -x [manifest] --json -a [version] [--verbose] [-c]
+--- - sf project retrieve start -m [type:name [type:name ...]] --json -a [version] -c [-o target-org]
+--- - sf project retrieve start -x [manifest] --json -a [version] -c [-o target-org]
+--- - sf sgd source delta -c --from HEAD --output-dir [path]
 --- - sf org list --json
---- - sf config set target-org [username]
+--- - sf config set target-org [target-org]
+--- - sf org list metadata-types --json [-o target-org]
+--- - sf org list metadata -m [type] --json [-o target-org]
+--- - sf apex run test -y -n [class] --json [-c]
+--- - sf apex run test -y -t [method] --json [-c]
+--- - sf apex list log --json [-o target-org]
+--- - sf apex get log -d [dir] -i [id]
 M.SF_CLI = {
   VERSION = {
     CMD = "--version",
@@ -121,10 +135,10 @@ M.SF_CLI = {
     GENERATE = {
       CMD = "project generate",
       ARGS = {
-        NAME = "--name",
-        OUTPUT_DIR = "--output-dir",
+        NAME = "-n",
+        OUTPUT_DIR = "-d",
         API_VERSION = "--api-version",
-        TEMPLATE = "--template",
+        TEMPLATE = "-t",
         TEMPLATE_TYPE = "empty",
       },
     },
@@ -133,10 +147,10 @@ M.SF_CLI = {
       ARGS = {
         SOURCE_DIR = "-d",
         JSON = "--json",
-        API_VERSION = "--api-version",
+        API_VERSION = "-a",
         VERBOSE = "--verbose",
-        MANIFEST = "--manifest",
-        IGNORE_CONFLICTS = "--ignore-conflicts",
+        MANIFEST = "-x",
+        IGNORE_CONFLICTS = "-c",
       },
     },
     RETRIEVE = {
@@ -145,6 +159,9 @@ M.SF_CLI = {
         METADATA = "-m",
         MANIFEST = "-x",
         JSON = "--json",
+        API_VERSION = "-a",
+        IGNORE_CONFLICTS = "-c",
+        TARGET_ORG = "-o",
       },
     },
   },
@@ -180,6 +197,7 @@ M.SF_CLI = {
       CMD = "org list metadata-types",
       ARGS = {
         JSON = "--json",
+        TARGET_ORG = "-o",
       },
     },
     LIST_METADATA = {
@@ -187,6 +205,7 @@ M.SF_CLI = {
       ARGS = {
         METADATA_TYPE = "-m",
         JSON = "--json",
+        TARGET_ORG = "-o",
       },
     },
   },
@@ -525,18 +544,22 @@ function M.get_config_set_args(username)
 end
 
 --- Constructs arguments for SF CLI org list metadata-types command
---- @return table Complete argument list for sf org list metadata-types --json
-function M.get_org_list_metadata_types_args()
+--- @param target_org string|nil Optional target org username (uses default if nil)
+function M.get_org_list_metadata_types_args(target_org)
   local args = {}
   vim.list_extend(args, split_cmd(M.SF_CLI.ORG.LIST_METADATA_TYPES.CMD))
   vim.list_extend(args, { M.SF_CLI.ORG.LIST_METADATA_TYPES.ARGS.JSON })
+  if target_org then
+    vim.list_extend(args, { M.SF_CLI.ORG.LIST_METADATA_TYPES.ARGS.TARGET_ORG, target_org })
+  end
   return args
 end
 
 --- Constructs arguments for SF CLI org list metadata command
 --- @param xml_name string The metadata type xmlName (e.g. "ApexClass")
+--- @param target_org string|nil Optional target org username (uses default if nil)
 --- @return table Complete argument list for sf org list metadata -m <xmlName> --json
-function M.get_org_list_metadata_args(xml_name)
+function M.get_org_list_metadata_args(xml_name, target_org)
   local args = {}
   vim.list_extend(args, split_cmd(M.SF_CLI.ORG.LIST_METADATA.CMD))
   vim.list_extend(args, {
@@ -544,6 +567,9 @@ function M.get_org_list_metadata_args(xml_name)
     xml_name,
     M.SF_CLI.ORG.LIST_METADATA.ARGS.JSON,
   })
+  if target_org then
+    vim.list_extend(args, { M.SF_CLI.ORG.LIST_METADATA.ARGS.TARGET_ORG, target_org })
+  end
   return args
 end
 
@@ -566,25 +592,40 @@ end
 --- Constructs arguments for sf project retrieve start using individual -m flags.
 --- Each item is formatted as "<xmlName>:<fullName>" (e.g. "ApexClass:MyClass").
 --- @param items table Array of { fullName = "...", type_name = "..." } items
+--- @param api_version string The Salesforce API version (e.g. "65.0")
+--- @param target_org string|nil Optional target org username
 --- @return table Complete argument list
-function M.get_project_retrieve_args(items)
+function M.get_project_retrieve_args(items, api_version, target_org)
   local args = {}
   vim.list_extend(args, split_cmd(M.SF_CLI.PROJECT.RETRIEVE.CMD))
   for _, item in ipairs(items) do
     vim.list_extend(args, { M.SF_CLI.PROJECT.RETRIEVE.ARGS.METADATA, item.type_name .. ":" .. item.fullName })
   end
   vim.list_extend(args, { M.SF_CLI.PROJECT.RETRIEVE.ARGS.JSON })
+  vim.list_extend(args, { M.SF_CLI.PROJECT.RETRIEVE.ARGS.API_VERSION, api_version })
+  vim.list_extend(args, { M.SF_CLI.PROJECT.RETRIEVE.ARGS.IGNORE_CONFLICTS })
+  if target_org then
+    vim.list_extend(args, { M.SF_CLI.PROJECT.RETRIEVE.ARGS.TARGET_ORG, target_org })
+  end
   return args
 end
 
 --- Constructs arguments for sf project retrieve start using a manifest file.
 --- @param manifest_path string Path to the manifest XML file
+--- @param api_version string The Salesforce API version (e.g. "65.0")
+--- @param target_org string|nil Optional target org username
 --- @return table Complete argument list
-function M.get_project_retrieve_manifest_args(manifest_path)
+function M.get_project_retrieve_manifest_args(manifest_path, api_version, target_org)
   local args = {}
   vim.list_extend(args, split_cmd(M.SF_CLI.PROJECT.RETRIEVE.CMD))
   vim.list_extend(args, { M.SF_CLI.PROJECT.RETRIEVE.ARGS.MANIFEST, manifest_path })
   vim.list_extend(args, { M.SF_CLI.PROJECT.RETRIEVE.ARGS.JSON })
+  vim.list_extend(args, { M.SF_CLI.PROJECT.RETRIEVE.ARGS.API_VERSION, api_version })
+  vim.list_extend(args, { M.SF_CLI.PROJECT.RETRIEVE.ARGS.IGNORE_CONFLICTS })
+  if target_org then
+    vim.list_extend(args, { M.SF_CLI.PROJECT.RETRIEVE.ARGS.TARGET_ORG, target_org })
+  end
   return args
 end
+M.MANIFEST_THRESHOLD = 10
 return M

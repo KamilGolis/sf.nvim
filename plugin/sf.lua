@@ -17,6 +17,7 @@ local LogList = require("sf.log.list")
 local RetrieveMetadata = require("sf.retrieve.metadata")
 local SchemaRefresh = require("sf.schema.refresh")
 local SchemaRetrieve = require("sf.schema.retrieve")
+local SchemaCleanup = require("sf.schema.cleanup")
 local TestRunner = require("sf.test.runner")
 
 local indexes = require("sf.core.indexes")
@@ -78,6 +79,9 @@ local COMMANDS = {
     end,
     retrieve = function()
       SchemaRetrieve.retrieve()
+    end,
+    cleanup = function()
+      SchemaCleanup.cleanup_schema()
     end,
   },
   deploy = {

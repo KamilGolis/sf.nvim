@@ -42,7 +42,7 @@ function Schema.refresh(on_complete)
 
     vim.fn.mkdir(result_dir, "p")
 
-    local args = Const.get_org_list_metadata_types_args()
+    local args = Const.get_org_list_metadata_types_args(target_org)
 
     local job = JobUtils.create_cli_job(executable_path, args, {
       on_success = function(job, return_val)
