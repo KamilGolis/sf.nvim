@@ -108,6 +108,7 @@ M.SF_CLI_MESSAGES = {
   RETRIEVE_MANIFEST_CREATED = "Generated manifest for %d items.",
   RETRIEVE_CONFLICT = "Source conflicts detected during retrieval.",
   RETRIEVE_WARNING = "Retrieval completed with warnings.",
+  RETRIEVE_WITH_ISSUES = "Metadata retrieval completed with issues.",
 }
 
 --- Salesforce CLI commands and their arguments
@@ -619,6 +620,25 @@ function M.get_project_retrieve_manifest_args(manifest_path, api_version, target
   local args = {}
   vim.list_extend(args, split_cmd(M.SF_CLI.PROJECT.RETRIEVE.CMD))
   vim.list_extend(args, { M.SF_CLI.PROJECT.RETRIEVE.ARGS.MANIFEST, manifest_path })
+  vim.list_extend(args, { M.SF_CLI.PROJECT.RETRIEVE.ARGS.JSON })
+  vim.list_extend(args, { M.SF_CLI.PROJECT.RETRIEVE.ARGS.API_VERSION, api_version })
+  vim.list_extend(args, { M.SF_CLI.PROJECT.RETRIEVE.ARGS.IGNORE_CONFLICTS })
+  if target_org then
+    vim.list_extend(args, { M.SF_CLI.PROJECT.RETRIEVE.ARGS.TARGET_ORG, target_org })
+  end
+  return args
+end
+
+--- Constructs arguments for sf project retrieve start using a single metadata type.
+--- Retrieves ALL items of the given type without listing individual items.
+--- @param xml_name string The metadata type xmlName (e.g. "ApexClass")
+--- @param api_version string The Salesforce API version (e.g. "65.0")
+--- @param target_org string|nil Optional target org username
+--- @return table Complete argument list
+function M.get_project_retrieve_type_args(xml_name, api_version, target_org)
+  local args = {}
+  vim.list_extend(args, split_cmd(M.SF_CLI.PROJECT.RETRIEVE.CMD))
+  vim.list_extend(args, { M.SF_CLI.PROJECT.RETRIEVE.ARGS.METADATA, xml_name })
   vim.list_extend(args, { M.SF_CLI.PROJECT.RETRIEVE.ARGS.JSON })
   vim.list_extend(args, { M.SF_CLI.PROJECT.RETRIEVE.ARGS.API_VERSION, api_version })
   vim.list_extend(args, { M.SF_CLI.PROJECT.RETRIEVE.ARGS.IGNORE_CONFLICTS })

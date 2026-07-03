@@ -8,9 +8,10 @@ local JobUtils = require("sf.core.job_utils")
 local Log = require("sf.core.log")
 local OrgUtils = require("sf.org.utils")
 local PathUtils = require("sf.core.path_utils")
-local SchemaRetrieve = require("sf.schema.retrieve")
 local Picker = require("sf.retrieve.picker")
 local RetrieveUtils = require("sf.retrieve.utils")
+local SchemaRetrieve = require("sf.schema.retrieve")
+local State = require("sf.core.state")
 
 local Metadata = {}
 
@@ -68,7 +69,6 @@ local function show_items_picker(xml_name)
   end)
 end
 
-
 --- Runs the retrieval CLI command for the given items and metadata type.
 --- If >10 items, creates a manifest file and uses -x flag; deletes manifest after.
 --- @param items table Array of { fullName = "...", id = "..." } items
@@ -80,6 +80,11 @@ function Metadata.execute_retrieve(items, xml_name)
 
       if not has_default_org then
         vim.notify(org_error or Const.SF_CLI_MESSAGES.NO_DEFAULT_ORG, vim.log.levels.ERROR)
+        return
+      end
+
+      if State.is_busy("retrieve") then
+        vim.notify("Already retrieving. Please wait...", vim.log.levels.WARN)
         return
       end
 
@@ -102,10 +107,9 @@ function Metadata.execute_retrieve(items, xml_name)
       local args
 
       if use_manifest then
-        -- Manifest directory is <project_root>/manifest/
-        local project_root = vim.fn.getcwd()
-
-        local manifest_dir = PathUtils.join(project_root, "manifest")
+        -- Manifest directory is <cache_path>/manifest/
+        local cache_dir = Config:get_options().cache_path
+        local manifest_dir = PathUtils.join(cache_dir, "manifest")
 
         vim.fn.mkdir(manifest_dir, "p")
 
@@ -123,11 +127,8 @@ function Metadata.execute_retrieve(items, xml_name)
           return
         end
 
-        args = Const.get_project_retrieve_manifest_args(
-          PathUtils.to_forward_slashes(manifest_path),
-          api_version,
-          target_org
-        )
+        args =
+          Const.get_project_retrieve_manifest_args(PathUtils.to_forward_slashes(manifest_path), api_version, target_org)
       else
         -- Build items with type_name for the "xmlName:fullName" -m format
         local typed_items = vim.tbl_map(function(item)
@@ -145,52 +146,38 @@ function Metadata.execute_retrieve(items, xml_name)
 
           Log.deb("Retrieve result:", result)
 
-          -- Save result to retrieve.json
-          local retrieve_file = Config:get_options().retrieve_file
-          local retrieve_dir = vim.fn.fnamemodify(retrieve_file, ":h")
-
-          vim.fn.mkdir(retrieve_dir, "p")
-
-          local rfile = io.open(retrieve_file, "w")
-
-          if rfile then
-            rfile:write(result)
-            rfile:close()
-            Log.deb("Retrieve result saved to:", retrieve_file)
-          end
-
           -- Clean up manifest file
           if use_manifest and manifest_path then
             os.remove(manifest_path)
           end
 
-          -- Check JSON response for status/messages/warnings
-          local ok, parsed = pcall(vim.json.decode, result)
+          local status, detail = RetrieveUtils.handle_retrieve_result(result, context)
 
-          if ok and parsed then
-            local status = parsed.status
-            local success = parsed.result and parsed.result.success
-            local messages = parsed.result and parsed.result.messages
-            local warnings = parsed.warnings
-
-            if status ~= "Succeeded" or success == false then
-              local error_detail = "Retrieval encountered issues"
-
-              if messages and #messages > 0 then
-                error_detail = messages[1].error or messages[1].message or error_detail
-              end
-              JobUtils.handle_cli_error(return_val, context, error_detail)
-              return
-            end
-
-            if warnings and #warnings > 0 then
-              vim.notify(Const.SF_CLI_MESSAGES.RETRIEVE_WARNING, vim.log.levels.WARN)
-            end
+          if status == "error" then
+            State.finish("retrieve")
+            JobUtils.handle_cli_error(return_val, context, detail or "Retrieval encountered issues")
+            return
           end
 
-          context.handle:report({ message = context.success_message, percentage = 100 })
-          context.handle:finish()
-          vim.notify("Metadata retrieved successfully.", vim.log.levels.INFO)
+          if status == "warning" then
+            State.finish("retrieve")
+            vim.notify(detail, vim.log.levels.WARN)
+            context.handle:report({ message = Const.SF_CLI_MESSAGES.RETRIEVE_WITH_ISSUES, percentage = 100 })
+            context.handle:finish()
+            return
+          end
+
+          if status == "success" then
+            State.finish("retrieve")
+
+            if detail then
+              vim.notify(detail, vim.log.levels.WARN)
+            end
+
+            context.handle:report({ message = context.success_message, percentage = 100 })
+            context.handle:finish()
+            vim.notify("Metadata retrieved successfully.", vim.log.levels.INFO)
+          end
         end,
         on_error = function(job, return_val)
           local stderr = job:stderr_result()
@@ -201,9 +188,12 @@ function Metadata.execute_retrieve(items, xml_name)
             os.remove(manifest_path)
           end
 
+          State.finish("retrieve")
           JobUtils.handle_cli_error(return_val, context)
         end,
       })
+
+      State.start("retrieve")
 
       job:start()
     end)
@@ -238,6 +228,11 @@ function Metadata.retrieve_all_of_type()
         return
       end
 
+      if State.is_busy("retrieve") then
+        vim.notify("Already retrieving. Please wait...", vim.log.levels.WARN)
+        return
+      end
+
       local cli_valid, executable_path, error_msg = JobUtils.validate_cli_installation(Config:get_options().sf_cli_path)
 
       if not cli_valid or not executable_path then
@@ -253,16 +248,7 @@ function Metadata.retrieve_all_of_type()
         Const.SF_CLI_MESSAGES.RETRIEVE_FAILED
       )
 
-      local direct_args = {}
-
-      vim.list_extend(direct_args, vim.split(Const.SF_CLI.PROJECT.RETRIEVE.CMD, " "))
-      vim.list_extend(direct_args, { Const.SF_CLI.PROJECT.RETRIEVE.ARGS.METADATA, xml_name })
-      vim.list_extend(direct_args, { Const.SF_CLI.PROJECT.RETRIEVE.ARGS.JSON })
-      vim.list_extend(direct_args, { Const.SF_CLI.PROJECT.RETRIEVE.ARGS.API_VERSION, api_version })
-      vim.list_extend(direct_args, { Const.SF_CLI.PROJECT.RETRIEVE.ARGS.IGNORE_CONFLICTS })
-      if target_org then
-        vim.list_extend(direct_args, { Const.SF_CLI.PROJECT.RETRIEVE.ARGS.TARGET_ORG, target_org })
-      end
+      local direct_args = Const.get_project_retrieve_type_args(xml_name, api_version, target_org)
 
       local job = JobUtils.create_cli_job(executable_path, direct_args, {
         on_success = function(job, return_val)
@@ -272,55 +258,45 @@ function Metadata.retrieve_all_of_type()
 
           Log.deb("Retrieve type result:", result)
 
-          -- Save result to retrieve.json
-          local retrieve_file = Config:get_options().retrieve_file
-          local retrieve_dir = vim.fn.fnamemodify(retrieve_file, ":h")
+          local status, detail = RetrieveUtils.handle_retrieve_result(result, context)
 
-          vim.fn.mkdir(retrieve_dir, "p")
-
-          local rfile = io.open(retrieve_file, "w")
-
-          if rfile then
-            rfile:write(result)
-            rfile:close()
-            Log.deb("Retrieve type result saved to:", retrieve_file)
+          if status == "error" then
+            State.finish("retrieve")
+            JobUtils.handle_cli_error(return_val, context, detail or "Retrieval encountered issues")
+            return
           end
 
-          -- Check JSON response for status/messages/warnings
-          local ok, parsed = pcall(vim.json.decode, result)
-
-          if ok and parsed then
-            local status = parsed.status
-            local success = parsed.result and parsed.result.success
-            local messages = parsed.result and parsed.result.messages
-            local warnings = parsed.warnings
-
-            if status ~= "Succeeded" or success == false then
-              local error_detail = "Retrieval encountered issues"
-
-              if messages and #messages > 0 then
-                error_detail = messages[1].error or messages[1].message or error_detail
-              end
-              JobUtils.handle_cli_error(return_val, context, error_detail)
-              return
-            end
-
-            if warnings and #warnings > 0 then
-              vim.notify(Const.SF_CLI_MESSAGES.RETRIEVE_WARNING, vim.log.levels.WARN)
-            end
+          if status == "warning" then
+            State.finish("retrieve")
+            vim.notify(detail, vim.log.levels.WARN)
+            context.handle:report({ message = Const.SF_CLI_MESSAGES.RETRIEVE_WITH_ISSUES, percentage = 100 })
+            context.handle:finish()
+            return
           end
 
-          context.handle:report({ message = context.success_message, percentage = 100 })
-          context.handle:finish()
-          vim.notify(xml_name .. " metadata retrieved successfully.", vim.log.levels.INFO)
+          if status == "success" then
+            State.finish("retrieve")
+
+            if detail then
+              vim.notify(detail, vim.log.levels.WARN)
+            end
+
+            context.handle:report({ message = context.success_message, percentage = 100 })
+            context.handle:finish()
+            vim.notify(xml_name .. " metadata retrieved successfully.", vim.log.levels.INFO)
+          end
         end,
         on_error = function(job, return_val)
           local stderr = job:stderr_result()
 
           Log.deb("Retrieve type error", { xml_name = xml_name, return_val = return_val, stderr = stderr })
+
+          State.finish("retrieve")
           JobUtils.handle_cli_error(return_val, context)
         end,
       })
+
+      State.start("retrieve")
 
       job:start()
     end)

@@ -7,7 +7,9 @@ local Snacks = require("snacks")
 
 local Cleanup = {}
 
---- Clean up cached schema files (metadata-types.json and metadatas/*).
+--- Clean up cached schema data: deletes `metadata-types.json` and all `.json`
+--- files under the `metadatas/` directory.
+--- Does NOT delete `retrieve.json` or the `metadatas/` directory itself.
 --- Prompts for confirmation before deleting.
 function Cleanup.cleanup_schema()
   local metadata_types_file = Config:get_options().metadata_types_file

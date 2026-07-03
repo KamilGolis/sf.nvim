@@ -101,11 +101,10 @@ end
 --- Walks every line and applies extmarks for tags, line numbers, and event names.
 --- @param buf number Buffer handle
 function Analyze.apply_highlights(buf)
-  local line_count = vim.api.nvim_buf_line_count(buf)
+  local all_lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
 
-  for i = 0, line_count - 1 do
-    local lines = vim.api.nvim_buf_get_lines(buf, i, i + 1, false)
-    local line = lines[1] or ""
+  for line_idx, line in ipairs(all_lines) do
+    local i = line_idx - 1 -- 0-indexed for highlight API
 
     if line == "" then
       goto continue
@@ -122,7 +121,7 @@ function Analyze.apply_highlights(buf)
 
     if not pipe1 then
       -- No pipe: continuation line — apply SfLogCont to the whole content
-      vim.api.nvim_buf_add_highlight(buf, NS, "SfLogCont", i, indent_end - 1, -1)
+      vim.hl.range(buf, NS, "SfLogCont", { i, indent_end - 1 }, { i, -1 })
       goto continue
     end
 
@@ -130,17 +129,18 @@ function Analyze.apply_highlights(buf)
     local tag_hl = Analyze.tag_category(tag)
 
     -- Highlight tag from indent_end to just before the first `|`
-    vim.api.nvim_buf_add_highlight(buf, NS, tag_hl, i, indent_end - 1, indent_end + pipe1 - 2)
+    vim.hl.range(buf, NS, tag_hl, { i, indent_end - 1 }, { i, indent_end + pipe1 - 2 })
 
     -- After first `|` — look for `[N]` or `[EXTERNAL]`
     local after_tag = rest:sub(pipe1 + 1)
     local ln_start, ln_end = after_tag:find("%[[%w]+%]")
 
     if ln_start then
-      local base_col = indent_end + pipe1 -- position right after first `|`
+      -- position right after first `|`
+      local base_col = indent_end + pipe1
 
       -- Highlight the line number bracket
-      vim.api.nvim_buf_add_highlight(buf, NS, "SfLogLineNr", i, base_col + ln_start - 1, base_col + ln_end)
+      vim.hl.range(buf, NS, "SfLogLineNr", { i, base_col + ln_start - 1 }, { i, base_col + ln_end })
       -- Event name: segment after `[N]|`
 
       local name_start = ln_end + 1
@@ -150,12 +150,13 @@ function Analyze.apply_highlights(buf)
         local name_end = after_tag:find("|", name_start, true)
 
         if name_end then
-          vim.api.nvim_buf_add_highlight(buf, NS, "SfLogEvent", i, base_col + name_start - 1, base_col + name_end - 1)
+          vim.hl.range(buf, NS, "SfLogEvent", { i, base_col + name_start - 1 }, { i, base_col + name_end - 1 })
         else
-          vim.api.nvim_buf_add_highlight(buf, NS, "SfLogEvent", i, base_col + name_start - 1, -1)
+          vim.hl.range(buf, NS, "SfLogEvent", { i, base_col + name_start - 1 }, { i, -1 })
         end
       end
     end
+
     ::continue::
   end
 end
@@ -175,7 +176,6 @@ function Analyze.basic()
       local raw_stat = vim.uv.fs_stat(log_path)
       local cached_stat = vim.uv.fs_stat(cached_log)
 
-      -- Use cache if cached log exists and is not stale (cached mtime >= raw mtime)
       if cached_stat and raw_stat and cached_stat.mtime.sec >= raw_stat.mtime.sec then
         local lines = vim.fn.readfile(cached_log)
 
@@ -185,7 +185,6 @@ function Analyze.basic()
         end
       end
 
-      -- Cache miss, stale, or corrupt — render fresh
       require("sf.log.analysis.basic").render(log_path)
     end)
   end)

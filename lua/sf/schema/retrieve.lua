@@ -8,8 +8,8 @@ local JobUtils = require("sf.core.job_utils")
 local Log = require("sf.core.log")
 local OrgUtils = require("sf.org.utils")
 local PathUtils = require("sf.core.path_utils")
-local SchemaRefresh = require("sf.schema.refresh")
 local Picker = require("sf.schema.picker")
+local SchemaRefresh = require("sf.schema.refresh")
 
 local Retrieve = {}
 
@@ -23,7 +23,7 @@ function Retrieve.retrieve(on_type_selected, skip_fetch)
     vim.notify("Metadata types schema not found. Running schema refresh first...", vim.log.levels.INFO)
     SchemaRefresh.refresh(function(success)
       if success then
-        Retrieve.retrieve(on_type_selected)
+        Retrieve.retrieve(on_type_selected, skip_fetch)
       else
         vim.notify("Schema refresh failed. Cannot retrieve metadata.", vim.log.levels.ERROR)
       end
@@ -71,7 +71,9 @@ function Retrieve.retrieve(on_type_selected, skip_fetch)
 
   Picker.create_type_picker(items, function(item)
     if skip_fetch then
-      if on_type_selected then on_type_selected(item.xml_name) end
+      if on_type_selected then
+        on_type_selected(item.xml_name)
+      end
     else
       Retrieve.fetch_metadata(item.xml_name, on_type_selected)
     end
@@ -80,12 +82,17 @@ end
 
 --- Fetch metadata of a specific type from the org and save to disk.
 --- @param xml_name string The metadata type xmlName (e.g. "ApexClass")
-function Retrieve.fetch_metadata(xml_name, on_type_selected)
+function Retrieve.fetch_metadata(xml_name, on_type_selected, on_complete)
   Connector:check_cli(function()
     local has_default_org, target_org, org_error = OrgUtils.check_default_org()
 
     if not has_default_org then
       vim.notify(org_error or Const.SF_CLI_MESSAGES.NO_DEFAULT_ORG, vim.log.levels.ERROR)
+
+      if on_complete then
+        on_complete(false)
+      end
+
       return
     end
 
@@ -93,6 +100,11 @@ function Retrieve.fetch_metadata(xml_name, on_type_selected)
 
     if not cli_valid or not executable_path then
       vim.notify(error_msg or Const.SF_CLI_MESSAGES.NOT_FOUND, vim.log.levels.ERROR)
+
+      if on_complete then
+        on_complete(false)
+      end
+
       return
     end
 
@@ -119,6 +131,11 @@ function Retrieve.fetch_metadata(xml_name, on_type_selected)
 
         if not ok then
           JobUtils.handle_cli_error(return_val, context, "Invalid JSON response: " .. (json_err or "unknown error"))
+
+          if on_complete then
+            on_complete(false)
+          end
+
           return
         end
 
@@ -130,19 +147,34 @@ function Retrieve.fetch_metadata(xml_name, on_type_selected)
           Log.deb("Metadata saved to:", output_file)
         else
           JobUtils.handle_cli_error(return_val, context, "Failed to write metadata file: " .. output_file)
+
+          if on_complete then
+            on_complete(false)
+          end
+
           return
         end
 
         context.handle:report({ message = context.success_message, percentage = 100 })
         context.handle:finish()
         vim.notify(xml_name .. " metadata info retrieved", vim.log.levels.INFO)
-        if on_type_selected then on_type_selected(xml_name) end
+        if on_type_selected then
+          on_type_selected(xml_name)
+        end
+
+        if on_complete then
+          on_complete(true)
+        end
       end,
       on_error = function(job, return_val)
         local stderr = job:stderr_result()
 
         Log.deb("Metadata retrieve error", { xml_name = xml_name, return_val = return_val, stderr = stderr })
         JobUtils.handle_cli_error(return_val, context)
+
+        if on_complete then
+          on_complete(false)
+        end
       end,
     })
 

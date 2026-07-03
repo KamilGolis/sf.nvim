@@ -2,6 +2,7 @@
 -- @license MIT
 
 local Config = require("sf.config")
+local Const = require("sf.const")
 
 local Utils = {}
 
@@ -26,6 +27,77 @@ function Utils.build_manifest_xml(items, xml_name)
   table.insert(lines, "</Package>")
 
   return table.concat(lines, "\n")
+end
+
+--- Formats retrieval warning/error messages into a numbered list string.
+--- Each entry in the messages array has `fileName` and `problem` fields.
+--- @param messages table|nil Array of { fileName = string, problem = string } from retrieve result
+--- @return string|nil Formatted message string, or nil if messages is nil or empty
+function Utils.format_retrieve_messages(messages)
+  if not messages or #messages == 0 then
+    return nil
+  end
+
+  local lines = { "Retrieve issues:" }
+
+  for i, msg in ipairs(messages) do
+    table.insert(lines, string.format("  %d. %s: %s", i, msg.fileName or "unknown", msg.problem or "unknown"))
+  end
+
+  return table.concat(lines, "\n")
+end
+
+--- Parse a retrieve JSON result, save it to disk, check status/warnings.
+--- @param result string Raw JSON result from sf project retrieve start
+--- @param context table Progress context with handle, success_message
+--- @return string|nil "success" on success, "warning" on success with warnings, "error" on failure, nil on parse failure
+--- @return string|nil Error/warning detail message
+function Utils.handle_retrieve_result(result, context)
+  if not result or result == "" then
+    return "error", "Empty retrieve result"
+  end
+
+  -- Save to retrieve.json
+  local retrieve_file = Config:get_options().retrieve_file
+  local retrieve_dir = vim.fn.fnamemodify(retrieve_file, ":h")
+
+  vim.fn.mkdir(retrieve_dir, "p")
+
+  local rfile = io.open(retrieve_file, "w")
+
+  if rfile then
+    rfile:write(result)
+    rfile:close()
+  end
+
+  -- Parse JSON
+  local ok, parsed = pcall(vim.json.decode, result)
+
+  if not ok or not parsed then
+    return "error", "Invalid JSON in retrieve result"
+  end
+
+  local result_data = parsed.result
+  local status = result_data and result_data.status
+  local success = result_data and result_data.success
+  local messages = result_data and result_data.messages
+  local warnings = parsed.warnings
+  local formatted = Utils.format_retrieve_messages(messages)
+
+  if status ~= "Succeeded" or success == false then
+    local error_detail = formatted or "Retrieval encountered issues"
+    return "error", error_detail
+  end
+
+  if formatted then
+    return "warning", formatted
+  end
+
+  if warnings and #warnings > 0 then
+    return "success", Const.SF_CLI_MESSAGES.RETRIEVE_WARNING
+  end
+
+  return "success", nil
 end
 
 return Utils
