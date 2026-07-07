@@ -35,7 +35,7 @@ function Cleanup.cleanup_logs()
       end
     end
 
-    -- Delete logList.json
+    -- Delete log-list.json
     local list_deleted = false
     if vim.fn.filereadable(log_list_file) == 1 then
       list_deleted = pcall(vim.fn.delete, log_list_file)
