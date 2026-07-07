@@ -3,6 +3,8 @@ name: CI
 on:
   pull_request:
     branches: [main, develop, feature/*, bug/*, release/*]
+  push:
+    branches: [main, develop]
   workflow_dispatch:
 
 concurrency:
@@ -11,31 +13,36 @@ concurrency:
 
 jobs:
   stylua:
-    name: stylua
+    name: StyLua format check
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: JohnnyMorganz/stylua-action@v4
+      - name: Run StyLua
+        uses: JohnnyMorganz/stylua-action@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          version: latest
+          # Pin a StyLua release for reproducible checks.
+          version: "2.0.0"
           args: --color always --check .
 
   luacheck:
-    name: luacheck
+    name: LuaCheck lint
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: install luacheck
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y luarocks
-          sudo luarocks install luacheck
-      - name: lint
+      - uses: leafo/gh-actions-lua@v10
+        with:
+          luaVersion: "5.1"
+      - uses: leafo/gh-actions-luarocks@v4
+      - name: Install luacheck
+        run: luarocks install luacheck
+      - name: Add luarocks bin to PATH
+        run: echo "$(luarocks config deploy_bin_dir)" >> "$GITHUB_PATH"
+      - name: Run luacheck
         run: make luacheck
 
   test:
-    name: test
+    name: Unit tests (vusted)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -43,9 +50,15 @@ jobs:
         with:
           neovim: true
           version: stable
-      - name: install vusted
+      - uses: leafo/gh-actions-lua@v10
+        with:
+          luaVersion: "5.1"
+      - uses: leafo/gh-actions-luarocks@v4
+      - name: Install vusted
         run: luarocks install vusted
-      - name: run tests
+      - name: Add luarocks bin to PATH
+        run: echo "$(luarocks config deploy_bin_dir)" >> "$GITHUB_PATH"
+      - name: Run tests
         run: make test
         env:
           VUSTED_USE_LOCAL: 1
