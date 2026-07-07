@@ -138,6 +138,37 @@ require("sf").setup({
 
 View debug logs: `:lua Snacks.debug.log()`
 
+## 🧪 Testing
+
+Run the test suite with `make test`:
+
+```bash
+make test
+```
+
+Requires [vusted](https://github.com/notomo/vusted) (install via `luarocks install vusted`).
+Tests run in headless Neovim — no real SF CLI or Salesforce org needed.
+All CLI interactions are mocked using fixture JSON derived from real org sessions.
+
+Test files are organized under `tests/`:
+```
+tests/
+├── helpers/              # Mock infrastructure
+│   ├── init.lua          # Re-exports and test setup/teardown
+│   ├── mock_vim.lua      # vim.system, vim.fn, vim.notify mocks
+│   ├── mock_snacks.lua   # Snacks.picker capture mock
+│   ├── mock_notify.lua   # vim.notify assertion helpers
+│   └── fixtures.lua      # JSON/text fixture loader
+├── fixtures/             # Mock response data (9 capability dirs)
+├── *spec.lua             # One spec per capability (9 total)
+└── smoke_spec.lua        # Infrastructure smoke test
+```
+
+Run a single spec:
+```bash
+VUSTED_USE_LOCAL=1 vusted ./tests/core_utilities_spec.lua
+```
+
 ## 🎮 Commands
 
 All commands are available under the `:Sf` command with subcommands:

@@ -1,0 +1,5 @@
+{
+  "name": "SourceConflictError",
+  "message": "Source conflict detected: The file FakeClass.cls has been modified locally and remotely.",
+  "status": 1
+}

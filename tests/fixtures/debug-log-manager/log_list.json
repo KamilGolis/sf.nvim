@@ -1,0 +1,32 @@
+{
+  "status": 0,
+  "result": [
+    {
+      "attributes": { "type": "ApexLog", "url": "/services/data/v99.0/tooling/sobjects/ApexLog/07LFAKE000001" },
+      "Id": "07LFAKE000001",
+      "Application": "Browser",
+      "DurationMilliseconds": 272,
+      "Location": "Monitoring",
+      "LogLength": 737255,
+      "LogUser": { "attributes": { "type": "Name" }, "Name": "Test User" },
+      "Operation": "/aura",
+      "Request": "Application",
+      "StartTime": "2026-01-15T10:00:00+0000",
+      "Status": "Success"
+    },
+    {
+      "attributes": { "type": "ApexLog", "url": "/services/data/v99.0/tooling/sobjects/ApexLog/07LFAKE000002" },
+      "Id": "07LFAKE000002",
+      "Application": "Browser",
+      "DurationMilliseconds": 141,
+      "Location": "Monitoring",
+      "LogLength": 5000,
+      "LogUser": { "attributes": { "type": "Name" }, "Name": "Test User" },
+      "Operation": "/apex",
+      "Request": "API",
+      "StartTime": "2026-01-15T11:00:00+0000",
+      "Status": "Success"
+    }
+  ],
+  "warnings": []
+}
