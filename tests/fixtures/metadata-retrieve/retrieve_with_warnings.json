@@ -1,0 +1,15 @@
+{
+  "status": 0,
+  "result": {
+    "done": true,
+    "fileProperties": [],
+    "id": "09SFAKE000002",
+    "status": "Succeeded",
+    "success": true,
+    "messages": [
+      { "fileName": "classes/FakeClass.cls", "problem": "Missing field X" }
+    ],
+    "files": []
+  },
+  "warnings": []
+}
