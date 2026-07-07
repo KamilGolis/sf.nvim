@@ -1,0 +1,47 @@
+name: Bug Report
+description: File a bug report.
+title: "[bug]: "
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before filing, please check if an issue already exists for this bug.
+  - type: textarea
+    attributes:
+      label: Description
+      description: A clear and concise description of the bug.
+    validations:
+      required: true
+  - type: dropdown
+    id: nvim-version
+    attributes:
+      label: Neovim version
+      options:
+        - 0.11.x (stable)
+        - Nightly
+        - <= 0.10.x
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Steps to reproduce
+      description: |
+        Minimal steps to reproduce the bug.
+      placeholder: |
+        1. Open Neovim in a Salesforce project
+        2. Run `:Sf ...`
+        3. See error
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Debug log output
+      description: |
+        Set `debug = true` in your sf.nvim config, reproduce the issue, then paste the output of `:messages`.
+      render: shell
+  - type: checkboxes
+    attributes:
+      label: Self-service
+      options:
+        - label: I'd be willing to fix this bug myself.
