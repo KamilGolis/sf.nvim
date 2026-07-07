@@ -4,6 +4,7 @@
 local Config = require("sf.config")
 local Connector = require("sf.org.connect")
 local Const = require("sf.const")
+local Detect = require("sf.diff.detect")
 local JobUtils = require("sf.core.job_utils")
 local Log = require("sf.core.log")
 local OrgUtils = require("sf.org.utils")
@@ -298,6 +299,101 @@ function Metadata.retrieve_all_of_type()
 
       State.start("retrieve")
 
+      job:start()
+    end)
+  end)
+end
+
+--- Sf retrieve refresh: detect metadata type from the current buffer and retrieve
+--- directly, skipping pickers. Reuses sf.diff.detect for type detection.
+function Metadata.retrieve_current_buffer()
+  local bufnr = vim.api.nvim_get_current_buf()
+  local info, detect_err = Detect.detect_metadata_from_buffer(bufnr)
+
+  if not info then
+    vim.notify(detect_err or "Could not determine metadata type.", vim.log.levels.ERROR)
+    return
+  end
+
+  vim.schedule(function()
+    Connector:check_cli(function()
+      local has_default_org, target_org, org_error = OrgUtils.check_default_org()
+
+      if not has_default_org then
+        vim.notify(org_error or Const.SF_CLI_MESSAGES.NO_DEFAULT_ORG, vim.log.levels.ERROR)
+        return
+      end
+
+      if State.is_busy("retrieve") then
+        vim.notify("Already retrieving. Please wait...", vim.log.levels.WARN)
+        return
+      end
+
+      local cli_valid, executable_path, error_msg = JobUtils.validate_cli_installation(Config:get_options().sf_cli_path)
+
+      if not cli_valid or not executable_path then
+        vim.notify(error_msg or Const.SF_CLI_MESSAGES.NOT_FOUND, vim.log.levels.ERROR)
+        return
+      end
+
+      local api_version = Config:get_options().api_version
+
+      local context = JobUtils.create_progress_context(
+        Const.SF_CLI_MESSAGES.RETRIEVE_TITLE,
+        Const.SF_CLI_MESSAGES.RETRIEVE_SUCCESS,
+        Const.SF_CLI_MESSAGES.RETRIEVE_FAILED
+      )
+
+      local items = { { fullName = info.member, type_name = info.type } }
+      local args = Const.get_project_retrieve_args(items, api_version, target_org)
+
+      local job = JobUtils.create_cli_job(executable_path, args, {
+        on_success = function(job, return_val)
+          Log.deb("Refresh retrieve success", { return_val = return_val })
+
+          local result = table.concat(job:result(), "\n")
+          Log.deb("Refresh retrieve result:", result)
+
+          local status, detail = RetrieveUtils.handle_retrieve_result(result, context)
+
+          if status == "error" then
+            State.finish("retrieve")
+            JobUtils.handle_cli_error(return_val, context, detail or "Retrieval encountered issues")
+            return
+          end
+
+          if status == "warning" then
+            State.finish("retrieve")
+
+            vim.notify(detail, vim.log.levels.WARN)
+            context.handle:report({ message = Const.SF_CLI_MESSAGES.RETRIEVE_WITH_ISSUES, percentage = 100 })
+            context.handle:finish()
+
+            return
+          end
+
+          if status == "success" then
+            State.finish("retrieve")
+
+            if detail then
+              vim.notify(detail, vim.log.levels.WARN)
+            end
+
+            context.handle:report({ message = context.success_message, percentage = 100 })
+            context.handle:finish()
+
+            vim.notify(info.type .. ":" .. info.member .. " retrieved successfully.", vim.log.levels.INFO)
+          end
+        end,
+        on_error = function(job, return_val)
+          local stderr = job:stderr_result()
+          Log.deb("Refresh retrieve error", { return_val = return_val, stderr = stderr })
+          State.finish("retrieve")
+          JobUtils.handle_cli_error(return_val, context)
+        end,
+      })
+
+      State.start("retrieve")
       job:start()
     end)
   end)
