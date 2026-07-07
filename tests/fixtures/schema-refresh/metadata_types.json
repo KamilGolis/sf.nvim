@@ -1,0 +1,14 @@
+{
+  "status": 0,
+  "result": {
+    "metadataObjects": [
+      { "xmlName": "ApexClass", "directoryName": "classes", "inFolder": false, "metaFile": false, "suffix": "cls" },
+      { "xmlName": "ApexPage", "directoryName": "pages", "inFolder": false, "metaFile": false, "suffix": "page" },
+      { "xmlName": "ApexTrigger", "directoryName": "triggers", "inFolder": false, "metaFile": false, "suffix": "trigger" }
+    ],
+    "organizationNamespace": "",
+    "partialSaveAllowed": true,
+    "testRequired": false
+  },
+  "warnings": []
+}

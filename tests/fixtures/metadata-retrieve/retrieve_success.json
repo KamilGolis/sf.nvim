@@ -1,0 +1,21 @@
+{
+  "status": 0,
+  "result": {
+    "done": true,
+    "fileProperties": [
+      { "fullName": "FakeClass", "type": "ApexClass", "id": "01pFAKE000001", "fileName": "unpackaged/classes/FakeClass.cls" },
+      { "fullName": "FakeTrigger", "type": "ApexTrigger", "id": "01qFAKE000001", "fileName": "unpackaged/triggers/FakeTrigger.trigger" },
+      { "fullName": "FakePage", "type": "ApexPage", "id": "03hFAKE000001", "fileName": "unpackaged/pages/FakePage.page" }
+    ],
+    "id": "09SFAKE000001",
+    "status": "Succeeded",
+    "success": true,
+    "messages": [],
+    "files": [
+      { "fullName": "FakeClass", "type": "ApexClass", "state": "Created" },
+      { "fullName": "FakeTrigger", "type": "ApexTrigger", "state": "Created" },
+      { "fullName": "FakePage", "type": "ApexPage", "state": "Created" }
+    ]
+  },
+  "warnings": []
+}

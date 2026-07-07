@@ -1,0 +1,1 @@
+@salesforce/cli/2.15.9 linux-x64 node-v20.10.0
