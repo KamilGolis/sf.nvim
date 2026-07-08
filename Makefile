@@ -1,3 +1,5 @@
+.PHONY: test test_file deps luacheck
+
 # Run all test files
 test: deps
 	nvim --headless --noplugin -u ./scripts/minimal_init.lua -c "lua MiniTest.run()"
@@ -8,6 +10,10 @@ test_file: deps
 
 deps: deps/mini.nvim
 	@echo "deps ready"
+
+# Run luacheck linter
+luacheck:
+	-luacheck .
 
 deps/mini.nvim:
 	@mkdir -p deps

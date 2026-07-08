@@ -26,7 +26,7 @@ function Detect.parse_meta_xml_type(file_path)
     return nil, "Cannot open -meta.xml: " .. (open_err or "unknown error")
   end
 
-  -- Read first 2KB (need only header and first line from -meta.xml to determine metadata type) 
+  -- Read first 2KB (need only header and first line from -meta.xml to determine metadata type)
   local content = file:read(2048)
   file:close()
 
