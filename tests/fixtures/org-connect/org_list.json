@@ -1,0 +1,33 @@
+{
+  "status": 0,
+  "result": {
+    "nonScratchOrgs": [
+      {
+        "alias": "prod",
+        "username": "admin@mycompany.com",
+        "instanceUrl": "https://na1.salesforce.com",
+        "isDefault": true,
+        "orgId": "00DFAKE000001234AAA",
+        "connectedStatus": "Connected"
+      },
+      {
+        "alias": "dev",
+        "username": "dev@mycompany.com.sandbox",
+        "instanceUrl": "https://test-dev-ed.my.salesforce.com",
+        "orgId": "00DFAKE000005678BBB",
+        "connectedStatus": "Connected"
+      },
+      {
+        "alias": "scratch",
+        "username": "test-user@example.com",
+        "instanceUrl": "https://test-dev-ed.my.salesforce.com",
+        "isDefault": false,
+        "orgId": "00DFAKE000009012CCC",
+        "connectedStatus": "Connected"
+      }
+    ],
+    "scratchOrgs": [],
+    "devHubs": []
+  },
+  "warnings": []
+}

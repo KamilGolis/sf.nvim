@@ -1,0 +1,26 @@
+{
+  "status": 0,
+  "result": {
+    "summary": {
+      "failRate": "0%",
+      "failing": 0,
+      "hostname": "https://test-dev-ed.my.salesforce.com",
+      "orgId": "00DFAKE000000001",
+      "outcome": "Passed",
+      "passRate": "100%",
+      "passing": 13,
+      "skipped": 0,
+      "testRunId": "",
+      "testsRan": 13,
+      "username": "test-runner@example.com",
+      "commandTime": "2 ms",
+      "testExecutionTime": "267 ms",
+      "testTotalTime": "267 ms"
+    },
+    "tests": [
+      { "ApexClass": { "Id": "01pFAKE0000001", "Name": "FakeTestClass" }, "MethodName": "testOne", "Outcome": "Pass", "RunTime": 50, "FullName": "FakeTestClass.testOne", "Message": "", "StackTrace": "" },
+      { "ApexClass": { "Id": "01pFAKE0000001", "Name": "FakeTestClass" }, "MethodName": "testTwo", "Outcome": "Pass", "RunTime": 75, "FullName": "FakeTestClass.testTwo", "Message": "", "StackTrace": "" }
+    ]
+  },
+  "warnings": []
+}

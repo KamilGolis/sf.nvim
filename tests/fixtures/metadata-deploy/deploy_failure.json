@@ -1,0 +1,29 @@
+{
+  "status": 1,
+  "result": {
+    "details": {
+      "componentFailures": [
+        {
+          "changed": false,
+          "componentType": "ApexClass",
+          "created": false,
+          "createdDate": "2026-01-15T10:00:00.000Z",
+          "deleted": false,
+          "fileName": "classes/FakeClass.cls",
+          "fullName": "FakeClass",
+          "id": "01pFAKE000001234",
+          "lineNumber": 42,
+          "columnNumber": 10,
+          "problem": "Missing required annotation",
+          "success": false
+        }
+      ],
+      "componentSuccesses": []
+    },
+    "done": true,
+    "id": "0AfFAKE000005678",
+    "status": "Failed",
+    "success": false
+  },
+  "warnings": []
+}

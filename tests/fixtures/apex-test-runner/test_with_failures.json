@@ -1,0 +1,26 @@
+{
+  "status": 0,
+  "result": {
+    "summary": {
+      "failRate": "50%",
+      "failing": 1,
+      "hostname": "https://test-dev-ed.my.salesforce.com",
+      "orgId": "00DFAKE000000001",
+      "outcome": "Failed",
+      "passRate": "50%",
+      "passing": 1,
+      "skipped": 0,
+      "testRunId": "",
+      "testsRan": 2,
+      "username": "test-runner@example.com",
+      "commandTime": "1 ms",
+      "testExecutionTime": "100 ms",
+      "testTotalTime": "100 ms"
+    },
+    "tests": [
+      { "ApexClass": { "Id": "01pFAKE0000001", "Name": "FakeTestClass" }, "MethodName": "testOne", "Outcome": "Pass", "RunTime": 50, "FullName": "FakeTestClass.testOne", "Message": "", "StackTrace": "" },
+      { "ApexClass": { "Id": "01pFAKE0000001", "Name": "FakeTestClass" }, "MethodName": "testFail", "Outcome": "Fail", "RunTime": 10, "FullName": "FakeTestClass.testFail", "Message": "System.AssertException: Assertion Failed", "StackTrace": "Class.FakeTestClass.testFail: line 42, column 1" }
+    ]
+  },
+  "warnings": []
+}

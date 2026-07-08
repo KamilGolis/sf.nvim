@@ -1,34 +1,14 @@
-VUSTED_USE_LOCAL ?= 1
-VUSTED ?= vusted
-STYLUA ?= stylua
-LUACHECK ?= luacheck
+# Run all test files
+test: deps
+	nvim --headless --noplugin -u ./scripts/minimal_init.lua -c "lua MiniTest.run()"
 
-_LUAROCKS_BIN := $(shell luarocks --local config deploy_bin_dir 2>/dev/null)
+# Run test from file at `FILE` environment variable
+test_file: deps
+	nvim --headless --noplugin -u ./scripts/minimal_init.lua -c "lua MiniTest.run_file('$(FILE)')"
 
-# When the binary is not on PATH, fall back to the luarocks deploy bin dir,
-# which is where `luarocks install <pkg>` places executables in CI and local dev.
-_HAS_VUSTED := $(shell command -v $(VUSTED) 2>/dev/null)
-_HAS_LUACHECK := $(shell command -v $(LUACHECK) 2>/dev/null)
+deps: deps/mini.nvim
+	@echo "deps ready"
 
-ifeq ($(_HAS_VUSTED),)
-ifneq ($(_LUAROCKS_BIN),)
-VUSTED := $(_LUAROCKS_BIN)/vusted
-endif
-endif
-
-ifeq ($(_HAS_LUACHECK),)
-ifneq ($(_LUAROCKS_BIN),)
-LUACHECK := $(_LUAROCKS_BIN)/luacheck
-endif
-endif
-
-test:
-	VUSTED_USE_LOCAL=$(VUSTED_USE_LOCAL) $(VUSTED) ./tests
-
-stylua:
-	$(STYLUA) --check .
-
-luacheck:
-	@set +e; $(LUACHECK) .; exit_code=$$?; if [ $$exit_code -gt 1 ]; then exit $$exit_code; fi
-
-.PHONY: test stylua luacheck
+deps/mini.nvim:
+	@mkdir -p deps
+	git clone --filter=blob:none https://github.com/nvim-mini/mini.nvim $@
