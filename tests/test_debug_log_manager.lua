@@ -68,7 +68,7 @@ describe("debug-log-manager", function()
 
     it("returns path rooted at cache path", function()
       local path = LogUtils.get_log_list_path()
-      expect.match(path, "logList%.json$")
+      expect.match(path, "log%-list%.json$")
     end)
   end)
 end)
