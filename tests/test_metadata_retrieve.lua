@@ -14,11 +14,15 @@ describe("metadata-retrieve", function()
         end,
       },
     })
-    -- Route retrieve.json writes to a temp dir so the suite doesn't pollute the repo.
+    -- Directly set cache_path instead of calling Config:setup a second time,
+    -- whose eager path-joining would corrupt retrieve_file with a nested path.
     local tmpdir = "/tmp/_sf_retrieve_test_" .. vim.fn.localtime() .. "_" .. vim.fn.rand()
     vim.fn.mkdir(tmpdir, "p")
     _G._sf_retrieve_tmpdir = tmpdir
-    require("sf.config"):setup({ cache_path = tmpdir })
+    local config = require("sf.config")
+    local opts = config:get_options()
+    opts.cache_path = vim.fn.fnamemodify(tmpdir, ":p")
+    opts.retrieve_file = opts.cache_path .. "/retrieve.json"
   end)
 
   after_each(function()

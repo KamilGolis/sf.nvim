@@ -42,7 +42,7 @@ jobs:
         run: make luacheck
 
   test:
-    name: Unit tests (vusted)
+    name: Unit tests (mini.test)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -50,15 +50,7 @@ jobs:
         with:
           neovim: true
           version: stable
-      - uses: leafo/gh-actions-lua@v10
-        with:
-          luaVersion: "5.1"
-      - uses: leafo/gh-actions-luarocks@v4
-      - name: Install vusted
-        run: luarocks install vusted
-      - name: Add luarocks bin to PATH
-        run: echo "$(luarocks config deploy_bin_dir)" >> "$GITHUB_PATH"
+      - name: Install test dependencies
+        run: make deps
       - name: Run tests
         run: make test
-        env:
-          VUSTED_USE_LOCAL: 1
