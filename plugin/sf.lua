@@ -13,6 +13,7 @@ local Config = require("sf.config")
 local Connector = require("sf.org.connect")
 local Deployment = require("sf.deploy.metadata")
 local Diagnostics = require("sf.core.diagnostics")
+local Diff = require("sf.diff.runner")
 local LogList = require("sf.log.list")
 local RetrieveMetadata = require("sf.retrieve.metadata")
 local SchemaCleanup = require("sf.schema.cleanup")
@@ -145,6 +146,12 @@ local COMMANDS = {
     end,
     type = function()
       RetrieveMetadata.retrieve_all_of_type()
+    end,
+    refresh = function()
+      RetrieveMetadata.retrieve_current_buffer()
+    end,
+    diff = function()
+      Diff.diff_current_buffer()
     end,
   },
 }

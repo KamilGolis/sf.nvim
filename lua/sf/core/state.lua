@@ -1,4 +1,6 @@
 local M = {}
+--- Central job busy-state registry.
+--- Known job kinds (used by modules): "deploy", "test", "retrieve", "diff"
 
 local busy = {}
 

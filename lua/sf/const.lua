@@ -162,7 +162,17 @@ M.SF_CLI = {
         JSON = "--json",
         API_VERSION = "-a",
         IGNORE_CONFLICTS = "-c",
+        TARGET_METADATA_DIR = "--target-metadata-dir",
+        UNZIP = "--unzip",
         TARGET_ORG = "-o",
+      },
+    },
+    CONVERT = {
+      CMD = "project convert mdapi",
+      ARGS = {
+        ROOT_DIR = "--root-dir",
+        OUTPUT_DIR = "--output-dir",
+        JSON = "--json",
       },
     },
   },
@@ -645,6 +655,40 @@ function M.get_project_retrieve_type_args(xml_name, api_version, target_org)
   if target_org then
     vim.list_extend(args, { M.SF_CLI.PROJECT.RETRIEVE.ARGS.TARGET_ORG, target_org })
   end
+  return args
+end
+
+--- Constructs arguments for sf project retrieve start in metadata API format.
+--- Used by the diff command: retrieves to --target-metadata-dir, then project convert mdapi converts to source format.
+--- @param metadata_type string The metadata type xmlName (e.g. "ApexClass")
+--- @param member_name string The member name (e.g. "MyClass")
+--- @param output_dir string The target metadata directory (from vim.fn.tempname())
+--- @param target_org string|nil Optional target org username
+--- @return table Complete argument list
+function M.get_diff_retrieve_args(metadata_type, member_name, output_dir, target_org)
+  local args = {}
+  vim.list_extend(args, split_cmd(M.SF_CLI.PROJECT.RETRIEVE.CMD))
+  vim.list_extend(args, { M.SF_CLI.PROJECT.RETRIEVE.ARGS.METADATA, metadata_type .. ":" .. member_name })
+  vim.list_extend(args, { M.SF_CLI.PROJECT.RETRIEVE.ARGS.TARGET_METADATA_DIR, output_dir })
+  vim.list_extend(args, { M.SF_CLI.PROJECT.RETRIEVE.ARGS.UNZIP })
+  vim.list_extend(args, { M.SF_CLI.PROJECT.RETRIEVE.ARGS.JSON })
+  if target_org then
+    vim.list_extend(args, { M.SF_CLI.PROJECT.RETRIEVE.ARGS.TARGET_ORG, target_org })
+  end
+  return args
+end
+
+--- Constructs arguments for sf project convert mdapi to source format.
+--- Converts the unpacked metadata format files back to source format for diffing.
+--- @param root_dir string Path to unpackaged directory (from the retrieve)
+--- @param output_dir string Path to write converted source files
+--- @return table Complete argument list
+function M.get_diff_convert_args(root_dir, output_dir)
+  local args = {}
+  vim.list_extend(args, split_cmd(M.SF_CLI.PROJECT.CONVERT.CMD))
+  vim.list_extend(args, { M.SF_CLI.PROJECT.CONVERT.ARGS.ROOT_DIR, root_dir })
+  vim.list_extend(args, { M.SF_CLI.PROJECT.CONVERT.ARGS.OUTPUT_DIR, output_dir })
+  vim.list_extend(args, { M.SF_CLI.PROJECT.CONVERT.ARGS.JSON })
   return args
 end
 M.MANIFEST_THRESHOLD = 10
