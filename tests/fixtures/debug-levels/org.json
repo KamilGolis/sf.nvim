@@ -1,0 +1,14 @@
+{
+  "status": 0,
+  "result": {
+    "id": "00D000000000001",
+    "apiVersion": "67.0",
+    "accessToken": "[REDACTED]",
+    "instanceUrl": "https://test-dev-ed.my.salesforce.com",
+    "username": "test.user@example.com",
+    "clientId": "PlatformCLI",
+    "connectedStatus": "Connected",
+    "alias": "TEST-ORG"
+  },
+  "warnings": []
+}

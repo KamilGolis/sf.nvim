@@ -140,6 +140,19 @@ local COMMANDS = {
       end,
     },
   },
+  debug = {
+    level = {
+      new = function()
+        require("sf.debug.level").new_level()
+      end,
+      delete = function()
+        require("sf.debug.level").delete_level()
+      end,
+      edit = function()
+        require("sf.debug.level").edit_level()
+      end,
+    },
+  },
   retrieve = {
     metadata = function()
       RetrieveMetadata.retrieve_selected()

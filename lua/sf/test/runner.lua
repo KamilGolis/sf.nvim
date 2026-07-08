@@ -49,6 +49,32 @@ local function find_class_name(node)
   return nil
 end
 
+--- Find the class name by searching the entire file tree.
+--- Used as fallback when cursor is on a top-level node (comment, blank line)
+--- that is a sibling of the class_declaration, not a descendant.
+--- @param bufnr number Buffer handle
+--- @return string|nil class_name
+local function find_class_name_in_file(bufnr)
+  local parser = vim.treesitter.get_parser(bufnr, "apex")
+  if not parser then
+    return nil
+  end
+  local tree = parser:parse()[1]
+  local root = tree:root()
+
+  local query = vim.treesitter.query.parse(
+    "apex",
+    [[
+    (class_declaration
+      name: (identifier) @name)
+  ]]
+  )
+  for _, node, _ in query:iter_captures(root, bufnr) do
+    return vim.treesitter.get_node_text(node, bufnr)
+  end
+  return nil
+end
+
 --- Find the method name from treesitter node
 --- @param node table The treesitter node to analyze
 --- @return string|nil The method name if found
@@ -416,6 +442,13 @@ function TestRunner.run_current_tests(test_type, options)
     local class_name = find_class_name(node)
 
     if not class_name then
+      -- Fallback: cursor may be on a top-level comment/blank line
+      -- whose parent is the program root, not the class_declaration.
+      -- Search the whole file for the first class_declaration.
+      local bufnr = vim.api.nvim_get_current_buf()
+      class_name = find_class_name_in_file(bufnr)
+    end
+    if not class_name then
       vim.notify("Could not find class name", vim.log.levels.ERROR)
       return
     end
@@ -621,6 +654,11 @@ function TestRunner.run_coverage_at_cursor(test_type, options)
 
   local class_name = find_class_name(node)
 
+  if not class_name then
+    -- Fallback: cursor may be on a top-level comment/blank line
+    local bufnr = vim.api.nvim_get_current_buf()
+    class_name = find_class_name_in_file(bufnr)
+  end
   if not class_name then
     vim.notify("Could not find class name", vim.log.levels.ERROR)
     return

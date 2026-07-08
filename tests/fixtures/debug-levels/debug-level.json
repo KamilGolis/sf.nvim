@@ -1,0 +1,50 @@
+{
+  "status": 0,
+  "result": {
+    "records": [
+      {
+        "attributes": {
+          "type": "DebugLevel",
+          "url": "/services/data/v67.0/tooling/sobjects/DebugLevel/7dl000000000001"
+        },
+        "Id": "7dl000000000001",
+        "ApexCode": "FINEST",
+        "ApexProfiling": "ERROR",
+        "Callout": "ERROR",
+        "CreatedDate": "2018-01-01T00:00:00.000+0000",
+        "DataAccess": null,
+        "Database": "INFO",
+        "DeveloperName": "Default_DevConsole",
+        "Language": "en_US",
+        "MasterLabel": "Default_DevConsole",
+        "Nba": "ERROR",
+        "System": "FINEST",
+        "Validation": "ERROR",
+        "Visualforce": "FINE"
+      },
+      {
+        "attributes": {
+          "type": "DebugLevel",
+          "url": "/services/data/v67.0/tooling/sobjects/DebugLevel/7dl000000000002"
+        },
+        "Id": "7dl000000000002",
+        "ApexCode": "FINE",
+        "ApexProfiling": "INFO",
+        "Callout": "INFO",
+        "CreatedDate": "2026-01-01T12:00:00.000+0000",
+        "DataAccess": "INFO",
+        "Database": "INFO",
+        "DeveloperName": "My_Debug",
+        "Language": "en_US",
+        "MasterLabel": "My_Debug",
+        "Nba": "INFO",
+        "System": "DEBUG",
+        "Validation": "INFO",
+        "Visualforce": "INFO"
+      }
+    ],
+    "totalSize": 2,
+    "done": true
+  },
+  "warnings": []
+}

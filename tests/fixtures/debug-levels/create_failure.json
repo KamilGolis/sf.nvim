@@ -1,0 +1,8 @@
+{
+  "name": "REQUIRED_FIELD_MISSING",
+  "message": "Required fields are missing: [MasterLabel]",
+  "exitCode": 1,
+  "context": "Create",
+  "status": 1,
+  "commandName": "Create"
+}
