@@ -20,7 +20,8 @@ As a Salesforce developer, I’ve mostly used VS Code and WebStorm with Illumina
 - 🔌 **Org Management** - Easy switching between Salesforce orgs
 - 📝 **Debug Logs** - List, fetch, and analyze debug logs with rich per-token highlighting and tree view
 - 📦 **Schema Management** - Refresh org metadata type index and retrieve type details
-- ⬇️  **Metadata Retrieval** - Retrieve metadata individually or by type from org
+- ⬇️  **Metadata Retrieval** - Retrieve metadata individually, by type, or refresh the current buffer from org
+- ↔️  **Server Diff** - Diff local metadata against the server version in a dedicated tab with scroll-synced views
 - 🔍 **Diagnostics** - Inline error display for deployment failures
 - 💾 **Cross-platform** - Works on Windows, macOS, and Linux
 - ⚡ **Fast** - Asynchronous operations with progress indicators
@@ -154,14 +155,14 @@ All commands are available under the `:Sf` command with subcommands:
 :Sf schema retrieve  " Select and retrieve metadata of a type
 :Sf schema cleanup   " Delete cached schema files (like metadata-types.json and all files under metadatas directory)
 ```
-
 ### Metadata Retrieval
 
 ```vim
 :Sf retrieve metadata   " Select type, then pick items to retrieve
 :Sf retrieve type       " Select type, retrieve all items at once
+:Sf retrieve refresh    " Refresh current buffer from server (skips picker, uses buffer detection)
+:Sf retrieve diff       " Diff current buffer against server version (new tab, scroll-synced)
 ```
-
 ### Deployment
 
 ```vim
@@ -242,7 +243,8 @@ vim.keymap.set("n", "<leader>sR", ":Sf log resume<CR>", { desc = "Resume cached 
 vim.keymap.set("n", "<leader>sr", ":Sf test result<CR>", { desc = "Show test results" })
 vim.keymap.set("n", "<leader>ss", ":Sf schema retrieve<CR>", { desc = "Retrieve metadata info" })
 vim.keymap.set("n", "<leader>srm", ":Sf retrieve metadata<CR>", { desc = "Retrieve selected metadata" })
-vim.keymap.set("n", "<leader>srt", ":Sf retrieve type<CR>", { desc = "Retrieve all of type" })
+vim.keymap.set("n", "<leader>sdd", ":Sf retrieve diff<CR>", { desc = "Diff against server" })
+vim.keymap.set("n", "<leader>srf", ":Sf retrieve refresh<CR>", { desc = "Refresh from server" })
 ```
 
 ## 🎨 Features in Detail
@@ -282,12 +284,12 @@ When enabled (`:Sf coverage on`), coverage signs appear in the gutter:
 ### Schema Management
 
 - **Refresh**: Pull the latest metadata type index from the org via `Sf schema refresh`
-- **Retrieve Info**: Select a type via picker to download its full metadata listing (saved as JSON)
-
 ### Metadata Retrieval
 
 - **Select Items**: Multi-select individual metadata items via picker with preview details
 - **Retrieve by Type**: Retrieve all items of a selected type in one command
+- **Refresh Current Buffer**: `Sf retrieve refresh` detects the metadata type from the current buffer and retrieves the server version directly — no pickers, no extra steps
+- **Diff Against Server**: `Sf retrieve diff` retrieves the server version to a temp directory, converts it to source format, then opens a dedicated tab with a scroll-synced 2-pane diff view (left: server, right: local). Uses an in-memory scratch buffer with `sf://` URI scheme to avoid LSP interference
 - **Manifest Mode**: For >10 items, generates a `retrieve-manifest.xml` automatically for efficiency
 
 ## 🛠️ Development
@@ -357,10 +359,9 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 📚 Related Projects
 
-- [salesforce.nvim](https://github.com/xixiaofinland/salesforce.nvim) - Alternative Salesforce plugin
 - [sgd (sfdx-git-delta)](https://github.com/scolladon/sfdx-git-delta) - Delta deployment support
-
----
+- [salesforce.nvim](https://github.com/jonathanmorris180/salesforce.nvim) - Alternative Salesforce plugin
+- [sf.nvim](https://github.com/xixiaofinland/sf.nvim) - Another Salesforce plugin for Neovim
 
 <div align="center">
 

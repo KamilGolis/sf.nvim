@@ -42,3 +42,6 @@ luac.out
 
 # Sample data directory
 data/
+
+# Test dependencies
+deps/

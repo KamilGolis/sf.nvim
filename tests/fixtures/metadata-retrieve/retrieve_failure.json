@@ -1,0 +1,9 @@
+{
+  "status": 1,
+  "result": {
+    "status": "Failed",
+    "success": false,
+    "messages": [{ "fileName": "classes/FakeClass.cls", "problem": "Permission denied" }]
+  },
+  "warnings": []
+}

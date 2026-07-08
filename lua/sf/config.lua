@@ -16,7 +16,7 @@ function Config:new()
     deploy_file = "deploy.json", -- Default filename for storing deploy info
     test_results_file = "test.json", -- Default filename for storing test results
     coverage_results_file = "coverage.json", -- Default filename for storing coverage results
-    log_list_file = "logList.json", -- Default filename for storing log list results
+    log_list_file = "log-list.json", -- Default filename for storing log list results
     log_dir = "logs", -- Default directory for downloaded debug logs
     delta_dir = "delta", -- Default directory for delta package
     metadata_types_file = "metadata-types.json", -- Default filename for metadata types schema

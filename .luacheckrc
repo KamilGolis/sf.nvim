@@ -5,4 +5,6 @@ exclude_files = {
     ".jj/",
     ".sf/",
     "tests/",
+    "deps/",
+    ".luarocks/",
 }
