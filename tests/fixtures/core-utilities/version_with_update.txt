@@ -1,0 +1,2 @@
+› Warning: @salesforce/cli update available from 2.15.9 to 2.16.0
+@salesforce/cli/2.15.9 linux-x64 node-v20.10.0
