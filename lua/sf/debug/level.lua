@@ -3,6 +3,7 @@
 
 local Config = require("sf.config")
 local Const = require("sf.const")
+local DebugPicker = require("sf.debug.picker")
 local DebugUtils = require("sf.debug.utils")
 local JobUtils = require("sf.core.job_utils")
 local Log = require("sf.core.log")
@@ -40,57 +41,6 @@ local function record_to_fields(dl)
 
   fields.MasterLabel = dl.MasterLabel or fields.DeveloperName
   return fields
-end
-
---- Build a picker for valid values of a debug level field.
---- @param field_def table The field definition from Const.DEBUG_LEVEL_FIELDS
---- @param on_select fun(value: string) Called with the selected value
-local function show_field_value_picker(field_def, on_select)
-  local values = field_def.values
-
-  if not values or #values == 0 then
-    return
-  end
-
-  local items = {}
-  for _, v in ipairs(values) do
-    table.insert(items, { text = v, value = v })
-  end
-
-  vim.schedule(function()
-    local Snacks = require("snacks")
-
-    Snacks.picker({
-      title = "Select " .. field_def.label,
-      items = items,
-      layout = { preset = "vscode" },
-      format = function(item)
-        return { { item.text } }
-      end,
-      confirm = function(picker, item)
-        picker:close()
-        if item and item.value then
-          on_select(item.value)
-        end
-      end,
-    })
-  end)
-end
-
---- Build an input picker for the DeveloperName field.
---- @param current_value string The current value
---- @param on_confirm fun(value: string) Called with the entered name
-local function show_name_input(current_value, on_confirm)
-  local Snacks = require("snacks")
-
-  Snacks.input({
-    prompt = "Log Level Name: ",
-    default = current_value,
-  }, function(value)
-    if value and value ~= "" then
-      on_confirm(value)
-    end
-  end)
 end
 
 --- Render the debug level edit buffer.
@@ -341,13 +291,13 @@ local function open_level_buffer(existing_dl, extra)
     end
 
     if field_def.name == "DeveloperName" then
-      show_name_input(current_fields[field_def.name] or field_def.default, function(new_value)
+      DebugPicker.create_name_input(current_fields[field_def.name] or field_def.default, function(new_value)
         current_fields[field_def.name] = new_value
         vim.b[buf].debug_level_fields = current_fields
         render_buffer(buf, current_fields, is_edit)
       end)
     elseif field_def.values and #field_def.values > 0 then
-      show_field_value_picker(field_def, function(new_value)
+      DebugPicker.create_field_value_picker(field_def, function(new_value)
         current_fields[field_def.name] = new_value
         vim.b[buf].debug_level_fields = current_fields
         render_buffer(buf, current_fields, is_edit)
@@ -421,105 +371,74 @@ function Level.delete_level()
       return
     end
 
-    local items = {}
+    DebugPicker.create_debug_level_picker(debug_levels, function(selected_dl)
+      local record_id = selected_dl.Id
 
-    for _, dl in ipairs(debug_levels) do
-      table.insert(items, DebugUtils.debug_level_to_picker_item(dl))
-    end
+      if not record_id then
+        vim.notify(Const.SF_CLI_MESSAGES.DEBUG_LEVEL_NO_ID, vim.log.levels.ERROR)
 
-    local Snacks = require("snacks")
+        return
+      end
 
-    Snacks.picker({
-      title = "Select Debug Level to Delete",
-      items = items,
-      layout = { preset = "vscode" },
-      format = function(item, _)
-        local icon = Const.ICONS.ERROR or " "
-        return {
-          { icon .. " " .. item.text, "SnacksPickerNormal" },
-          { item.description or "", "SnacksPickerComment" },
-          { item.id or "", "Comment" },
-        }
-      end,
-      confirm = function(picker, item)
-        picker:close()
+      local config = Config:get_options()
+      local cli_valid, executable_path, _ = JobUtils.validate_cli_installation(config.sf_cli_path)
 
-        if not item then
-          return
-        end
+      if not cli_valid or not executable_path then
+        vim.notify(Const.SF_CLI_MESSAGES.NOT_FOUND, vim.log.levels.ERROR)
 
-        -- Re-find the full DebugLevel record from the picker item
-        local selected_dl = item.details
-        if not selected_dl then
-          vim.notify(Const.SF_CLI_MESSAGES.DEBUG_LEVEL_NOT_FOUND_ERROR, vim.log.levels.ERROR)
-          return
-        end
+        return
+      end
 
-        local record_id = selected_dl.Id
-        if not record_id then
-          vim.notify(Const.SF_CLI_MESSAGES.DEBUG_LEVEL_NO_ID, vim.log.levels.ERROR)
-          return
-        end
+      local state = require("sf.core.state")
+      state.start("debug")
 
-        local config = Config:get_options()
-        local cli_valid, executable_path, _ = JobUtils.validate_cli_installation(config.sf_cli_path)
+      local context = JobUtils.create_progress_context(
+        Const.SF_CLI_MESSAGES.DEBUG_LEVEL_DELETE_TITLE,
+        Const.SF_CLI_MESSAGES.DEBUG_LEVEL_DELETE_SUCCESS,
+        Const.SF_CLI_MESSAGES.DEBUG_LEVEL_DELETE_FAILED
+      )
 
-        if not cli_valid or not executable_path then
-          vim.notify(Const.SF_CLI_MESSAGES.NOT_FOUND, vim.log.levels.ERROR)
-          return
-        end
+      local args = Const.get_record_delete_args(target_org, record_id, config.api_version)
+      local job = JobUtils.create_cli_job(executable_path, args, {
+        on_success = function(job, _)
+          local result = table.concat(job:result(), "\n")
+          local ok, parsed, _ = JobUtils.validate_json_response(result)
 
-        local state = require("sf.core.state")
-        state.start("debug")
+          if ok and parsed and parsed.status == 0 then
+            context.handle:report({ message = Const.SF_CLI_MESSAGES.DEBUG_LEVEL_DELETE_SUCCESS, percentage = 100 })
+            context.handle:finish()
 
-        local context = JobUtils.create_progress_context(
-          Const.SF_CLI_MESSAGES.DEBUG_LEVEL_DELETE_TITLE,
-          Const.SF_CLI_MESSAGES.DEBUG_LEVEL_DELETE_SUCCESS,
-          Const.SF_CLI_MESSAGES.DEBUG_LEVEL_DELETE_FAILED
-        )
-
-        local args = Const.get_record_delete_args(target_org, record_id, config.api_version)
-        local job = JobUtils.create_cli_job(executable_path, args, {
-          on_success = function(job, _)
-            local result = table.concat(job:result(), "\n")
-            local ok, parsed, _ = JobUtils.validate_json_response(result)
-
-            if ok and parsed and parsed.status == 0 then
-              context.handle:report({ message = Const.SF_CLI_MESSAGES.DEBUG_LEVEL_DELETE_SUCCESS, percentage = 100 })
-              context.handle:finish()
-
-              state.finish("debug")
-              vim.notify(Const.SF_CLI_MESSAGES.DEBUG_LEVEL_DELETE_SUCCESS, vim.log.levels.INFO)
-            else
-              local err_msg = Const.SF_CLI_MESSAGES.DEBUG_LEVEL_DELETE_FAILED
-
-              if parsed and parsed.message then
-                err_msg = parsed.message
-              end
-
-              JobUtils.handle_cli_error(1, context, err_msg)
-              state.finish("debug")
-            end
-          end,
-          on_error = function(job, return_val)
-            local stderr = job:stderr_result()
+            state.finish("debug")
+            vim.notify(Const.SF_CLI_MESSAGES.DEBUG_LEVEL_DELETE_SUCCESS, vim.log.levels.INFO)
+          else
             local err_msg = Const.SF_CLI_MESSAGES.DEBUG_LEVEL_DELETE_FAILED
 
-            if stderr and stderr ~= "" then
-              local ok, parsed, _ = JobUtils.validate_json_response(stderr)
-
-              if ok and parsed and parsed.message then
-                err_msg = parsed.message
-              end
+            if parsed and parsed.message then
+              err_msg = parsed.message
             end
 
-            JobUtils.handle_cli_error(return_val, context, err_msg)
+            JobUtils.handle_cli_error(1, context, err_msg)
             state.finish("debug")
-          end,
-        })
-        job:start()
-      end,
-    })
+          end
+        end,
+        on_error = function(job, return_val)
+          local stderr = job:stderr_result()
+          local err_msg = Const.SF_CLI_MESSAGES.DEBUG_LEVEL_DELETE_FAILED
+
+          if stderr and stderr ~= "" then
+            local ok, parsed, _ = JobUtils.validate_json_response(stderr)
+
+            if ok and parsed and parsed.message then
+              err_msg = parsed.message
+            end
+          end
+
+          JobUtils.handle_cli_error(return_val, context, err_msg)
+          state.finish("debug")
+        end,
+      })
+      job:start()
+    end)
   end)
 end
 
@@ -538,45 +457,21 @@ function Level.edit_level()
       return
     end
 
-    local items = {}
-    for _, dl in ipairs(debug_levels) do
-      table.insert(items, DebugUtils.debug_level_to_picker_item(dl))
-    end
-
     local config = Config:get_options()
     local cli_valid, executable_path, _ = JobUtils.validate_cli_installation(config.sf_cli_path)
 
     if not cli_valid or not executable_path then
       vim.notify(Const.SF_CLI_MESSAGES.NOT_FOUND, vim.log.levels.ERROR)
+
       return
     end
-
-    local Snacks = require("snacks")
-    Snacks.picker({
-      title = "Select Debug Level to Edit",
-      items = items,
-      layout = { preset = "vscode" },
-      format = function(item, _)
-        local icon = Const.ICONS.ERROR or " "
-        return {
-          { icon .. " " .. item.text, "SnacksPickerNormal" },
-          { item.description or "", "SnacksPickerComment" },
-          { item.id or "", "Comment" },
-        }
-      end,
-      confirm = function(picker, item)
-        picker:close()
-        if not item or not item.details then
-          return
-        end
-
-        open_level_buffer(item.details, {
-          target_org = target_org,
-          executable_path = executable_path,
-          api_version = config.api_version,
-        })
-      end,
-    })
+    DebugPicker.create_debug_level_picker(debug_levels, function(selected_dl)
+      open_level_buffer(selected_dl, {
+        target_org = target_org,
+        executable_path = executable_path,
+        api_version = config.api_version,
+      })
+    end)
   end)
 end
 

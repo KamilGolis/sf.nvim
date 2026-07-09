@@ -21,6 +21,7 @@ As a Salesforce developer, I’ve mostly used VS Code and WebStorm with Illumina
 - 🔌 **Org Management** - Easy switching between Salesforce orgs
 - 📝 **Debug Logs** - List, fetch, and analyze debug logs with rich per-token highlighting and tree view
 - 🔧 **Debug Level Management** - Create, edit, and delete debug levels with an interactive buffer and syntax highlighting
+- 🏷️ **Trace Flag Management** - Create new trace flags with interactive buffer, debug level picker with preview, and auto-conflict resolution
 - 📦 **Schema Management** - Refresh org metadata type index and retrieve type details
 - ⬇️  **Metadata Retrieval** - Retrieve metadata individually, by type, or refresh the current buffer from org
 - ↔️  **Server Diff** - Diff local metadata against the server version in a dedicated tab with scroll-synced views
@@ -212,6 +213,13 @@ All commands are available under the `:Sf` command with subcommands:
 :Sf debug level delete   " Delete a debug level
 ```
 
+### Debug Trace Flags
+
+```vim
+:Sf debug trace new   " Create a new trace flag with interactive editor
+```
+
+
 ## 📖 Usage Examples
 
 
@@ -254,6 +262,7 @@ vim.keymap.set("n", "<leader>sC", ":Sf coverage on<CR>", { desc = "Toggle covera
 vim.keymap.set("n", "<leader>sl", ":Sf log list<CR>", { desc = "List debug logs" })
 vim.keymap.set("n", "<leader>sR", ":Sf log resume<CR>", { desc = "Resume cached log list" })
 vim.keymap.set("n", "<leader>sr", ":Sf test result<CR>", { desc = "Show test results" })
+vim.keymap.set("n", "<leader>stn", ":Sf debug trace new<CR>", { desc = "Create trace flag" })
 vim.keymap.set("n", "<leader>ss", ":Sf schema retrieve<CR>", { desc = "Retrieve metadata info" })
 vim.keymap.set("n", "<leader>srm", ":Sf retrieve metadata<CR>", { desc = "Retrieve selected metadata" })
 vim.keymap.set("n", "<leader>sa", ":Sf test action<CR>", { desc = "Show test actions" })
