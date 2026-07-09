@@ -18,7 +18,7 @@ local function get_default_fields()
     fields[fd.name] = fd.default
   end
 
-  fields.MasterLabel = fields.DeveloperName -- MasterLabel mirrors DeveloperName
+  fields.MasterLabel = fields.DeveloperName
   return fields
 end
 
@@ -99,26 +99,23 @@ end
 --- @param is_edit boolean True if editing existing level (DeveloperName read-only)
 local function render_buffer(buf, fields, is_edit)
   local lines = {}
-  local line_map = {} -- maps actionable value lines to field_def index
+  local line_map = {}
 
   for i, fd in ipairs(Const.DEBUG_LEVEL_FIELDS) do
     local label = fd.label
     local value = fields[fd.name] or fd.default
 
-    -- Label line
     table.insert(lines, "  " .. label)
 
-    -- Value line with accordion sign
     local value_line
-    if fd.name == "DeveloperName" and is_edit then
+    if fd.readonly_edit and is_edit then
       value_line = "  > " .. value .. " (read-only)"
     else
       value_line = "  > " .. value
     end
     table.insert(lines, value_line)
-    line_map[#lines] = i -- mark this line as actionable, pointing to field index
+    line_map[#lines] = i
 
-    -- Empty separator after DeveloperName
     if fd.name == "DeveloperName" then
       table.insert(lines, "")
     end
@@ -146,19 +143,21 @@ end
 local function save_buffer(buf)
   -- Read current fields from buffer-local variable
   local fields = vim.b[buf].debug_level_fields
-  local mode = vim.b[buf].debug_level_mode -- "new" or "edit"
-  local record_id = vim.b[buf].debug_level_record_id -- nil for new
+  -- "new" or "edit"
+  local mode = vim.b[buf].debug_level_mode
+  -- nil for new
+  local record_id = vim.b[buf].debug_level_record_id
   local target_org = vim.b[buf].debug_level_target_org
   local executable_path = vim.b[buf].debug_level_executable_path
   local api_version = vim.b[buf].debug_level_api_version
 
   if not fields then
-    vim.notify("No field data to save", vim.log.levels.ERROR)
+    vim.notify(Const.SF_CLI_MESSAGES.DEBUG_LEVEL_NO_FIELD_DATA, vim.log.levels.ERROR)
     return
   end
 
   if not target_org then
-    vim.notify("No target org configured for save", vim.log.levels.ERROR)
+    vim.notify(Const.SF_CLI_MESSAGES.DEBUG_LEVEL_NO_TARGET_ORG, vim.log.levels.ERROR)
     return
   end
 
@@ -173,13 +172,10 @@ local function save_buffer(buf)
     executable_path = path
   end
 
-  -- Ensure MasterLabel matches DeveloperName
   fields.MasterLabel = fields.DeveloperName
 
-  -- Save JSON locally
   DebugUtils.save_debug_level_json(fields)
 
-  -- Build CLI command
   local value_string = DebugUtils.fields_to_value_string(fields)
   value_string = value_string .. " MasterLabel=" .. fields.DeveloperName
 
@@ -213,12 +209,10 @@ local function save_buffer(buf)
         state.finish("debug")
 
         vim.notify(context.success_message, vim.log.levels.INFO)
-        -- Close the buffer
         pcall(vim.api.nvim_buf_delete, buf, { force = true })
       else
         Log.deb("save_buffer on_success non-zero status", parsed)
 
-        -- Parse error from response
         local err_msg = "Failed to save debug level"
 
         if parsed and parsed.message then
@@ -238,7 +232,6 @@ local function save_buffer(buf)
       local stdout_str = table.concat(stdout_lines, "\n")
       local err_msg = Const.SF_CLI_MESSAGES.DEBUG_LEVEL_NEW_FAILED
 
-      -- Try stdout first (SF CLI writes error JSON to stdout)
       if stdout_str ~= "" then
         local ok, parsed, _ = JobUtils.validate_json_response(stdout_str)
 
@@ -318,7 +311,7 @@ local function open_level_buffer(existing_dl, extra)
   vim.bo[buf].buftype = "acwrite"
   vim.bo[buf].bufhidden = "wipe"
   vim.bo[buf].filetype = "sfdebuglevel"
-  vim.bo[buf].modifiable = false -- We handle edits via keymaps
+  vim.bo[buf].modifiable = false
 
   -- Render content
   render_buffer(buf, fields, is_edit)
@@ -341,9 +334,9 @@ local function open_level_buffer(existing_dl, extra)
     local field_def = Const.DEBUG_LEVEL_FIELDS[field_index]
     local current_fields = vim.b[buf].debug_level_fields
 
-    if field_def.name == "DeveloperName" and is_edit then
+    if field_def.readonly_edit and is_edit then
       -- Read-only in edit mode
-      vim.notify("DeveloperName cannot be changed after creation", vim.log.levels.WARN)
+      vim.notify(Const.SF_CLI_MESSAGES.DEBUG_LEVEL_READONLY_WARN, vim.log.levels.WARN)
       return
     end
 
@@ -394,7 +387,7 @@ end
 function Level.new_level()
   DebugUtils.run_workflow(function(success, data)
     if not success then
-      return -- Error already reported by workflow
+      return
     end
 
     local config = Config:get_options()
@@ -424,7 +417,7 @@ function Level.delete_level()
     local debug_levels = data.debug_levels
 
     if not debug_levels or #debug_levels == 0 then
-      vim.notify("No debug levels found", vim.log.levels.INFO)
+      vim.notify(Const.SF_CLI_MESSAGES.DEBUG_LEVEL_NONE_FOUND, vim.log.levels.INFO)
       return
     end
 
@@ -458,13 +451,13 @@ function Level.delete_level()
         -- Re-find the full DebugLevel record from the picker item
         local selected_dl = item.details
         if not selected_dl then
-          vim.notify("Could not find selected debug level", vim.log.levels.ERROR)
+          vim.notify(Const.SF_CLI_MESSAGES.DEBUG_LEVEL_NOT_FOUND_ERROR, vim.log.levels.ERROR)
           return
         end
 
         local record_id = selected_dl.Id
         if not record_id then
-          vim.notify("Selected debug level has no Id", vim.log.levels.ERROR)
+          vim.notify(Const.SF_CLI_MESSAGES.DEBUG_LEVEL_NO_ID, vim.log.levels.ERROR)
           return
         end
 
@@ -541,7 +534,7 @@ function Level.edit_level()
     local debug_levels = data.debug_levels
 
     if not debug_levels or #debug_levels == 0 then
-      vim.notify("No debug levels found", vim.log.levels.INFO)
+      vim.notify(Const.SF_CLI_MESSAGES.DEBUG_LEVEL_NONE_FOUND, vim.log.levels.INFO)
       return
     end
 

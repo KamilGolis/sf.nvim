@@ -3,9 +3,27 @@
 -- to provide code actions without requiring an external LSP server.
 -- @license MIT
 
+local Const = require("sf.const")
+
 local M = {}
 
 local null_client_id = nil
+
+--- Dispatch a code action command by ID.
+--- @param cmd string The command identifier (e.g. "sf.test.runClass")
+local function dispatch_command(cmd)
+  local TestRunner = require("sf.test.runner")
+
+  if cmd == Const.SF_ACTIONS.CMD_RUN_CLASS then
+    TestRunner.run_current_tests("class")
+  elseif cmd == Const.SF_ACTIONS.CMD_RUN_METHOD then
+    TestRunner.run_current_tests("method")
+  elseif cmd == Const.SF_ACTIONS.CMD_RUN_CLASS_COVERAGE then
+    TestRunner.run_coverage_at_cursor("class")
+  elseif cmd == Const.SF_ACTIONS.CMD_RUN_METHOD_COVERAGE then
+    TestRunner.run_coverage_at_cursor("method")
+  end
+end
 
 --- Factory for an in-process LSP RPC client.
 --- The returned object satisfies vim.lsp.rpc.PublicClient.
@@ -23,16 +41,15 @@ local function create_rpc_client(_dispatchers, _config)
             codeActionProvider = true,
             executeCommandProvider = {
               commands = {
-                "sf.test.runClass",
-                "sf.test.runMethod",
-                "sf.test.runClassCoverage",
-                "sf.test.runMethodCoverage",
+                Const.SF_ACTIONS.CMD_RUN_CLASS,
+                Const.SF_ACTIONS.CMD_RUN_METHOD,
+                Const.SF_ACTIONS.CMD_RUN_CLASS_COVERAGE,
+                Const.SF_ACTIONS.CMD_RUN_METHOD_COVERAGE,
               },
             },
           },
-          serverInfo = { name = "sf.nvim" },
+          serverInfo = { name = Const.SF_ACTIONS.SERVER_NAME },
         })
-
         return true, 0
       end
 
@@ -50,18 +67,7 @@ local function create_rpc_client(_dispatchers, _config)
       end
 
       if method == "workspace/executeCommand" then
-        local cmd = params.command
-
-        if cmd == "sf.test.runClass" then
-          require("sf.test.runner").run_current_tests("class")
-        elseif cmd == "sf.test.runMethod" then
-          require("sf.test.runner").run_current_tests("method")
-        elseif cmd == "sf.test.runClassCoverage" then
-          require("sf.test.runner").run_coverage_at_cursor("class")
-        elseif cmd == "sf.test.runMethodCoverage" then
-          require("sf.test.runner").run_coverage_at_cursor("method")
-        end
-
+        dispatch_command(params.command)
         callback(nil, vim.NIL)
         return true, 0
       end
@@ -97,7 +103,7 @@ local function ensure_client()
   end
 
   local ok, client_id = pcall(vim.lsp.start, {
-    name = "sf-actions",
+    name = Const.SF_ACTIONS.CLIENT_NAME,
     cmd = create_rpc_client,
     root_dir = vim.fn.getcwd(),
     capabilities = vim.lsp.protocol.make_client_capabilities(),
@@ -127,14 +133,17 @@ function M.get_actions_for_buffer(bufnr)
 
   local actions = {
     {
-      title = "Sf: Run Test Class",
+      title = Const.SF_ACTIONS.TITLE_RUN_TEST_CLASS,
       kind = "refactor.extract",
-      command = { command = "sf.test.runClass", title = "Run Test Class" },
+      command = { command = Const.SF_ACTIONS.CMD_RUN_CLASS, title = Const.SF_ACTIONS.TITLE_RUN_TEST_CLASS },
     },
     {
-      title = "Sf: Run Test Class with Coverage",
+      title = Const.SF_ACTIONS.TITLE_RUN_TEST_CLASS_COVERAGE,
       kind = "refactor.extract",
-      command = { command = "sf.test.runClassCoverage", title = "Run Test Class with Coverage" },
+      command = {
+        command = Const.SF_ACTIONS.CMD_RUN_CLASS_COVERAGE,
+        title = Const.SF_ACTIONS.TITLE_RUN_TEST_CLASS_COVERAGE,
+      },
     },
   }
 
@@ -143,14 +152,20 @@ function M.get_actions_for_buffer(bufnr)
 
   if node and TestRunner.find_method_name(node) then
     table.insert(actions, 1, {
-      title = "Sf: Run Test Method",
+      title = Const.SF_ACTIONS.TITLE_RUN_TEST_METHOD,
       kind = "refactor.extract",
-      command = { command = "sf.test.runMethod", title = "Run Test Method" },
+      command = {
+        command = Const.SF_ACTIONS.CMD_RUN_METHOD,
+        title = Const.SF_ACTIONS.TITLE_RUN_TEST_METHOD,
+      },
     })
     table.insert(actions, 2, {
-      title = "Sf: Run Test Method with Coverage",
+      title = Const.SF_ACTIONS.TITLE_RUN_TEST_METHOD_COVERAGE,
       kind = "refactor.extract",
-      command = { command = "sf.test.runMethodCoverage", title = "Run Test Method with Coverage" },
+      command = {
+        command = Const.SF_ACTIONS.CMD_RUN_METHOD_COVERAGE,
+        title = Const.SF_ACTIONS.TITLE_RUN_TEST_METHOD_COVERAGE,
+      },
     })
   end
 
@@ -162,7 +177,7 @@ function M.show_actions()
   local actions = M.get_actions_for_buffer(vim.api.nvim_get_current_buf())
 
   if #actions == 0 then
-    vim.notify("No test actions available for this file", vim.log.levels.WARN)
+    vim.notify(Const.SF_ACTIONS.NO_ACTIONS, vim.log.levels.WARN)
     return
   end
 
@@ -172,7 +187,7 @@ function M.show_actions()
   end
 
   require("snacks").picker({
-    title = "Test Actions",
+    title = Const.SF_ACTIONS.PICKER_TITLE,
     items = items,
     layout = { preset = "vscode" },
     format = function(item)
@@ -181,17 +196,7 @@ function M.show_actions()
     confirm = function(picker, item)
       picker:close()
       if item and item.action then
-        local cmd = item.action.command.command
-
-        if cmd == "sf.test.runClass" then
-          require("sf.test.runner").run_current_tests("class")
-        elseif cmd == "sf.test.runMethod" then
-          require("sf.test.runner").run_current_tests("method")
-        elseif cmd == "sf.test.runClassCoverage" then
-          require("sf.test.runner").run_coverage_at_cursor("class")
-        elseif cmd == "sf.test.runMethodCoverage" then
-          require("sf.test.runner").run_coverage_at_cursor("method")
-        end
+        dispatch_command(item.action.command.command)
       end
     end,
   })
@@ -201,12 +206,12 @@ end
 --- to Apex test class buffers.
 function M.setup()
   if not ensure_client() then
-    vim.notify("sf.nvim: Failed to start test actions LSP client", vim.log.levels.WARN)
+    vim.notify(Const.SF_ACTIONS.CLIENT_FAILED, vim.log.levels.WARN)
     return
   end
 
   vim.api.nvim_create_autocmd("BufEnter", {
-    group = vim.api.nvim_create_augroup("sf_actions", { clear = true }),
+    group = vim.api.nvim_create_augroup(Const.SF_ACTIONS.AUGROUP, { clear = true }),
     pattern = "*.cls",
     callback = function(args)
       local bufnr = args.buf

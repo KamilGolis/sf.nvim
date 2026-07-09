@@ -16,9 +16,11 @@ As a Salesforce developer, I’ve mostly used VS Code and WebStorm with Illumina
 
 - 🚀 **Metadata Deployment** - Deploy current file, changed files, or selected files
 - 🧪 **Apex Test Execution** - Run tests at class or method level with detailed results
+- ⚡ **LSP Code Actions** - Run tests via `vim.lsp.buf.code_action()` with integrated test actions, no Apex LSP required
 - 📊 **Code Coverage** - Visual coverage indicators with detailed statistics
 - 🔌 **Org Management** - Easy switching between Salesforce orgs
 - 📝 **Debug Logs** - List, fetch, and analyze debug logs with rich per-token highlighting and tree view
+- 🔧 **Debug Level Management** - Create, edit, and delete debug levels with an interactive buffer and syntax highlighting
 - 📦 **Schema Management** - Refresh org metadata type index and retrieve type details
 - ⬇️  **Metadata Retrieval** - Retrieve metadata individually, by type, or refresh the current buffer from org
 - ↔️  **Server Diff** - Diff local metadata against the server version in a dedicated tab with scroll-synced views
@@ -180,6 +182,7 @@ All commands are available under the `:Sf` command with subcommands:
 :Sf test class    " Run all tests in current test class
 :Sf test method   " Run test method at cursor position
 :Sf test result   " Show last test results
+:Sf test action   " Show available test actions via picker (alternative to LSP code actions)
 ```
 
 ### Coverage
@@ -201,7 +204,17 @@ All commands are available under the `:Sf` command with subcommands:
 :Sf log cleanup          " Delete cached log files and logList.json
 ```
 
+### Debug Levels
+
+```vim
+:Sf debug level new      " Create a new debug level with interactive editor
+:Sf debug level edit     " Edit an existing debug level
+:Sf debug level delete   " Delete a debug level
+```
+
 ## 📖 Usage Examples
+
+
 
 ### Basic Workflow
 
@@ -243,6 +256,7 @@ vim.keymap.set("n", "<leader>sR", ":Sf log resume<CR>", { desc = "Resume cached 
 vim.keymap.set("n", "<leader>sr", ":Sf test result<CR>", { desc = "Show test results" })
 vim.keymap.set("n", "<leader>ss", ":Sf schema retrieve<CR>", { desc = "Retrieve metadata info" })
 vim.keymap.set("n", "<leader>srm", ":Sf retrieve metadata<CR>", { desc = "Retrieve selected metadata" })
+vim.keymap.set("n", "<leader>sa", ":Sf test action<CR>", { desc = "Show test actions" })
 vim.keymap.set("n", "<leader>sdd", ":Sf retrieve diff<CR>", { desc = "Diff against server" })
 vim.keymap.set("n", "<leader>srf", ":Sf retrieve refresh<CR>", { desc = "Refresh from server" })
 ```

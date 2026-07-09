@@ -2,8 +2,8 @@
 -- @license MIT
 
 local Config = require("sf.config")
-local Const = require("sf.const")
 local Connector = require("sf.org.connect")
+local Const = require("sf.const")
 local JobUtils = require("sf.core.job_utils")
 local Log = require("sf.core.log")
 local OrgUtils = require("sf.org.utils")
@@ -114,7 +114,6 @@ function DebugUtils.parse_trace_flags(json_response)
 
   -- Array of records returned
   if type(result) == "table" then
-    -- Check if it looks like an array (has numeric keys)
     local flags = {}
 
     for _, item in ipairs(result) do
@@ -226,13 +225,10 @@ function DebugUtils.run_workflow(on_complete)
     local workflow_data = {}
     local context
 
-    -- Step 4: Get trace flags for our UserId
-    local function step4()
-      local trace_args = Const.get_record_get_args(
-        "TraceFlag",
-        "TracedEntityId='" .. workflow_data.user_id .. "'",
-        target_org
-      )
+    -- Fetch trace flags for the UserId, then call on_complete
+    local function fetch_trace_flags_and_finish()
+      local trace_args =
+        Const.get_record_get_args("TraceFlag", "TracedEntityId='" .. workflow_data.user_id .. "'", target_org)
 
       context = JobUtils.create_progress_context(
         Const.SF_CLI_MESSAGES.DEBUG_LEVEL_FETCHING_TRACES,
@@ -262,7 +258,6 @@ function DebugUtils.run_workflow(on_complete)
         on_error = function(job, return_val)
           local stderr = job:stderr_result()
           Log.deb("Trace flags fetch error", { return_val = return_val, stderr = stderr })
-          -- Trace flags are optional; proceed without them
           workflow_data.trace_flags = {}
 
           context.handle:report({ message = Const.SF_CLI_MESSAGES.DEBUG_LEVEL_WORKFLOW_SUCCESS, percentage = 100 })
@@ -277,9 +272,10 @@ function DebugUtils.run_workflow(on_complete)
       trace_job:start()
     end
 
-    -- Step 3: Get all debug levels
-    local function step3()
-      local query = "SELECT Id,ApexCode,ApexProfiling,Callout,CreatedDate,DataAccess,Database,DeveloperName,Language,MasterLabel,Nba,System,Validation,Visualforce,Wave,Workflow FROM DebugLevel"
+    -- Query all DebugLevel records, then fetch trace flags
+    local function fetch_debug_levels_and_proceed()
+      local query =
+        "SELECT Id,ApexCode,ApexProfiling,Callout,CreatedDate,DataAccess,Database,DeveloperName,Language,MasterLabel,Nba,System,Validation,Visualforce,Wave,Workflow FROM DebugLevel"
       local debug_args = Const.get_query_args(query, target_org)
 
       context = JobUtils.create_progress_context(
@@ -307,7 +303,7 @@ function DebugUtils.run_workflow(on_complete)
           workflow_data.debug_levels = levels
           context.handle:finish()
 
-          step4()
+          fetch_trace_flags_and_finish()
         end,
         on_error = function(job, return_val)
           local stderr = job:stderr_result()
@@ -325,8 +321,8 @@ function DebugUtils.run_workflow(on_complete)
       debug_job:start()
     end
 
-    -- Step 2: Get User by Username → parse Id
-    local function step2(username)
+    -- Get User record by username, extract Id, then query debug levels
+    local function fetch_user_and_proceed(username)
       workflow_data.username = username
       local user_args = Const.get_record_get_args("User", "Username='" .. username .. "'", target_org)
 
@@ -356,7 +352,7 @@ function DebugUtils.run_workflow(on_complete)
           workflow_data.user_id = user_id
           context.handle:finish()
 
-          step3()
+          fetch_debug_levels_and_proceed()
         end,
         on_error = function(job, return_val)
           local stderr = job:stderr_result()
@@ -400,7 +396,7 @@ function DebugUtils.run_workflow(on_complete)
         end
 
         context.handle:finish()
-        step2(username)
+        fetch_user_and_proceed(username)
       end,
       on_error = function(job, return_val)
         local stderr = job:stderr_result()

@@ -55,7 +55,12 @@ M.ICONS = {
 --- Used by debug level new/edit commands for interactive editing.
 M.DEBUG_LEVEL_FIELDS = {
   { name = "DeveloperName", label = "Log Level Name", values = nil, default = "Debug_Default", readonly_edit = true },
-  { name = "ApexCode", label = "Apex Code", values = { "None", "Error", "Warn", "Info", "Debug", "Fine", "Finer", "Finest" }, default = "Debug" },
+  {
+    name = "ApexCode",
+    label = "Apex Code",
+    values = { "None", "Error", "Warn", "Info", "Debug", "Fine", "Finer", "Finest" },
+    default = "Debug",
+  },
   { name = "ApexProfiling", label = "Apex Profiling", values = { "None", "Info", "Fine", "Finest" }, default = "Info" },
   { name = "Callout", label = "Callout", values = { "None", "Error", "Info", "Finer", "Finest" }, default = "Info" },
   { name = "DataAccess", label = "Data Access", values = { "None" }, default = "None" },
@@ -65,7 +70,12 @@ M.DEBUG_LEVEL_FIELDS = {
   { name = "Validation", label = "Validation", values = { "None", "Info" }, default = "Info" },
   { name = "Visualforce", label = "Visualforce", values = { "None", "Info", "Fine", "Finer" }, default = "Info" },
   { name = "Wave", label = "Wave", values = { "None", "Error", "Info", "Fine", "Finer", "Finest" }, default = "Info" },
-  { name = "Workflow", label = "Workflow", values = { "None", "Error", "Warn", "Info", "Fine", "Finer" }, default = "Info" },
+  {
+    name = "Workflow",
+    label = "Workflow",
+    values = { "None", "Error", "Warn", "Info", "Fine", "Finer" },
+    default = "Info",
+  },
 }
 
 --- String format templates for displaying Salesforce org details
@@ -143,6 +153,39 @@ M.SF_CLI_MESSAGES = {
   DEBUG_LEVEL_FETCHING_USER = "Fetching user info.",
   DEBUG_LEVEL_FETCHING_LEVELS = "Fetching debug levels.",
   DEBUG_LEVEL_FETCHING_TRACES = "Fetching trace flags.",
+  DEBUG_LEVEL_NO_FIELD_DATA = "No field data to save",
+  DEBUG_LEVEL_NO_TARGET_ORG = "No target org configured for save",
+  DEBUG_LEVEL_READONLY_WARN = "DeveloperName cannot be changed after creation",
+  DEBUG_LEVEL_NONE_FOUND = "No debug levels found",
+  DEBUG_LEVEL_NOT_FOUND_ERROR = "Could not find selected debug level",
+  DEBUG_LEVEL_NO_ID = "Selected debug level has no Id",
+}
+
+--- SF code actions configuration
+M.SF_ACTIONS = {
+  -- LSP client settings
+  CLIENT_NAME = "sf-actions",
+  SERVER_NAME = "sf.nvim",
+  AUGROUP = "sf_actions",
+
+  -- Command identifiers
+  CMD_RUN_CLASS = "sf.test.runClass",
+  CMD_RUN_METHOD = "sf.test.runMethod",
+  CMD_RUN_CLASS_COVERAGE = "sf.test.runClassCoverage",
+  CMD_RUN_METHOD_COVERAGE = "sf.test.runMethodCoverage",
+
+  -- Action titles
+  TITLE_RUN_TEST_CLASS = "Sf: Run Test Class",
+  TITLE_RUN_TEST_CLASS_COVERAGE = "Sf: Run Test Class with Coverage",
+  TITLE_RUN_TEST_METHOD = "Sf: Run Test Method",
+  TITLE_RUN_TEST_METHOD_COVERAGE = "Sf: Run Test Method with Coverage",
+
+  -- Messages
+  NO_ACTIONS = "No test actions available for this file",
+  CLIENT_FAILED = "sf.nvim: Failed to start test actions LSP client",
+
+  -- Picker
+  PICKER_TITLE = "Test Actions",
 }
 
 --- Salesforce CLI commands and their arguments
