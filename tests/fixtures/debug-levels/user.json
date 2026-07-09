@@ -1,0 +1,18 @@
+{
+  "status": 0,
+  "result": {
+    "attributes": {
+      "type": "User",
+      "url": "/services/data/v67.0/sobjects/User/005000000000001"
+    },
+    "Id": "005000000000001",
+    "Username": "test.user@example.com",
+    "Name": "Test User",
+    "Email": "test.user@example.com",
+    "Alias": "TUser",
+    "IsActive": true,
+    "ProfileId": "00e000000000001",
+    "UserType": "Standard"
+  },
+  "warnings": []
+}
