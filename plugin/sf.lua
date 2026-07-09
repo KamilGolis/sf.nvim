@@ -19,6 +19,7 @@ local RetrieveMetadata = require("sf.retrieve.metadata")
 local SchemaCleanup = require("sf.schema.cleanup")
 local SchemaRefresh = require("sf.schema.refresh")
 local SchemaRetrieve = require("sf.schema.retrieve")
+local TestCodeActions = require("sf.core.code_actions")
 local TestRunner = require("sf.test.runner")
 
 local indexes = require("sf.core.indexes")
@@ -105,6 +106,9 @@ local COMMANDS = {
     end,
     result = function()
       TestRunner.show_last_results(make_test_options())
+    end,
+    action = function()
+      TestCodeActions.show_actions()
     end,
   },
   coverage = {
@@ -223,3 +227,4 @@ end, {
   end,
   desc = "Salesforce CLI integration commands",
 })
+TestCodeActions.setup()
