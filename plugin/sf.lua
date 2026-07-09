@@ -156,6 +156,11 @@ local COMMANDS = {
         require("sf.debug.level").edit_level()
       end,
     },
+    trace = {
+      new = function()
+        require("sf.trace.flag").new_trace_flag()
+      end,
+    },
   },
   retrieve = {
     metadata = function()

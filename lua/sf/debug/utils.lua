@@ -34,27 +34,28 @@ function DebugUtils.parse_org_data(json_response)
   return username, nil
 end
 
---- Parse user.json response → extract Id (UserId).
+--- Parse user.json response → extract Id (UserId) and Name.
 --- @param json_response string The raw JSON from sf data record get
---- @return string|nil user_id, string|nil error
+--- @return string|nil user_id, string|nil user_name, string|nil error
 function DebugUtils.parse_user_data(json_response)
   local ok, parsed, err = JobUtils.validate_json_response(json_response)
 
   if not ok then
-    return nil, "Invalid user data response: " .. (err or "unknown error")
+    return nil, nil, "Invalid user data response: " .. (err or "unknown error")
   end
 
   if parsed.status ~= 0 then
-    return nil, "User record get command failed"
+    return nil, nil, "User record get command failed"
   end
 
   local user_id = parsed.result and parsed.result.Id
+  local user_name = parsed.result and parsed.result.Name
 
   if not user_id then
-    return nil, "Could not find Id in user data"
+    return nil, nil, "Could not find Id in user data"
   end
 
-  return user_id, nil
+  return user_id, user_name, nil
 end
 
 --- Parse debug-level.json → array of debug level records.
@@ -103,8 +104,8 @@ function DebugUtils.parse_trace_flags(json_response)
 
   local result = parsed.result
 
-  if not result then
-    return nil, "No trace flag data found"
+  if result == nil or result == vim.NIL then
+    return {}, nil
   end
 
   -- Single record returned (sf data record get)
@@ -228,7 +229,7 @@ function DebugUtils.run_workflow(on_complete)
     -- Fetch trace flags for the UserId, then call on_complete
     local function fetch_trace_flags_and_finish()
       local trace_args =
-        Const.get_record_get_args("TraceFlag", "TracedEntityId='" .. workflow_data.user_id .. "'", target_org)
+        Const.get_tooling_record_get_args("TraceFlag", "TracedEntityId='" .. workflow_data.user_id .. "'", target_org)
 
       context = JobUtils.create_progress_context(
         Const.SF_CLI_MESSAGES.DEBUG_LEVEL_FETCHING_TRACES,
@@ -335,7 +336,7 @@ function DebugUtils.run_workflow(on_complete)
       local user_job = JobUtils.create_cli_job(executable_path, user_args, {
         on_success = function(job, _)
           local result = table.concat(job:result(), "\n")
-          local user_id, parse_err = DebugUtils.parse_user_data(result)
+          local user_id, user_name, parse_err = DebugUtils.parse_user_data(result)
 
           if not user_id then
             context.handle:report({ message = Const.SF_CLI_MESSAGES.DEBUG_LEVEL_WORKFLOW_FAILED, percentage = 100 })
@@ -350,6 +351,7 @@ function DebugUtils.run_workflow(on_complete)
           end
 
           workflow_data.user_id = user_id
+          workflow_data.user_name = user_name
           context.handle:finish()
 
           fetch_debug_levels_and_proceed()
