@@ -4,7 +4,7 @@
 local Config = require("sf.config")
 local Const = require("sf.const")
 local DebugUtils = require("sf.debug.utils")
-local Str = require("sf.const").SF_CLI_MESSAGES
+local Str = Const.SF_CLI_MESSAGES
 local DebugPicker = require("sf.debug.picker")
 local JobUtils = require("sf.core.job_utils")
 local Log = require("sf.core.log")
@@ -21,6 +21,11 @@ local function show_date_input(current_value, on_confirm)
     default = current_value,
   }, function(new_value)
     if new_value then
+      local iso, err = TraceUtils.parse_datetime_local(new_value)
+      if not iso then
+        vim.notify(err or "Invalid date format", vim.log.levels.WARN)
+        return
+      end
       on_confirm(new_value)
     end
   end)
@@ -128,7 +133,7 @@ local function delete_conflicting_and_retry(
 
         retry_job:start()
       else
-        local derr_msg = "Failed to delete conflicting trace flag"
+        local derr_msg = Str.TRACE_DELETE_CONFLICT_FAILED
 
         if dparsed and dparsed.data and dparsed.data.message then
           derr_msg = dparsed.data.message
@@ -144,7 +149,7 @@ local function delete_conflicting_and_retry(
       local dstderr_str = table.concat(djob:stderr_result(), "\n")
 
       Log.deb("Delete conflicting trace flag error", { return_val = return_val, stderr = dstderr_str })
-      JobUtils.handle_cli_error(return_val, context, "Failed to delete conflicting trace flag")
+      JobUtils.handle_cli_error(return_val, context, Str.TRACE_DELETE_CONFLICT_FAILED)
       sf_state.finish("debug")
     end,
   })
@@ -195,14 +200,16 @@ local function render_trace_buffer(buf, state)
     "  ────────────────────────────────────────────────────────────────"
   )
   table.insert(lines, "  Press <Enter> on a field to edit its value")
-  table.insert(lines, "  Press <C-s> or :w to save changes")
+  table.insert(lines, "  Press <C-s> to save changes")
   table.insert(lines, "  Press q to close this buffer")
 
   vim.bo[buf].modifiable = true
+  vim.bo[buf].readonly = false
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
   vim.b[buf].trace_state = state
   vim.b[buf].trace_line_map = line_map
   vim.bo[buf].modified = false
+  vim.bo[buf].readonly = true
   vim.bo[buf].modifiable = false
 end
 
@@ -241,7 +248,7 @@ local function save_trace_buffer(buf)
   local target_org = state.target_org
 
   if not target_org then
-    vim.notify(Str.DEBUG_LEVEL_NO_TARGET_ORG, vim.log.levels.ERROR)
+    vim.notify(Str.NO_DEFAULT_ORG, vim.log.levels.ERROR)
     return
   end
 
@@ -258,6 +265,10 @@ local function save_trace_buffer(buf)
   end
 
   local sf_state = require("sf.core.state")
+  if sf_state.is_busy("debug") then
+    vim.notify(Str.TRACE_SAVE_IN_PROGRESS, vim.log.levels.WARN)
+    return
+  end
   sf_state.start("debug")
 
   local context
@@ -451,20 +462,20 @@ local function open_trace_buffer(existing_tf, extra)
   end
 
   -- Set buffer name for display
-  local buf_name = existing_tf and ("trace-flag://" .. existing_tf.Id) or "trace-flag://new"
-  vim.api.nvim_buf_set_name(buf, buf_name)
+  local buf_name = existing_tf and ("trace-flag://" .. existing_tf.Id) or ("trace-flag://new-" .. os.time())
 
   -- Set buffer-local variables
   vim.b[buf].trace_state = state
   vim.b[buf].trace_line_map = {}
 
   -- Configure buffer
-  vim.bo[buf].buftype = "acwrite"
+  vim.bo[buf].buftype = "nofile"
   vim.bo[buf].bufhidden = "wipe"
   vim.bo[buf].filetype = "sftraceflag"
   vim.bo[buf].modifiable = false
 
   render_trace_buffer(buf, state)
+  vim.bo[buf].readonly = true
 
   -- Set up keymaps
   local function on_enter()
@@ -513,6 +524,10 @@ local function open_trace_buffer(existing_tf, extra)
         vim.b[buf].trace_state = current_state
 
         render_trace_buffer(buf, current_state)
+        local win = vim.fn.bufwinid(buf)
+        if win ~= -1 then
+          vim.api.nvim_set_current_win(win)
+        end
       end)
     end
   end
@@ -530,17 +545,8 @@ local function open_trace_buffer(existing_tf, extra)
   -- Map q to close
   vim.keymap.set("n", "q", ":bdelete<CR>", { buffer = buf, silent = true, desc = "Close trace flag buffer" })
 
-  -- Handle :w via BufWriteCmd
-  vim.api.nvim_create_autocmd("BufWriteCmd", {
-    group = vim.api.nvim_create_augroup("sf_trace_flag_" .. buf, { clear = true }),
-    buffer = buf,
-    callback = function()
-      pcall(save_trace_buffer, buf)
-    end,
-  })
-
   -- Open the buffer at 40% right vertical split
-  vim.api.nvim_command("vertical rightbelow sbuffer " .. buf)
+  vim.api.nvim_command("vertical rightbelow sbuffer " .. tostring(buf))
   vim.api.nvim_command("vertical resize " .. math.floor(vim.o.columns * 0.25))
   setup_syntax(buf)
 end
@@ -588,7 +594,7 @@ function Flag.delete_trace_flag()
 
     local TracePicker = require("sf.trace.picker")
 
-    TracePicker.create_trace_flag_picker(trace_flags, function(selected_tf)
+    TracePicker.create_trace_flag_picker(trace_flags, data.debug_levels, function(selected_tf)
       local record_id = selected_tf.Id
 
       if not record_id then
@@ -598,15 +604,16 @@ function Flag.delete_trace_flag()
 
       local config = Config:get_options()
       local cli_valid, executable_path, _ = JobUtils.validate_cli_installation(config.sf_cli_path)
-
       if not cli_valid or not executable_path then
         vim.notify(Const.SF_CLI_MESSAGES.NOT_FOUND, vim.log.levels.ERROR)
         return
       end
-
       local sf_state = require("sf.core.state")
+      if sf_state.is_busy("debug") then
+        vim.notify(Str.TRACE_DELETE_IN_PROGRESS, vim.log.levels.WARN)
+        return
+      end
       sf_state.start("debug")
-
       local context =
         JobUtils.create_progress_context(Str.TRACE_DELETE_TITLE, Str.TRACE_DELETE_SUCCESS, Str.TRACE_DELETE_FAILED)
 

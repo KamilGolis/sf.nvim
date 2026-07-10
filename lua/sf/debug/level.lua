@@ -78,13 +78,15 @@ local function render_buffer(buf, fields, is_edit)
     "  ────────────────────────────────────────────────────────────────"
   )
   table.insert(lines, "  Press <Enter> on a field to edit its value")
-  table.insert(lines, "  Press <C-s> or :w to save changes")
+  table.insert(lines, "  Press <C-s> to save changes")
   table.insert(lines, "  Press q to close this buffer")
 
   vim.bo[buf].modifiable = true
+  vim.bo[buf].readonly = false
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
   vim.b[buf].debug_level_line_map = line_map
   vim.bo[buf].modified = false
+  vim.bo[buf].readonly = true
   vim.bo[buf].modifiable = false
 end
 
@@ -130,6 +132,10 @@ local function save_buffer(buf)
   value_string = value_string .. " MasterLabel=" .. fields.DeveloperName
 
   local state = require("sf.core.state")
+  if state.is_busy("debug") then
+    vim.notify(Const.SF_CLI_MESSAGES.DEBUG_LEVEL_SAVE_IN_PROGRESS, vim.log.levels.WARN)
+    return
+  end
   state.start("debug")
 
   local context = JobUtils.create_progress_context(
@@ -141,9 +147,9 @@ local function save_buffer(buf)
   local args
 
   if mode == "new" then
-    args = Const.get_record_create_args(target_org, value_string, api_version)
+    args = Const.get_record_create_args(target_org, "DebugLevel", value_string, api_version)
   else
-    args = Const.get_record_update_args(target_org, value_string, record_id, api_version)
+    args = Const.get_record_update_args(target_org, "DebugLevel", value_string, record_id, api_version)
   end
 
   local job = JobUtils.create_cli_job(executable_path, args, {
@@ -247,7 +253,7 @@ local function open_level_buffer(existing_dl, extra)
   end
 
   -- Set buffer name for display
-  vim.api.nvim_buf_set_name(buf, "debug-level://" .. name)
+  vim.api.nvim_buf_set_name(buf, "debug-level://" .. (is_edit and name or "new-" .. os.time()))
 
   -- Set buffer-local variables
   vim.b[buf].debug_level_fields = fields
@@ -258,13 +264,14 @@ local function open_level_buffer(existing_dl, extra)
   vim.b[buf].debug_level_api_version = extra and extra.api_version or nil
 
   -- Configure buffer
-  vim.bo[buf].buftype = "acwrite"
+  vim.bo[buf].buftype = "nofile"
   vim.bo[buf].bufhidden = "wipe"
   vim.bo[buf].filetype = "sfdebuglevel"
   vim.bo[buf].modifiable = false
 
   -- Render content
   render_buffer(buf, fields, is_edit)
+  vim.bo[buf].readonly = true
 
   -- Set up keymaps
   local function on_enter()
@@ -301,6 +308,10 @@ local function open_level_buffer(existing_dl, extra)
         current_fields[field_def.name] = new_value
         vim.b[buf].debug_level_fields = current_fields
         render_buffer(buf, current_fields, is_edit)
+        local win = vim.fn.bufwinid(buf)
+        if win ~= -1 then
+          vim.api.nvim_set_current_win(win)
+        end
       end)
     end
   end
@@ -318,17 +329,8 @@ local function open_level_buffer(existing_dl, extra)
   -- Map q to close
   vim.keymap.set("n", "q", ":bdelete<CR>", { buffer = buf, silent = true, desc = "Close debug level buffer" })
 
-  -- Handle :w via BufWriteCmd
-  vim.api.nvim_create_autocmd("BufWriteCmd", {
-    group = vim.api.nvim_create_augroup("sf_debug_level_" .. buf, { clear = true }),
-    buffer = buf,
-    callback = function()
-      pcall(save_buffer, buf)
-    end,
-  })
-
   -- Open the buffer at 40% right vertical split
-  vim.api.nvim_command("vertical rightbelow sbuffer " .. buf)
+  vim.api.nvim_command("vertical rightbelow sbuffer " .. tostring(buf))
   vim.api.nvim_command("vertical resize " .. math.floor(vim.o.columns * 0.25))
   setup_syntax(buf)
 end
@@ -385,20 +387,21 @@ function Level.delete_level()
 
       if not cli_valid or not executable_path then
         vim.notify(Const.SF_CLI_MESSAGES.NOT_FOUND, vim.log.levels.ERROR)
-
         return
       end
-
       local state = require("sf.core.state")
+      if state.is_busy("debug") then
+        vim.notify(Const.SF_CLI_MESSAGES.DEBUG_LEVEL_DELETE_IN_PROGRESS, vim.log.levels.WARN)
+        return
+      end
       state.start("debug")
-
       local context = JobUtils.create_progress_context(
         Const.SF_CLI_MESSAGES.DEBUG_LEVEL_DELETE_TITLE,
         Const.SF_CLI_MESSAGES.DEBUG_LEVEL_DELETE_SUCCESS,
         Const.SF_CLI_MESSAGES.DEBUG_LEVEL_DELETE_FAILED
       )
 
-      local args = Const.get_record_delete_args(target_org, record_id, config.api_version)
+      local args = Const.get_record_delete_args(target_org, "DebugLevel", record_id, config.api_version)
       local job = JobUtils.create_cli_job(executable_path, args, {
         on_success = function(job, _)
           local result = table.concat(job:result(), "\n")

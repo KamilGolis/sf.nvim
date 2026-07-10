@@ -27,7 +27,12 @@ describe("trace-flags", function()
     local TraceUtils
 
     before_each(function()
+      vim.env.TZ = "UTC"
       TraceUtils = require("sf.trace.utils")
+    end)
+
+    after_each(function()
+      vim.env.TZ = nil
     end)
 
     it("converts ISO string to local display format", function()
@@ -82,27 +87,27 @@ describe("trace-flags", function()
 
     it("extracts 8 picklist fields plus LogType", function()
       local dl = {
-        ApexCode = "Debug",
-        ApexProfiling = "Info",
-        Callout = "Info",
-        Database = "Fine",
-        System = "Debug",
-        Validation = "Info",
-        Visualforce = "Fine",
-        Workflow = "Info",
+        ApexCode = "DEBUG",
+        ApexProfiling = "INFO",
+        Callout = "INFO",
+        Database = "FINE",
+        System = "DEBUG",
+        Validation = "INFO",
+        Visualforce = "FINE",
+        Workflow = "INFO",
       }
 
       local fields = TraceUtils.required_trace_fields_from_debug_level(dl)
 
       eq("USER_DEBUG", fields.LogType)
-      eq("Debug", fields.ApexCode)
-      eq("Info", fields.ApexProfiling)
-      eq("Info", fields.Callout)
-      eq("Fine", fields.Database)
-      eq("Debug", fields.System)
-      eq("Info", fields.Validation)
-      eq("Fine", fields.Visualforce)
-      eq("Info", fields.Workflow)
+      eq("DEBUG", fields.ApexCode)
+      eq("INFO", fields.ApexProfiling)
+      eq("INFO", fields.Callout)
+      eq("FINE", fields.Database)
+      eq("DEBUG", fields.System)
+      eq("INFO", fields.Validation)
+      eq("FINE", fields.Visualforce)
+      eq("INFO", fields.Workflow)
     end)
 
     it("defaults missing fields to NONE", function()
@@ -127,14 +132,14 @@ describe("trace-flags", function()
       local dl = { Id = "7dl000000000001" }
       local fields = {
         LogType = "USER_DEBUG",
-        ApexCode = "Debug",
-        ApexProfiling = "Info",
-        Callout = "Info",
-        Database = "Fine",
-        System = "Debug",
-        Validation = "Info",
-        Visualforce = "Fine",
-        Workflow = "Info",
+        ApexCode = "DEBUG",
+        ApexProfiling = "INFO",
+        Callout = "INFO",
+        Database = "FINE",
+        System = "DEBUG",
+        Validation = "INFO",
+        Visualforce = "FINE",
+        Workflow = "INFO",
       }
 
       local result = TraceUtils.build_trace_value_string(
@@ -150,8 +155,8 @@ describe("trace-flags", function()
       expect.match(result, "ExpirationDate=2026%-01%-01")
       expect.match(result, "LogType=USER_DEBUG")
       expect.match(result, "TracedEntityId=005000000000001")
-      expect.match(result, "ApexCode=Debug")
-      expect.match(result, "Workflow=Info")
+      expect.match(result, "ApexCode=DEBUG")
+      expect.match(result, "Workflow=INFO")
     end)
   end)
 

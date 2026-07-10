@@ -99,26 +99,26 @@ describe("debug-levels", function()
     end)
 
     it("get_record_create_args builds DebugLevel record create", function()
-      local args = Const.get_record_create_args("test@example.com", "ApexCode=Fine DeveloperName=Test", "65.0")
+      local args = Const.get_record_create_args("test@example.com", "DebugLevel", "ApexCode=FINE DeveloperName=Test", "65.0")
       local s = table.concat(args, " ")
 
       expect.match(s, "data create record")
       expect.match(s, "%-s DebugLevel")
       expect.match(s, "%-t")
-      expect.match(s, "%-v ApexCode=Fine DeveloperName=Test")
+      expect.match(s, "%-v ApexCode=FINE DeveloperName=Test")
       expect.match(s, "%-o test@example%.com")
       expect.match(s, "%-%-api%-version 65%.0")
       expect.match(s, "%-%-json")
     end)
 
     it("get_record_update_args includes record id", function()
-      local args = Const.get_record_update_args("test@example.com", "ApexCode=Fine", "7dl00000001", "65.0")
+      local args = Const.get_record_update_args("test@example.com", "DebugLevel", "ApexCode=FINE", "7dl00000001", "65.0")
       local s = table.concat(args, " ")
 
       expect.match(s, "data update record")
       expect.match(s, "%-s DebugLevel")
       expect.match(s, "%-t")
-      expect.match(s, "%-v ApexCode=Fine")
+      expect.match(s, "%-v ApexCode=FINE")
       expect.match(s, "%-i 7dl00000001")
       expect.match(s, "%-o test@example%.com")
       expect.match(s, "%-%-api%-version 65%.0")
@@ -126,7 +126,7 @@ describe("debug-levels", function()
     end)
 
     it("get_record_delete_args builds delete command", function()
-      local args = Const.get_record_delete_args("test@example.com", "7dl00000001", "65.0")
+      local args = Const.get_record_delete_args("test@example.com", "DebugLevel", "7dl00000001", "65.0")
       local s = table.concat(args, " ")
 
       expect.match(s, "data delete record")
@@ -256,8 +256,8 @@ describe("debug-levels", function()
 
       local value_string = DebugUtils.fields_to_value_string(fields)
       expect.match(value_string, "DeveloperName=Test_Debug")
-      expect.match(value_string, "ApexCode=Debug")
-      expect.match(value_string, "ApexProfiling=Info")
+      expect.match(value_string, "ApexCode=DEBUG")
+      expect.match(value_string, "ApexProfiling=INFO")
       expect.no_match(value_string, "MasterLabel=")
     end)
 
@@ -272,7 +272,7 @@ describe("debug-levels", function()
       local parts = vim.split(value_string, " ")
       eq(12, #parts)
       eq("DeveloperName=MyLevel", parts[1])
-      eq("Workflow=Info", parts[#parts])
+      eq("Workflow=INFO", parts[#parts])
     end)
   end)
 
@@ -325,7 +325,7 @@ describe("debug-levels", function()
     end)
 
     it("writes JSON to debug_levels_dir/<DeveloperName>.json", function()
-      local fields = { DeveloperName = "Test_Level", ApexCode = "Fine", MasterLabel = "Test_Level" }
+      local fields = { DeveloperName = "Test_Level", ApexCode = "FINE", MasterLabel = "Test_Level" }
       DebugUtils.save_debug_level_json(fields)
 
       local dir = Config:get_options().debug_levels_dir
@@ -337,7 +337,7 @@ describe("debug-levels", function()
         local data = table.concat(content, "")
         local decoded = vim.json.decode(data)
         eq("Test_Level", decoded.DeveloperName)
-        eq("Fine", decoded.ApexCode)
+        eq("FINE", decoded.ApexCode)
       end
     end)
   end)

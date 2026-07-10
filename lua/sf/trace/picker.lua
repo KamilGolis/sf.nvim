@@ -8,15 +8,25 @@ local Picker = {}
 
 --- Show a Snacks picker for selecting a TraceFlag with details preview.
 --- @param trace_flags table Array of TraceFlag records from the workflow
+--- @param debug_levels table Array of DebugLevel records for name lookup
 --- @param on_select fun(tf: table) Called with the selected full TraceFlag record
-function Picker.create_trace_flag_picker(trace_flags, on_select)
+function Picker.create_trace_flag_picker(trace_flags, debug_levels, on_select)
   local Snacks = require("snacks")
+
+  -- Build debug level lookup by Id for display name resolution
+  local dl_by_id = {}
+  if debug_levels then
+    for _, dl in ipairs(debug_levels) do
+      dl_by_id[dl.Id] = dl.DeveloperName
+    end
+  end
 
   local items = {}
   for _, tf in ipairs(trace_flags) do
     local start_str = TraceUtils.format_datetime_local(tf.StartDate)
     local exp_str = TraceUtils.format_datetime_local(tf.ExpirationDate)
-    local label = "TraceFlag: " .. (tf.DebugLevelId or "unknown")
+    local dl_name = dl_by_id[tf.DebugLevelId] or tf.DebugLevelId or "unknown"
+    local label = "TraceFlag: " .. dl_name
     local desc = start_str .. " → " .. exp_str
 
     table.insert(items, {
@@ -108,10 +118,13 @@ function Picker.create_trace_flag_picker(trace_flags, on_select)
         "Apex Code:       " .. sanitize_text(tf.ApexCode),
         "Apex Profiling:  " .. sanitize_text(tf.ApexProfiling),
         "Callout:         " .. sanitize_text(tf.Callout),
+        "Data Access:     " .. sanitize_text(tf.DataAccess),
         "Database:        " .. sanitize_text(tf.Database),
+        "NBA:             " .. sanitize_text(tf.Nba),
         "System:          " .. sanitize_text(tf.System),
         "Validation:      " .. sanitize_text(tf.Validation),
         "Visualforce:     " .. sanitize_text(tf.Visualforce),
+        "Wave:            " .. sanitize_text(tf.Wave),
         "Workflow:        " .. sanitize_text(tf.Workflow),
       }
 

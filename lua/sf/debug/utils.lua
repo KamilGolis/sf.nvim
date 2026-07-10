@@ -154,7 +154,13 @@ function DebugUtils.save_debug_level_json(fields)
   local dir = Config:get_options().debug_levels_dir
   vim.fn.mkdir(dir, "p")
 
-  local filepath = PathUtils.join(dir, fields.DeveloperName .. ".json")
+  local safe_name = fields.DeveloperName and fields.DeveloperName:gsub("[^%w_-]", "_") or ""
+  if safe_name == "" then
+    Log.deb("Empty DeveloperName, cannot save JSON")
+    return
+  end
+
+  local filepath = PathUtils.join(dir, safe_name .. ".json")
   local data = vim.json.encode(fields)
   local file, err = io.open(filepath, "w")
 
@@ -228,8 +234,12 @@ function DebugUtils.run_workflow(on_complete)
 
     -- Fetch trace flags for the UserId, then call on_complete
     local function fetch_trace_flags_and_finish()
-      local trace_args =
-        Const.get_tooling_record_get_args("TraceFlag", "TracedEntityId='" .. workflow_data.user_id .. "'", target_org)
+      local trace_args = Const.get_tooling_record_get_args(
+        "TraceFlag",
+        "TracedEntityId='" .. workflow_data.user_id .. "'",
+        target_org,
+        config.api_version
+      )
 
       context = JobUtils.create_progress_context(
         Const.SF_CLI_MESSAGES.DEBUG_LEVEL_FETCHING_TRACES,
@@ -261,6 +271,11 @@ function DebugUtils.run_workflow(on_complete)
           Log.deb("Trace flags fetch error", { return_val = return_val, stderr = stderr })
           workflow_data.trace_flags = {}
 
+          vim.notify(
+            "Failed to fetch trace flags: " .. (table.concat(stderr, "\n") or "unknown error"),
+            vim.log.levels.WARN
+          )
+
           context.handle:report({ message = Const.SF_CLI_MESSAGES.DEBUG_LEVEL_WORKFLOW_SUCCESS, percentage = 100 })
           context.handle:finish()
           state.finish("debug")
@@ -277,7 +292,7 @@ function DebugUtils.run_workflow(on_complete)
     local function fetch_debug_levels_and_proceed()
       local query =
         "SELECT Id,ApexCode,ApexProfiling,Callout,CreatedDate,DataAccess,Database,DeveloperName,Language,MasterLabel,Nba,System,Validation,Visualforce,Wave,Workflow FROM DebugLevel"
-      local debug_args = Const.get_query_args(query, target_org)
+      local debug_args = Const.get_query_args(query, target_org, config.api_version)
 
       context = JobUtils.create_progress_context(
         Const.SF_CLI_MESSAGES.DEBUG_LEVEL_FETCHING_LEVELS,
