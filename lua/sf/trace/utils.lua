@@ -10,13 +10,35 @@ function TraceUtils.format_datetime_local(iso)
   if not iso or iso == "" then
     return ""
   end
-
   local year, month, day, hour, min = string.match(iso, "(%d%d%d%d)-(%d%d)-(%d%d)T(%d%d):(%d%d)")
   if not year then
     return ""
   end
-
-  return string.format("%02d.%02d.%04d %02d:%02d", day, month, year, hour, min)
+  -- ISO components are UTC. Compute the epoch, then offset by the local timezone
+  -- difference for that specific date (handles DST correctly).
+  -- os.time interprets the table as local time and auto-detects DST based on date.
+  local local_epoch = os.time({
+    year = tonumber(year),
+    month = tonumber(month),
+    day = tonumber(day),
+    hour = tonumber(hour),
+    min = tonumber(min),
+    sec = 0,
+  })
+  -- Compute the local timezone offset at local_epoch
+  local l = os.date("*t", local_epoch)
+  local u = os.date("!*t", local_epoch)
+  local offset = (l.hour - u.hour) * 3600 + (l.min - u.min) * 60 + (l.sec - u.sec)
+  if offset > 43200 then
+    offset = offset - 86400
+  elseif offset < -43200 then
+    offset = offset + 86400
+  end
+  -- Adjust: local_epoch is epoch for H:M local. We want epoch for H:M UTC.
+  -- If offset = +7200 (CEST), then H:M local corresponds to (H-2):M UTC.
+  -- To get epoch for H:M UTC, add offset.
+  local utc_epoch = local_epoch + offset
+  return os.date("%d.%m.%Y %H:%M", utc_epoch)
 end
 
 --- Parse a local datetime string "dd.mm.yyyy HH:MM" to ISO format "YYYY-MM-DDTHH:MM:SS.000+0000".

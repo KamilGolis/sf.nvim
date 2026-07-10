@@ -160,6 +160,9 @@ local COMMANDS = {
       new = function()
         require("sf.trace.flag").new_trace_flag()
       end,
+      delete = function()
+        require("sf.trace.flag").delete_trace_flag()
+      end,
     },
   },
   retrieve = {

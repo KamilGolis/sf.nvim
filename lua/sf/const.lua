@@ -54,27 +54,27 @@ M.ICONS = {
 --- Debug level field definitions with valid values and defaults.
 --- Used by debug level new/edit commands for interactive editing.
 M.DEBUG_LEVEL_FIELDS = {
-  { name = "DeveloperName", label = "Log Level Name", values = nil, default = "Debug_Default", readonly_edit = true },
+  { name = "DeveloperName", label = "Log Level Name", values = nil, default = "Default", readonly_edit = true },
   {
     name = "ApexCode",
     label = "Apex Code",
-    values = { "None", "Error", "Warn", "Info", "Debug", "Fine", "Finer", "Finest" },
-    default = "Debug",
+    values = { "NONE", "ERROR", "WARN", "INFO", "DEBUG", "FINE", "FINER", "FINEST" },
+    default = "DEBUG",
   },
-  { name = "ApexProfiling", label = "Apex Profiling", values = { "None", "Info", "Fine", "Finest" }, default = "Info" },
-  { name = "Callout", label = "Callout", values = { "None", "Error", "Info", "Finer", "Finest" }, default = "Info" },
-  { name = "DataAccess", label = "Data Access", values = { "None" }, default = "None" },
-  { name = "Database", label = "Database", values = { "None", "Warn", "Info", "Fine", "Finest" }, default = "Info" },
-  { name = "Nba", label = "NBA", values = { "None", "Error", "Info", "Fine" }, default = "Info" },
-  { name = "System", label = "System", values = { "None", "Info", "Debug", "Fine" }, default = "Debug" },
-  { name = "Validation", label = "Validation", values = { "None", "Info" }, default = "Info" },
-  { name = "Visualforce", label = "Visualforce", values = { "None", "Info", "Fine", "Finer" }, default = "Info" },
-  { name = "Wave", label = "Wave", values = { "None", "Error", "Info", "Fine", "Finer", "Finest" }, default = "Info" },
+  { name = "ApexProfiling", label = "Apex Profiling", values = { "NONE", "INFO", "FINE", "FINEST" }, default = "INFO" },
+  { name = "Callout", label = "Callout", values = { "NONE", "ERROR", "INFO", "FINER", "FINEST" }, default = "INFO" },
+  { name = "DataAccess", label = "Data Access", values = { "NONE" }, default = "NONE" },
+  { name = "Database", label = "Database", values = { "NONE", "WARN", "INFO", "FINE", "FINEST" }, default = "INFO" },
+  { name = "Nba", label = "NBA", values = { "NONE", "ERROR", "INFO", "FINE" }, default = "INFO" },
+  { name = "System", label = "System", values = { "NONE", "INFO", "DEBUG", "FINE" }, default = "DEBUG" },
+  { name = "Validation", label = "Validation", values = { "NONE", "INFO" }, default = "INFO" },
+  { name = "Visualforce", label = "Visualforce", values = { "NONE", "INFO", "FINE", "FINER" }, default = "INFO" },
+  { name = "Wave", label = "Wave", values = { "NONE", "ERROR", "INFO", "FINE", "FINER", "FINEST" }, default = "INFO" },
   {
     name = "Workflow",
     label = "Workflow",
-    values = { "None", "Error", "Warn", "Info", "Fine", "Finer" },
-    default = "Info",
+    values = { "NONE", "ERROR", "WARN", "INFO", "FINE", "FINER" },
+    default = "INFO",
   },
 }
 
@@ -172,6 +172,16 @@ M.SF_CLI_MESSAGES = {
   TRACE_NOT_FOUND_ERROR = "Could not find selected trace flag.",
   TRACE_OVERLAP_DELETING = "Removing conflicting trace flag before creating new one.",
   TRACE_OVERLAP_RETRYING = "Retrying trace flag creation after deletion.",
+  TRACE_NO_STATE = "No trace state found",
+  TRACE_DELETE_TITLE = "Deleting trace flag.",
+  TRACE_DELETE_SUCCESS = "Trace flag deleted successfully.",
+  TRACE_DELETE_FAILED = "Failed to delete trace flag.",
+  TRACE_DELETE_CONFLICT_FAILED = "Failed to delete conflicting trace flag",
+  DEBUG_LEVEL_SAVE_FAILED = "Failed to save debug level",
+  TRACE_SAVE_IN_PROGRESS = "Trace flag save already in progress",
+  TRACE_DELETE_IN_PROGRESS = "Trace flag delete already in progress",
+  DEBUG_LEVEL_SAVE_IN_PROGRESS = "Debug level save already in progress",
+  DEBUG_LEVEL_DELETE_IN_PROGRESS = "Debug level delete already in progress",
 }
 
 --- SF code actions configuration
@@ -360,6 +370,7 @@ M.SF_CLI = {
         TARGET_ORG = "-o",
         JSON = "--json",
         TOOLING = "-t",
+        API_VERSION = "--api-version",
       },
     },
     QUERY = {
@@ -369,6 +380,7 @@ M.SF_CLI = {
         TARGET_ORG = "-o",
         TOOLING = "-t",
         JSON = "--json",
+        API_VERSION = "--api-version",
       },
     },
     RECORD_CREATE = {
@@ -874,14 +886,18 @@ end
 --- @param sobject string The SObject type (e.g. "TraceFlag")
 --- @param where string The WHERE clause
 --- @param target_org string The target org username
+--- @param api_version string|nil The Salesforce API version (optional)
 --- @return table Complete argument list
-function M.get_tooling_record_get_args(sobject, where, target_org)
+function M.get_tooling_record_get_args(sobject, where, target_org, api_version)
   local args = {}
   vim.list_extend(args, vim.split(M.SF_CLI.DATA.RECORD_GET.CMD, " "))
   vim.list_extend(args, { M.SF_CLI.DATA.RECORD_GET.ARGS.SOBJECT, sobject })
   vim.list_extend(args, { M.SF_CLI.DATA.RECORD_GET.ARGS.WHERE, where })
   vim.list_extend(args, { M.SF_CLI.DATA.RECORD_GET.ARGS.TOOLING })
   vim.list_extend(args, { M.SF_CLI.DATA.RECORD_GET.ARGS.TARGET_ORG, target_org })
+  if api_version then
+    vim.list_extend(args, { M.SF_CLI.DATA.RECORD_GET.ARGS.API_VERSION, api_version })
+  end
   vim.list_extend(args, { M.SF_CLI.DATA.RECORD_GET.ARGS.JSON })
   return args
 end
@@ -889,27 +905,32 @@ end
 --- Constructs arguments for SF CLI data query command
 --- @param query string The SOQL query
 --- @param target_org string The target org username
+--- @param api_version string|nil The Salesforce API version (optional)
 --- @return table Complete argument list for sf data query command with tooling API
-function M.get_query_args(query, target_org)
+function M.get_query_args(query, target_org, api_version)
   local args = {}
   vim.list_extend(args, vim.split(M.SF_CLI.DATA.QUERY.CMD, " "))
   vim.list_extend(args, { M.SF_CLI.DATA.QUERY.ARGS.QUERY, query })
   vim.list_extend(args, { M.SF_CLI.DATA.QUERY.ARGS.TARGET_ORG, target_org })
   vim.list_extend(args, { M.SF_CLI.DATA.QUERY.ARGS.TOOLING })
+  if api_version then
+    vim.list_extend(args, { M.SF_CLI.DATA.QUERY.ARGS.API_VERSION, api_version })
+  end
   vim.list_extend(args, { M.SF_CLI.DATA.QUERY.ARGS.JSON })
   return args
 end
 
---- Constructs arguments for SF CLI data create record command for DebugLevel
+--- Constructs arguments for SF CLI data create record command
 --- @param target_org string The target org username
+--- @param sobject string The SObject name (e.g. "DebugLevel")
 --- @param values string The field=value pairs (e.g. "ApexCode=Fine DeveloperName=Test")
 --- @param api_version string The Salesforce API version (e.g. "65.0")
 --- @return table Complete argument list for sf data create record command
-function M.get_record_create_args(target_org, values, api_version)
+function M.get_record_create_args(target_org, sobject, values, api_version)
   local args = {}
   vim.list_extend(args, vim.split(M.SF_CLI.DATA.RECORD_CREATE.CMD, " "))
   vim.list_extend(args, { M.SF_CLI.DATA.RECORD_CREATE.ARGS.TARGET_ORG, target_org })
-  vim.list_extend(args, { M.SF_CLI.DATA.RECORD_CREATE.ARGS.SOBJECT, "DebugLevel" })
+  vim.list_extend(args, { M.SF_CLI.DATA.RECORD_CREATE.ARGS.SOBJECT, sobject })
   vim.list_extend(args, { M.SF_CLI.DATA.RECORD_CREATE.ARGS.TOOLING })
   vim.list_extend(args, { M.SF_CLI.DATA.RECORD_CREATE.ARGS.VALUES, values })
   vim.list_extend(args, { M.SF_CLI.DATA.RECORD_CREATE.ARGS.API_VERSION, api_version })
@@ -917,17 +938,18 @@ function M.get_record_create_args(target_org, values, api_version)
   return args
 end
 
---- Constructs arguments for SF CLI data update record command for DebugLevel
+--- Constructs arguments for SF CLI data update record command
 --- @param target_org string The target org username
+--- @param sobject string The SObject name (e.g. "DebugLevel")
 --- @param values string The field=value pairs
 --- @param record_id string The record ID to update
 --- @param api_version string The Salesforce API version (e.g. "65.0")
 --- @return table Complete argument list for sf data update record command
-function M.get_record_update_args(target_org, values, record_id, api_version)
+function M.get_record_update_args(target_org, sobject, values, record_id, api_version)
   local args = {}
   vim.list_extend(args, vim.split(M.SF_CLI.DATA.RECORD_UPDATE.CMD, " "))
   vim.list_extend(args, { M.SF_CLI.DATA.RECORD_UPDATE.ARGS.TARGET_ORG, target_org })
-  vim.list_extend(args, { M.SF_CLI.DATA.RECORD_UPDATE.ARGS.SOBJECT, "DebugLevel" })
+  vim.list_extend(args, { M.SF_CLI.DATA.RECORD_UPDATE.ARGS.SOBJECT, sobject })
   vim.list_extend(args, { M.SF_CLI.DATA.RECORD_UPDATE.ARGS.TOOLING })
   vim.list_extend(args, { M.SF_CLI.DATA.RECORD_UPDATE.ARGS.VALUES, values })
   vim.list_extend(args, { M.SF_CLI.DATA.RECORD_UPDATE.ARGS.RECORD_ID, record_id })
@@ -936,16 +958,17 @@ function M.get_record_update_args(target_org, values, record_id, api_version)
   return args
 end
 
---- Constructs arguments for SF CLI data delete record command for DebugLevel
+--- Constructs arguments for SF CLI data delete record command
 --- @param target_org string The target org username
+--- @param sobject string The SObject name (e.g. "DebugLevel")
 --- @param record_id string The record ID to delete
 --- @param api_version string The Salesforce API version (e.g. "65.0")
 --- @return table Complete argument list for sf data delete record command
-function M.get_record_delete_args(target_org, record_id, api_version)
+function M.get_record_delete_args(target_org, sobject, record_id, api_version)
   local args = {}
   vim.list_extend(args, vim.split(M.SF_CLI.DATA.RECORD_DELETE.CMD, " "))
   vim.list_extend(args, { M.SF_CLI.DATA.RECORD_DELETE.ARGS.TARGET_ORG, target_org })
-  vim.list_extend(args, { M.SF_CLI.DATA.RECORD_DELETE.ARGS.SOBJECT, "DebugLevel" })
+  vim.list_extend(args, { M.SF_CLI.DATA.RECORD_DELETE.ARGS.SOBJECT, sobject })
   vim.list_extend(args, { M.SF_CLI.DATA.RECORD_DELETE.ARGS.TOOLING })
   vim.list_extend(args, { M.SF_CLI.DATA.RECORD_DELETE.ARGS.RECORD_ID, record_id })
   vim.list_extend(args, { M.SF_CLI.DATA.RECORD_DELETE.ARGS.API_VERSION, api_version })

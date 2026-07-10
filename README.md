@@ -81,22 +81,35 @@ require("sf").setup({
   -- Salesforce CLI executable path
   -- For Windows, use "sf.cmd"
   sf_cli_path = "sf",
-  
+
   -- API version for deployments
   api_version = "65.0",
-  
-  -- Cache directory for storing deployment/test results
+
+  -- Cache directory
   cache_path = "./.sf/sf.nvim",
-  
-  -- Schema and metadata retrieval
+
+  -- Deployment and test results
+  deploy_file = "deploy.json",
+  test_results_file = "test.json",
+  coverage_results_file = "coverage.json",
+
+  -- Debug logs
+  log_list_file = "log-list.json",
+  log_dir = "logs",
+
+  -- Delta deployments (requires sgd plugin)
+  delta_dir = "delta",
+
+  -- Metadata retrieval
+  retrieve_file = "retrieve.json",
   metadata_types_file = "metadata-types.json",
   metadatas_dir = "metadatas",
-  
-  -- Debug mode - enables logging to file
+
+  -- Debug level management
+  debug_levels_dir = "debug-levels",
+
+  -- Debug mode
   debug = false,
-  
-  -- Show debug output on screen (requires debug = true)
-  -- When false, only logs to file
   debug_inspect = false,
 })
 ```
@@ -116,6 +129,8 @@ require("sf").setup({
 | `delta_dir` | `string` | `"delta"` | Directory for delta package |
 | `metadata_types_file` | `string` | `"metadata-types.json"` | Filename for cached metadata types schema |
 | `metadatas_dir` | `string` | `"metadatas"` | Directory for retrieved metadata files |
+| `retrieve_file` | `string` | `"retrieve.json"` | Filename for retrieve results cache |
+| `debug_levels_dir` | `string` | `"debug-levels"` | Directory for debug level config files |
 | `debug` | `boolean` | `false` | Enable debug logging to file |
 | `debug_inspect` | `boolean` | `false` | Show debug output on screen |
 
@@ -216,7 +231,8 @@ All commands are available under the `:Sf` command with subcommands:
 ### Debug Trace Flags
 
 ```vim
-:Sf debug trace new   " Create a new trace flag with interactive editor
+:Sf debug trace new     " Create a new trace flag with interactive editor
+:Sf debug trace delete  " Delete a trace flag
 ```
 
 
