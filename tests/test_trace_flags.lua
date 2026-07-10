@@ -219,4 +219,45 @@ describe("trace-flags", function()
       expect.no_equality(err, nil)
     end)
   end)
+
+  describe("Const tooling arg builders", function()
+    local Const
+
+    before_each(function()
+      Const = require("sf.const")
+    end)
+
+    it("get_tooling_record_delete_args builds delete for TraceFlag", function()
+      local args = Const.get_tooling_record_delete_args("test@example.com", "TraceFlag", "7tf00001", "65.0")
+      local s = table.concat(args, " ")
+
+      expect.match(s, "data delete record")
+      expect.match(s, "%-s TraceFlag")
+      expect.match(s, "%-t")
+      expect.match(s, "%-i 7tf00001")
+      expect.match(s, "%-%-json")
+    end)
+
+    it("get_tooling_record_get_args includes -t flag", function()
+      local args = Const.get_tooling_record_get_args("TraceFlag", "TracedEntityId='005'", "test@example.com")
+      local s = table.concat(args, " ")
+
+      expect.match(s, "data record get")
+      expect.match(s, "%-s TraceFlag")
+      expect.match(s, "%-t")
+      expect.match(s, "%-w TracedEntityId='005'")
+      expect.match(s, "%-%-json")
+    end)
+
+    it("get_tooling_record_create_args builds create for TraceFlag", function()
+      local args = Const.get_tooling_record_create_args("test@example.com", "TraceFlag", "ApexCode=Debug", "65.0")
+      local s = table.concat(args, " ")
+
+      expect.match(s, "data create record")
+      expect.match(s, "%-s TraceFlag")
+      expect.match(s, "%-t")
+      expect.match(s, "%-v ApexCode=Debug")
+      expect.match(s, "%-%-json")
+    end)
+  end)
 end)

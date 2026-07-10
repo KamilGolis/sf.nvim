@@ -163,7 +163,7 @@ local function save_buffer(buf)
       else
         Log.deb("save_buffer on_success non-zero status", parsed)
 
-        local err_msg = "Failed to save debug level"
+        local err_msg = Const.SF_CLI_MESSAGES.DEBUG_LEVEL_SAVE_FAILED
 
         if parsed and parsed.message then
           err_msg = parsed.message

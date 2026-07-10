@@ -572,4 +572,94 @@ function Flag.new_trace_flag()
   end)
 end
 
+--- Sf debug trace delete — runs workflow, shows picker, deletes selected trace flag.
+function Flag.delete_trace_flag()
+  DebugUtils.run_workflow(function(success, data)
+    if not success or not data then
+      return
+    end
+
+    local trace_flags = data.trace_flags
+
+    if not trace_flags or #trace_flags == 0 then
+      vim.notify(Str.TRACE_NO_TRACE_FLAGS, vim.log.levels.INFO)
+      return
+    end
+
+    local TracePicker = require("sf.trace.picker")
+
+    TracePicker.create_trace_flag_picker(trace_flags, function(selected_tf)
+      local record_id = selected_tf.Id
+
+      if not record_id then
+        vim.notify(Str.TRACE_NOT_FOUND_ERROR, vim.log.levels.ERROR)
+        return
+      end
+
+      local config = Config:get_options()
+      local cli_valid, executable_path, _ = JobUtils.validate_cli_installation(config.sf_cli_path)
+
+      if not cli_valid or not executable_path then
+        vim.notify(Const.SF_CLI_MESSAGES.NOT_FOUND, vim.log.levels.ERROR)
+        return
+      end
+
+      local sf_state = require("sf.core.state")
+      sf_state.start("debug")
+
+      local context =
+        JobUtils.create_progress_context(Str.TRACE_DELETE_TITLE, Str.TRACE_DELETE_SUCCESS, Str.TRACE_DELETE_FAILED)
+
+      local target_org = data.username
+      local args = Const.get_tooling_record_delete_args(target_org, "TraceFlag", record_id, config.api_version)
+
+      local job = JobUtils.create_cli_job(executable_path, args, {
+        on_success = function(job, _)
+          local result = table.concat(job:result(), "\n")
+          local ok, parsed, _ = JobUtils.validate_json_response(result)
+
+          if ok and parsed and parsed.status == 0 then
+            context.handle:report({ message = Str.TRACE_DELETE_SUCCESS, percentage = 100 })
+            context.handle:finish()
+            sf_state.finish("debug")
+            vim.notify(Str.TRACE_DELETE_SUCCESS, vim.log.levels.INFO)
+          else
+            local err_msg = Str.TRACE_DELETE_FAILED
+
+            if parsed and parsed.data and parsed.data.message then
+              err_msg = parsed.data.message
+            elseif parsed and parsed.message then
+              err_msg = parsed.message
+            end
+
+            JobUtils.handle_cli_error(1, context, err_msg)
+            sf_state.finish("debug")
+          end
+        end,
+        on_error = function(job, return_val)
+          local stdout_str = table.concat(job:result(), "\n")
+          local err_msg = Str.TRACE_DELETE_FAILED
+
+          if stdout_str ~= "" then
+            local ok, parsed, _ = JobUtils.validate_json_response(stdout_str)
+
+            if ok and parsed then
+              if parsed.data and parsed.data.message then
+                err_msg = parsed.data.message
+              elseif parsed.message then
+                err_msg = parsed.message
+              end
+            end
+          end
+
+          JobUtils.handle_cli_error(return_val, context, err_msg)
+          sf_state.finish("debug")
+        end,
+      })
+
+      job:start()
+    end)
+  end)
+end
+
 return Flag

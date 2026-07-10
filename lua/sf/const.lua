@@ -172,6 +172,12 @@ M.SF_CLI_MESSAGES = {
   TRACE_NOT_FOUND_ERROR = "Could not find selected trace flag.",
   TRACE_OVERLAP_DELETING = "Removing conflicting trace flag before creating new one.",
   TRACE_OVERLAP_RETRYING = "Retrying trace flag creation after deletion.",
+  TRACE_NO_STATE = "No trace state found",
+  TRACE_DELETE_TITLE = "Deleting trace flag.",
+  TRACE_DELETE_SUCCESS = "Trace flag deleted successfully.",
+  TRACE_DELETE_FAILED = "Failed to delete trace flag.",
+  TRACE_DELETE_CONFLICT_FAILED = "Failed to delete conflicting trace flag",
+  DEBUG_LEVEL_SAVE_FAILED = "Failed to save debug level",
 }
 
 --- SF code actions configuration
