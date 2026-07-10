@@ -23,7 +23,6 @@ function Cleanup.cleanup_logs()
       return
     end
 
-    -- Delete log files from logs directory
     local deleted_count = 0
     local log_pattern = PathUtils.join(log_dir, "*.log")
     local log_files = vim.fn.glob(log_pattern, false, true)
@@ -35,7 +34,17 @@ function Cleanup.cleanup_logs()
       end
     end
 
-    -- Delete log-list.json
+    local anon_pattern = PathUtils.join(log_dir, "anonymous", "*.log")
+    local anon_files = vim.fn.glob(anon_pattern, false, true)
+
+    for _, f in ipairs(anon_files) do
+      local ok = pcall(vim.fn.delete, f)
+
+      if ok then
+        deleted_count = deleted_count + 1
+      end
+    end
+
     local list_deleted = false
     if vim.fn.filereadable(log_list_file) == 1 then
       list_deleted = pcall(vim.fn.delete, log_list_file)

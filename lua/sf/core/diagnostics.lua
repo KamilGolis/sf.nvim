@@ -97,7 +97,7 @@ function Diagnostics:set_diagnostics(source)
     end
   end
 
-  vim.cmd("Trouble diagnostics")
+  pcall(vim.cmd, "Trouble diagnostics")
 end
 
 --- Create and return a singleton Diagnostics instance

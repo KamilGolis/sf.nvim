@@ -182,6 +182,17 @@ M.SF_CLI_MESSAGES = {
   TRACE_DELETE_IN_PROGRESS = "Trace flag delete already in progress",
   DEBUG_LEVEL_SAVE_IN_PROGRESS = "Debug level save already in progress",
   DEBUG_LEVEL_DELETE_IN_PROGRESS = "Debug level delete already in progress",
+  -- Anonymous Apex execute messages
+  APEX_EXECUTE_TITLE = "Executing Anonymous Apex.",
+  APEX_EXECUTE_SUCCESS = "Anonymous Apex executed successfully.",
+  APEX_EXECUTE_FAILED = "Failed to execute Anonymous Apex.",
+  APEX_EXECUTE_COMPILE_ERROR = "Compilation failed.",
+  APEX_EXECUTE_RUNTIME_ERROR = "Runtime exception.",
+  APEX_EXECUTE_NEW_FAILED = "Failed to create scripts directory.",
+  APEX_EXECUTE_CLEANUP_TITLE = "Cleaning up apex temp files.",
+  APEX_EXECUTE_CLEANUP_SUCCESS = "Temp files cleaned up.",
+  APEX_LIST_NO_SCRIPTS = "No Apex scripts found in scripts directory.",
+  APEX_LIST_DIR_MISSING = "Scripts directory does not exist.",
 }
 
 --- SF code actions configuration
@@ -351,6 +362,15 @@ M.SF_CLI = {
       ANALYZE = {
         INDENT_UNIT = "  ",
         BUF_FILETYPE = "sflog",
+      },
+    },
+    ANONYMOUS = {
+      CMD = "apex run",
+      ARGS = {
+        FILE = "--file",
+        TARGET_ORG = "--target-org",
+        API_VERSION = "--api-version",
+        JSON = "--json",
       },
     },
   },
@@ -1029,6 +1049,28 @@ function M.get_tooling_record_delete_args(target_org, sobject, record_id, api_ve
   vim.list_extend(args, { M.SF_CLI.DATA.RECORD_DELETE.ARGS.RECORD_ID, record_id })
   vim.list_extend(args, { M.SF_CLI.DATA.RECORD_DELETE.ARGS.API_VERSION, api_version })
   vim.list_extend(args, { M.SF_CLI.DATA.RECORD_DELETE.ARGS.JSON })
+  return args
+end
+
+--- Constructs arguments for SF CLI Anonymous Apex execution
+--- @param file_path string The path to the apex script file
+--- @param api_version string The Salesforce API version to use
+--- @param target_org string|nil Optional target org username (uses default if nil)
+--- @return table Complete argument list for sf apex run command
+--- @usage local args = Const.get_apex_run_args("/tmp/run.apex", "65.0")
+function M.get_apex_run_args(file_path, api_version, target_org)
+  local args = {}
+  vim.list_extend(args, split_cmd(M.SF_CLI.APEX.ANONYMOUS.CMD))
+  vim.list_extend(args, {
+    M.SF_CLI.APEX.ANONYMOUS.ARGS.FILE,
+    file_path,
+    M.SF_CLI.APEX.ANONYMOUS.ARGS.API_VERSION,
+    api_version,
+    M.SF_CLI.APEX.ANONYMOUS.ARGS.JSON,
+  })
+  if target_org then
+    vim.list_extend(args, { M.SF_CLI.APEX.ANONYMOUS.ARGS.TARGET_ORG, target_org })
+  end
   return args
 end
 

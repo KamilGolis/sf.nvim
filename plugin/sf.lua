@@ -8,6 +8,7 @@ if not Utils.has_sfdx_project() then
 end
 
 local Analyze = require("sf.log.analyze")
+local ApexExecute = require("sf.apex.execute")
 local Cleanup = require("sf.log.cleanup")
 local Config = require("sf.config")
 local Connector = require("sf.org.connect")
@@ -141,6 +142,22 @@ local COMMANDS = {
     analysis = {
       basic = function()
         Analyze.basic()
+      end,
+    },
+  },
+  apex = {
+    execute = {
+      file = function()
+        ApexExecute:execute_file()
+      end,
+      new = function()
+        ApexExecute:execute_new()
+      end,
+      cleanup = function()
+        ApexExecute:execute_cleanup()
+      end,
+      list = function()
+        ApexExecute:execute_list()
       end,
     },
   },
