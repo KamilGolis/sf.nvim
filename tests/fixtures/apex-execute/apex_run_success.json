@@ -1,0 +1,1 @@
+{"status":0,"result":{"success":true,"compiled":true,"compileProblem":"","exceptionMessage":"","exceptionStackTrace":"","line":-1,"column":-1,"logs":"65.0 APEX_CODE,DEBUG\nExecute Anonymous: System.debug('Hi');\n14:02:56.42|USER_DEBUG|[1]|DEBUG|Hi\n"},"warnings":[]}

@@ -1,0 +1,1 @@
+{"name":"executeCompileFailure","message":"Compilation failed at Line 1 column 20","exitCode":1,"context":"Run","data":{"success":false,"compiled":false,"compileProblem":"Extra '<EOF>', at ';'.","exceptionMessage":"","exceptionStackTrace":"","line":"1","column":"20","logs":""},"warnings":[],"status":1,"commandName":"Run"}

@@ -186,6 +186,7 @@ describe("org-connect", function()
     local Connect
 
     before_each(function()
+      vim.g.sf_cli_checked = nil
       Connect = require("sf.org.connect")
     end)
     it("calls callback when CLI is installed and version parses", function()

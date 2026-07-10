@@ -20,6 +20,7 @@ As a Salesforce developer, I’ve mostly used VS Code and WebStorm with Illumina
 - 📊 **Code Coverage** - Visual coverage indicators with detailed statistics
 - 🔌 **Org Management** - Easy switching between Salesforce orgs
 - 📝 **Debug Logs** - List, fetch, and analyze debug logs with rich per-token highlighting and tree view
+:- 📝 **Anonymous Apex** - Execute anonymous Apex scripts from files with log saving and error diagnostics
 - 🔧 **Debug Level Management** - Create, edit, and delete debug levels with an interactive buffer and syntax highlighting
 - 🏷️ **Trace Flag Management** - Create new trace flags with interactive buffer, debug level picker with preview, and auto-conflict resolution
 - 📦 **Schema Management** - Refresh org metadata type index and retrieve type details
@@ -108,6 +109,11 @@ require("sf").setup({
   -- Debug level management
   debug_levels_dir = "debug-levels",
 
+  -- Anonymous Apex
+  apex_temp_dir = "apex",
+  scripts_dir = "scripts",
+  anonymous_log_dir = "anonymous",
+
   -- Debug mode
   debug = false,
   debug_inspect = false,
@@ -131,6 +137,9 @@ require("sf").setup({
 | `metadatas_dir` | `string` | `"metadatas"` | Directory for retrieved metadata files |
 | `retrieve_file` | `string` | `"retrieve.json"` | Filename for retrieve results cache |
 | `debug_levels_dir` | `string` | `"debug-levels"` | Directory for debug level config files |
+| `apex_temp_dir` | `string` | `"apex"` | Directory for temp .apex files under cache_path |
+| `scripts_dir` | `string` | `"scripts"` | Directory for persistent Apex scripts under project root |
+| `anonymous_log_dir` | `string` | `"anonymous"` | Subdirectory under log_dir for anonymous Apex logs |
 | `debug` | `boolean` | `false` | Enable debug logging to file |
 | `debug_inspect` | `boolean` | `false` | Show debug output on screen |
 
@@ -220,6 +229,15 @@ All commands are available under the `:Sf` command with subcommands:
 :Sf log cleanup          " Delete cached log files and logList.json
 ```
 
+### Anonymous Apex
+
+```vim
+:Sf apex execute file     " Execute Apex from current buffer
+:Sf apex execute new      " Create new blank Apex script in scripts/
+:Sf apex execute list     " Browse and execute scripts from scripts/
+:Sf apex execute cleanup  " Delete temp .apex files from cache
+```
+
 ### Debug Levels
 
 ```vim
@@ -284,6 +302,9 @@ vim.keymap.set("n", "<leader>srm", ":Sf retrieve metadata<CR>", { desc = "Retrie
 vim.keymap.set("n", "<leader>sa", ":Sf test action<CR>", { desc = "Show test actions" })
 vim.keymap.set("n", "<leader>sdd", ":Sf retrieve diff<CR>", { desc = "Diff against server" })
 vim.keymap.set("n", "<leader>srf", ":Sf retrieve refresh<CR>", { desc = "Refresh from server" })
+vim.keymap.set("n", "<leader>sa", ":Sf apex execute file<CR>", { desc = "Execute current Apex" })
+vim.keymap.set("n", "<leader>sn", ":Sf apex execute new<CR>", { desc = "New Apex script" })
+vim.keymap.set("n", "<leader>sL", ":Sf apex execute list<CR>", { desc = "List Apex scripts" })
 ```
 
 ## 🎨 Features in Detail
@@ -313,6 +334,15 @@ vim.keymap.set("n", "<leader>srf", ":Sf retrieve refresh<CR>", { desc = "Refresh
 - **Tree View**: Rendered log entries are indented to show the call hierarchy with entry/exit nesting
 - **Resume**: Re-open the last log list from cache without re-fetching
 - **Cleanup**: Remove cached logs and log list file
+
+### Anonymous Apex Execution
+
+- **Execute Buffer**: Run the current `.apex` file from any location — content is copied to a temp file under `.sf/sf.nvim/apex/`
+- **Scripts Directory**: Files in the `scripts/` directory (configurable) run directly with no temp copy
+- **Log Saving**: On success, the Apex debug log is saved to `logs/anonymous/<timestamp>.log`
+- **Split View**: Log opens in a vertical split alongside the script (`execute file`) or in a new buffer (`list` selection)
+- **Error Diagnostics**: Compile and runtime errors display as inline diagnostics on the source file
+- **Script Picker**: Browse and select scripts from `scripts/` with live content preview via `Sf apex execute list`
 
 ### Coverage Display
 
