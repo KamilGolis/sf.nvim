@@ -22,7 +22,12 @@ function Config:new()
     metadata_types_file = "metadata-types.json", -- Default filename for metadata types schema
     metadatas_dir = "metadatas", -- Default directory for retrieved metadata files
     retrieve_file = "retrieve.json", -- Default filename for storing retrieve results
+    debug_levels_dir = "debug-levels", -- Default directory for debug level configs
+    apex_temp_dir = "apex", -- Default directory for temp apex scripts
+    scripts_dir = "scripts", -- Default scripts directory for persistent apex scripts
+    anonymous_log_dir = "anonymous", -- Default subdirectory under logs/ for anonymous apex logs
     debug = false, -- Debug mode (enables logging to file)
+    logger_scope = {}, -- Module source patterns to log (empty = log everything). Example: {"test/runner", "core/job_utils"}
     debug_inspect = false, -- Show debug output on screen (requires debug = true)
   }
 
@@ -48,8 +53,11 @@ function Config:setup(options)
   self.options.metadata_types_file = PathUtils.join(self.options.cache_path, self.options.metadata_types_file)
   self.options.metadatas_dir = PathUtils.join(self.options.cache_path, self.options.metadatas_dir)
   self.options.retrieve_file = PathUtils.join(self.options.cache_path, self.options.retrieve_file)
+  self.options.debug_levels_dir = PathUtils.join(self.options.cache_path, self.options.debug_levels_dir)
   self.options.delta_path = PathUtils.join(self.options.cache_path, self.options.delta_dir)
   self.options.delta_manifest_path = PathUtils.join(self.options.delta_path, "package", "package.xml")
+  self.options.apex_temp_dir = PathUtils.join(self.options.cache_path, self.options.apex_temp_dir)
+  self.options.anonymous_log_dir = PathUtils.join(self.options.log_dir, self.options.anonymous_log_dir)
   self.options.namespace = vim.api.nvim_create_namespace("SFNVIM")
 
   Log.configure(self.options)

@@ -2,6 +2,7 @@
 -- @license MIT
 
 local Config = require("sf.config")
+local Log = require("sf.core.log")
 local PathUtils = require("sf.core.path_utils")
 local Snacks = require("snacks")
 local Utils = require("sf.log.utils")
@@ -19,11 +20,10 @@ function Cleanup.cleanup_logs()
     default = "N",
   }, function(value)
     if not value or not value:lower():match("^y") then
-      vim.notify("Log cleanup cancelled", vim.log.levels.INFO)
+      Log.notify("Log cleanup cancelled", vim.log.levels.INFO)
       return
     end
 
-    -- Delete log files from logs directory
     local deleted_count = 0
     local log_pattern = PathUtils.join(log_dir, "*.log")
     local log_files = vim.fn.glob(log_pattern, false, true)
@@ -35,7 +35,17 @@ function Cleanup.cleanup_logs()
       end
     end
 
-    -- Delete log-list.json
+    local anon_pattern = PathUtils.join(log_dir, "anonymous", "*.log")
+    local anon_files = vim.fn.glob(anon_pattern, false, true)
+
+    for _, f in ipairs(anon_files) do
+      local ok = pcall(vim.fn.delete, f)
+
+      if ok then
+        deleted_count = deleted_count + 1
+      end
+    end
+
     local list_deleted = false
     if vim.fn.filereadable(log_list_file) == 1 then
       list_deleted = pcall(vim.fn.delete, log_list_file)
@@ -48,7 +58,7 @@ function Cleanup.cleanup_logs()
       table.insert(message_parts, "log list removed")
     end
 
-    vim.notify("Log cleanup complete: " .. table.concat(message_parts, ", "), vim.log.levels.INFO)
+    Log.notify("Log cleanup complete: " .. table.concat(message_parts, ", "), vim.log.levels.INFO)
   end)
 end
 

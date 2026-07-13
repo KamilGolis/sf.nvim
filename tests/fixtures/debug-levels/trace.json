@@ -1,0 +1,19 @@
+{
+  "status": 0,
+  "result": {
+    "attributes": {
+      "type": "TraceFlag",
+      "url": "/services/data/v67.0/tooling/sobjects/TraceFlag/7tf000000000001"
+    },
+    "Id": "7tf000000000001",
+    "TracedEntityId": "005000000000001",
+    "DebugLevelId": "7dl000000000001",
+    "LogType": "USER_DEBUG",
+    "StartDate": "2026-01-01T10:00:00.000+0000",
+    "ExpirationDate": "2026-01-01T11:00:00.000+0000",
+    "ApexCode": "FINEST",
+    "System": "FINE",
+    "Database": "FINEST"
+  },
+  "warnings": []
+}

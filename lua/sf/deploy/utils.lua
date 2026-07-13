@@ -34,7 +34,7 @@ local function notify(context, state, msg, level)
 
   if msg then
     vim.schedule(function()
-      vim.notify(msg, level or vim.log.levels.INFO)
+      Log.notify(msg, level or vim.log.levels.INFO)
     end)
   end
 end
@@ -370,7 +370,7 @@ function DeployUtils.validate_quickfix_files(config, indexes, utils)
 
   if #missing_files > 0 then
     vim.schedule(function()
-      vim.notify("Could not find index entry for: " .. table.concat(missing_files, ", "), vim.log.levels.WARN)
+      Log.notify("Could not find index entry for: " .. table.concat(missing_files, ", "), vim.log.levels.WARN)
     end)
   end
 
@@ -470,7 +470,7 @@ function DeployUtils.create_manifest_job(command, context, next_job, options)
         context.handle:finish()
       end
 
-      vim.notify("Failed to prepare manifest", vim.log.levels.ERROR)
+      Log.notify("Failed to prepare manifest", vim.log.levels.ERROR)
     end,
   })
 
@@ -541,7 +541,7 @@ function DeployUtils.create_changed_files_manifest_job(context, next_job, option
         context.handle:finish()
       end
 
-      vim.notify("Failed to prepare manifest", vim.log.levels.ERROR)
+      Log.notify("Failed to prepare manifest", vim.log.levels.ERROR)
     end,
   })
 

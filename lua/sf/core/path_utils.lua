@@ -168,4 +168,37 @@ function M.to_forward_slashes(path)
   return path:gsub("\\", "/")
 end
 
+--- Find an Apex class file in standard project layouts.
+--- @param class_name string The class name without .cls extension
+--- @param sf_root string The project root directory
+--- @param default_package string|nil Optional default package path from sfdx-project.json
+--- @return string|nil Full path to the .cls file, or nil if not found
+function M.find_apex_class(class_name, sf_root, default_package)
+  -- Fast path: check default package first if provided
+  if default_package then
+    local path = M.join(sf_root, default_package, "classes", class_name .. ".cls")
+
+    if vim.fn.filereadable(path) == 1 then
+      return path
+    end
+  end
+
+  -- Dynamic: find all "classes" directories in the project
+  local classes_dirs = vim.fs.find("classes", {
+    path = sf_root,
+    type = "directory",
+    limit = math.huge,
+  })
+
+  for _, dir in ipairs(classes_dirs) do
+    local path = M.join(dir, class_name .. ".cls")
+
+    if vim.fn.filereadable(path) == 1 then
+      return path
+    end
+  end
+
+  return nil
+end
+
 return M

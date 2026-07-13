@@ -2,6 +2,8 @@
 -- @license MIT
 
 local Const = require("sf.const")
+local Log = require("sf.core.log")
+
 local Snacks = require("snacks")
 
 local Picker = {}
@@ -12,7 +14,7 @@ local Picker = {}
 --- @param on_confirm function(items) Called with array of selected items on confirm
 function Picker.create_items_picker(items, xml_name, on_confirm)
   if not items or #items == 0 then
-    vim.notify("No metadata items to display.", vim.log.levels.WARN)
+    Log.notify("No metadata items to display.", vim.log.levels.WARN)
     return
   end
 

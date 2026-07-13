@@ -1,8 +1,21 @@
 --- sf-nvim test results buffer module
 -- @license MIT
 
+local Const = require("sf.const")
+local Indexes = require("sf.core.indexes")
+local Log = require("sf.core.log")
 local PathUtils = require("sf.core.path_utils")
 local Utils = require("sf.core.utils")
+
+--- Convert vim.NIL (JSON null userdata) to Lua nil.
+--- @param val any
+--- @return any|nil
+local function to_lua_nil(val)
+  if val == vim.NIL then
+    return nil
+  end
+  return val
+end
 
 local TestResultsBuffer = {}
 
@@ -41,7 +54,7 @@ end
 --- @param test_name string The name of the test that was executed
 function TestResultsBuffer.show_results(test_results, test_name)
   if not test_results or not test_results.result then
-    vim.notify("No test results to display", vim.log.levels.ERROR)
+    Log.notify("No test results to display", vim.log.levels.ERROR)
     return
   end
 
@@ -61,10 +74,10 @@ function TestResultsBuffer.show_results(test_results, test_name)
   end
 
   -- Set buffer options
-  vim.api.nvim_buf_set_option(buf, "buftype", "nofile")
-  vim.api.nvim_buf_set_option(buf, "swapfile", false)
-  vim.api.nvim_buf_set_option(buf, "modifiable", true)
-  vim.api.nvim_buf_set_option(buf, "readonly", false)
+  vim.bo[buf].buftype = "nofile"
+  vim.bo[buf].swapfile = false
+  vim.bo[buf].modifiable = true
+  vim.bo[buf].readonly = false
 
   -- Generate buffer content
   local lines = {}
@@ -123,8 +136,8 @@ function TestResultsBuffer.show_results(test_results, test_name)
       -- Test header
       local status_icon = test.Outcome == "Pass" and "✓" or "✗"
       local test_full_name = test.FullName
-        or (test.ApexClass and test.ApexClass.Name .. "." .. test.MethodName)
-        or test.MethodName
+        or (test.ApexClass and type(test.ApexClass.Name) == "string" and type(test.MethodName) == "string" and (test.ApexClass.Name .. "." .. test.MethodName))
+        or (type(test.MethodName) == "string" and test.MethodName)
         or "Unknown"
 
       table.insert(lines, string.format("%s %s", status_icon, test_full_name))
@@ -132,7 +145,7 @@ function TestResultsBuffer.show_results(test_results, test_name)
       -- Store test information for navigation
       test_line_map[test_name_line] = {
         class_name = test.ApexClass and test.ApexClass.Name or nil,
-        method_name = test.MethodName,
+        method_name = to_lua_nil(test.MethodName),
         full_name = test_full_name,
       }
 
@@ -192,10 +205,9 @@ function TestResultsBuffer.show_results(test_results, test_name)
 
   -- Set buffer content
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
-
   -- Make buffer read-only
-  vim.api.nvim_buf_set_option(buf, "modifiable", false)
-  vim.api.nvim_buf_set_option(buf, "readonly", true)
+  vim.bo[buf].modifiable = false
+  vim.bo[buf].readonly = true
 
   -- Set up buffer-local keymaps
   TestResultsBuffer.setup_keymaps(buf, test_line_map)
@@ -212,8 +224,8 @@ end
 --- @param test_line_map table Map of line numbers to test information
 function TestResultsBuffer.setup_keymaps(buf, test_line_map)
   -- Close buffer with 'q'
-  vim.api.nvim_buf_set_keymap(buf, "n", "q", ":bdelete<CR>", {
-    noremap = true,
+  vim.keymap.set("n", "q", ":bdelete<CR>", {
+    buffer = buf,
     silent = true,
     desc = "Close test results buffer",
   })
@@ -234,17 +246,15 @@ function TestResultsBuffer.setup_keymaps(buf, test_line_map)
     end
   end
 
-  vim.api.nvim_buf_set_keymap(buf, "n", "gf", "", {
-    noremap = true,
+  vim.keymap.set("n", "gf", goto_test_source, {
+    buffer = buf,
     silent = true,
-    callback = goto_test_source,
     desc = "Go to test source file",
   })
 
-  vim.api.nvim_buf_set_keymap(buf, "n", "<CR>", "", {
-    noremap = true,
+  vim.keymap.set("n", "<CR>", goto_test_source, {
+    buffer = buf,
     silent = true,
-    callback = goto_test_source,
     desc = "Go to test source file",
   })
 end
@@ -255,7 +265,7 @@ end
 --- @param line_number number|nil The specific line number to navigate to (optional)
 function TestResultsBuffer.open_test_source(class_name, method_name, line_number)
   if not class_name then
-    vim.notify("No class name available", vim.log.levels.WARN)
+    Log.notify("No class name available", vim.log.levels.WARN)
     return
   end
 
@@ -268,30 +278,23 @@ function TestResultsBuffer.open_test_source(class_name, method_name, line_number
   end
 
   -- Try to find the class file
-  local sf_root = Utils.get_sf_root()
-  local possible_paths = {
-    PathUtils.join(sf_root, "force-app", "main", "default", "classes", class_name .. ".cls"),
-    PathUtils.join(sf_root, "src", "classes", class_name .. ".cls"),
-  }
-
-  -- Check default package path from sfdx-project.json
-  local default_path = Utils.get_default_package_path()
-
-  if default_path then
-    table.insert(possible_paths, 1, PathUtils.join(sf_root, default_path, "classes", class_name .. ".cls"))
-  end
-
   local class_file = nil
 
-  for _, path in ipairs(possible_paths) do
-    if vim.fn.filereadable(path) == 1 then
-      class_file = path
-      break
-    end
+  -- First, try index lookup (supports non-standard paths)
+  local file_index = Indexes.get_file_index()
+  if file_index then
+    class_file = file_index[class_name .. ".cls"]
+  end
+
+  -- Fallback: search through known project paths
+  if not class_file then
+    local sf_root = Utils.get_sf_root()
+    local default_path = Utils.get_default_package_path()
+    class_file = PathUtils.find_apex_class(class_name, sf_root, default_path)
   end
 
   if not class_file then
-    vim.notify("Could not find class file: " .. class_name .. ".cls", vim.log.levels.ERROR)
+    Log.notify("Could not find class file: " .. class_name .. ".cls", vim.log.levels.ERROR)
     return
   end
 
@@ -306,12 +309,14 @@ function TestResultsBuffer.open_test_source(class_name, method_name, line_number
   end
 
   -- Navigate to method if specified
-  if method_name then
+  if type(method_name) == "string" then
     -- Search for the method definition
+    -- Use case-insensitive (\c) default-magic patterns; vim.pesc escapes any regex metacharacters in method_name
+    local escaped = vim.pesc(method_name)
     local method_patterns = {
-      "\\v(public|private|protected|global)\\s+(static\\s+)?(testMethod\\s+)?\\w*\\s*" .. method_name .. "\\s*\\(",
-      "\\v@isTest.*\\n.*" .. method_name .. "\\s*\\(",
-      "\\v" .. method_name .. "\\s*\\(",
+      Const.APEX_PATTERNS.METHOD_SIGNATURE .. escaped .. "\\s*(",
+      Const.APEX_PATTERNS.ISTEST_METHOD .. escaped .. "\\s*(",
+      "\\c" .. escaped .. "\\s*(",
     }
 
     for _, pattern in ipairs(method_patterns) do

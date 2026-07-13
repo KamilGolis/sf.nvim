@@ -16,9 +16,13 @@ As a Salesforce developer, I’ve mostly used VS Code and WebStorm with Illumina
 
 - 🚀 **Metadata Deployment** - Deploy current file, changed files, or selected files
 - 🧪 **Apex Test Execution** - Run tests at class or method level with detailed results
+- ⚡ **LSP Code Actions** - Run tests via `vim.lsp.buf.code_action()` with integrated test actions, no Apex LSP required
 - 📊 **Code Coverage** - Visual coverage indicators with detailed statistics
 - 🔌 **Org Management** - Easy switching between Salesforce orgs
 - 📝 **Debug Logs** - List, fetch, and analyze debug logs with rich per-token highlighting and tree view
+:- 📝 **Anonymous Apex** - Execute anonymous Apex scripts from files with log saving and error diagnostics
+- 🔧 **Debug Level Management** - Create, edit, and delete debug levels with an interactive buffer and syntax highlighting
+- 🏷️ **Trace Flag Management** - Create new trace flags with interactive buffer, debug level picker with preview, and auto-conflict resolution
 - 📦 **Schema Management** - Refresh org metadata type index and retrieve type details
 - ⬇️  **Metadata Retrieval** - Retrieve metadata individually, by type, or refresh the current buffer from org
 - ↔️  **Server Diff** - Diff local metadata against the server version in a dedicated tab with scroll-synced views
@@ -78,23 +82,42 @@ require("sf").setup({
   -- Salesforce CLI executable path
   -- For Windows, use "sf.cmd"
   sf_cli_path = "sf",
-  
+
   -- API version for deployments
   api_version = "65.0",
-  
-  -- Cache directory for storing deployment/test results
+
+  -- Cache directory
   cache_path = "./.sf/sf.nvim",
-  
-  -- Schema and metadata retrieval
+
+  -- Deployment and test results
+  deploy_file = "deploy.json",
+  test_results_file = "test.json",
+  coverage_results_file = "coverage.json",
+
+  -- Debug logs
+  log_list_file = "log-list.json",
+  log_dir = "logs",
+
+  -- Delta deployments (requires sgd plugin)
+  delta_dir = "delta",
+
+  -- Metadata retrieval
+  retrieve_file = "retrieve.json",
   metadata_types_file = "metadata-types.json",
   metadatas_dir = "metadatas",
-  
-  -- Debug mode - enables logging to file
+
+  -- Debug level management
+  debug_levels_dir = "debug-levels",
+
+  -- Anonymous Apex
+  apex_temp_dir = "apex",
+  scripts_dir = "scripts",
+  anonymous_log_dir = "anonymous",
+
+  -- Debug mode
   debug = false,
-  
-  -- Show debug output on screen (requires debug = true)
-  -- When false, only logs to file
   debug_inspect = false,
+  logger_scope = {},
 })
 ```
 
@@ -113,8 +136,14 @@ require("sf").setup({
 | `delta_dir` | `string` | `"delta"` | Directory for delta package |
 | `metadata_types_file` | `string` | `"metadata-types.json"` | Filename for cached metadata types schema |
 | `metadatas_dir` | `string` | `"metadatas"` | Directory for retrieved metadata files |
+| `retrieve_file` | `string` | `"retrieve.json"` | Filename for retrieve results cache |
+| `debug_levels_dir` | `string` | `"debug-levels"` | Directory for debug level config files |
+| `apex_temp_dir` | `string` | `"apex"` | Directory for temp .apex files under cache_path |
+| `scripts_dir` | `string` | `"scripts"` | Directory for persistent Apex scripts under project root |
+| `anonymous_log_dir` | `string` | `"anonymous"` | Subdirectory under log_dir for anonymous Apex logs |
 | `debug` | `boolean` | `false` | Enable debug logging to file |
 | `debug_inspect` | `boolean` | `false` | Show debug output on screen |
+| `logger_scope` | `table` | `{}` | List of module source patterns to include in debug output (empty = log all modules). Example: `{"test/runner", "core/job_utils"}` |
 
 ### Debug Configuration
 
@@ -137,6 +166,35 @@ require("sf").setup({
 ```
 
 View debug logs: `:lua Snacks.debug.log()`
+**Scope filtering** — limit debug output to specific modules:
+```lua
+require("sf").setup({
+  debug = true,
+  logger_scope = { "test/runner", "core/job_utils" }, -- only these modules
+})
+```
+
+Available module names for `logger_scope`:
+| Module path | Description |
+|-------------|-------------|
+| `apex/execute` | Anonymous Apex execution |
+| `config` | Plugin configuration |
+| `core/diagnostics` | Deploy diagnostics system |
+| `core/job_utils` | CLI job creation and management |
+| `core/utils` | Core utilities (project root, etc.) |
+| `debug/level` | Debug level create/edit/delete |
+| `debug/utils` | Debug level workflow (org/user/trace queries) |
+| `deploy/utils` | Deployment utilities |
+| `diff/runner` | Diff job orchestration |
+| `log/list` | Log listing and picking |
+| `log/utils` | Log processing utilities |
+| `org/utils` | Org utilities |
+| `retrieve/metadata` | Metadata retrieval |
+| `schema/refresh` | Schema fetch from org |
+| `schema/retrieve` | Schema record retrieval |
+| `test/coverage` | Code coverage display |
+| `test/runner` | Test execution runner |
+| `trace/flag` | Trace flag create/edit/delete |
 
 ## 🎮 Commands
 
@@ -180,6 +238,7 @@ All commands are available under the `:Sf` command with subcommands:
 :Sf test class    " Run all tests in current test class
 :Sf test method   " Run test method at cursor position
 :Sf test result   " Show last test results
+:Sf test action   " Show available test actions via picker (alternative to LSP code actions)
 ```
 
 ### Coverage
@@ -200,6 +259,31 @@ All commands are available under the `:Sf` command with subcommands:
 :Sf log analysis basic   " Analyze a selected log with basic tree view and per-token highlighting
 :Sf log cleanup          " Delete cached log files and logList.json
 ```
+
+### Anonymous Apex
+
+```vim
+:Sf apex execute file     " Execute Apex from current buffer
+:Sf apex execute new      " Create new blank Apex script in scripts/
+:Sf apex execute list     " Browse and execute scripts from scripts/
+:Sf apex execute cleanup  " Delete temp .apex files from cache
+```
+
+### Debug Levels
+
+```vim
+:Sf debug level new      " Create a new debug level with interactive editor
+:Sf debug level edit     " Edit an existing debug level
+:Sf debug level delete   " Delete a debug level
+```
+
+### Debug Trace Flags
+
+```vim
+:Sf debug trace new     " Create a new trace flag with interactive editor
+:Sf debug trace delete  " Delete a trace flag
+```
+
 
 ## 📖 Usage Examples
 
@@ -241,10 +325,15 @@ vim.keymap.set("n", "<leader>sC", ":Sf coverage on<CR>", { desc = "Toggle covera
 vim.keymap.set("n", "<leader>sl", ":Sf log list<CR>", { desc = "List debug logs" })
 vim.keymap.set("n", "<leader>sR", ":Sf log resume<CR>", { desc = "Resume cached log list" })
 vim.keymap.set("n", "<leader>sr", ":Sf test result<CR>", { desc = "Show test results" })
+vim.keymap.set("n", "<leader>stn", ":Sf debug trace new<CR>", { desc = "Create trace flag" })
 vim.keymap.set("n", "<leader>ss", ":Sf schema retrieve<CR>", { desc = "Retrieve metadata info" })
 vim.keymap.set("n", "<leader>srm", ":Sf retrieve metadata<CR>", { desc = "Retrieve selected metadata" })
+vim.keymap.set("n", "<leader>sa", ":Sf test action<CR>", { desc = "Show test actions" })
 vim.keymap.set("n", "<leader>sdd", ":Sf retrieve diff<CR>", { desc = "Diff against server" })
 vim.keymap.set("n", "<leader>srf", ":Sf retrieve refresh<CR>", { desc = "Refresh from server" })
+vim.keymap.set("n", "<leader>sa", ":Sf apex execute file<CR>", { desc = "Execute current Apex" })
+vim.keymap.set("n", "<leader>sn", ":Sf apex execute new<CR>", { desc = "New Apex script" })
+vim.keymap.set("n", "<leader>sL", ":Sf apex execute list<CR>", { desc = "List Apex scripts" })
 ```
 
 ## 🎨 Features in Detail
@@ -274,6 +363,15 @@ vim.keymap.set("n", "<leader>srf", ":Sf retrieve refresh<CR>", { desc = "Refresh
 - **Tree View**: Rendered log entries are indented to show the call hierarchy with entry/exit nesting
 - **Resume**: Re-open the last log list from cache without re-fetching
 - **Cleanup**: Remove cached logs and log list file
+
+### Anonymous Apex Execution
+
+- **Execute Buffer**: Run the current `.apex` file from any location — content is copied to a temp file under `.sf/sf.nvim/apex/`
+- **Scripts Directory**: Files in the `scripts/` directory (configurable) run directly with no temp copy
+- **Log Saving**: On success, the Apex debug log is saved to `logs/anonymous/<timestamp>.log`
+- **Split View**: Log opens in a vertical split alongside the script (`execute file`) or in a new buffer (`list` selection)
+- **Error Diagnostics**: Compile and runtime errors display as inline diagnostics on the source file
+- **Script Picker**: Browse and select scripts from `scripts/` with live content preview via `Sf apex execute list`
 
 ### Coverage Display
 

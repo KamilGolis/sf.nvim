@@ -8,17 +8,20 @@ if not Utils.has_sfdx_project() then
 end
 
 local Analyze = require("sf.log.analyze")
+local ApexExecute = require("sf.apex.execute")
 local Cleanup = require("sf.log.cleanup")
 local Config = require("sf.config")
 local Connector = require("sf.org.connect")
 local Deployment = require("sf.deploy.metadata")
 local Diagnostics = require("sf.core.diagnostics")
 local Diff = require("sf.diff.runner")
+local Log = require("sf.core.log")
 local LogList = require("sf.log.list")
 local RetrieveMetadata = require("sf.retrieve.metadata")
 local SchemaCleanup = require("sf.schema.cleanup")
 local SchemaRefresh = require("sf.schema.refresh")
 local SchemaRetrieve = require("sf.schema.retrieve")
+local TestCodeActions = require("sf.core.code_actions")
 local TestRunner = require("sf.test.runner")
 
 local indexes = require("sf.core.indexes")
@@ -106,6 +109,9 @@ local COMMANDS = {
     result = function()
       TestRunner.show_last_results(make_test_options())
     end,
+    action = function()
+      TestCodeActions.show_actions()
+    end,
   },
   coverage = {
     class = function()
@@ -140,6 +146,43 @@ local COMMANDS = {
       end,
     },
   },
+  apex = {
+    execute = {
+      file = function()
+        ApexExecute:execute_file()
+      end,
+      new = function()
+        ApexExecute:execute_new()
+      end,
+      cleanup = function()
+        ApexExecute:execute_cleanup()
+      end,
+      list = function()
+        ApexExecute:execute_list()
+      end,
+    },
+  },
+  debug = {
+    level = {
+      new = function()
+        require("sf.debug.level").new_level()
+      end,
+      delete = function()
+        require("sf.debug.level").delete_level()
+      end,
+      edit = function()
+        require("sf.debug.level").edit_level()
+      end,
+    },
+    trace = {
+      new = function()
+        require("sf.trace.flag").new_trace_flag()
+      end,
+      delete = function()
+        require("sf.trace.flag").delete_trace_flag()
+      end,
+    },
+  },
   retrieve = {
     metadata = function()
       RetrieveMetadata.retrieve_selected()
@@ -156,17 +199,18 @@ local COMMANDS = {
   },
 }
 vim.api.nvim_create_user_command("Sf", function(opts)
+  Log.log("Sf command:", opts.fargs)
   local module = opts.fargs[1]
   local action = opts.fargs[2]
 
   if not module or not COMMANDS[module] then
-    vim.notify("Unknown subcommand: " .. (module or ""), vim.log.levels.ERROR)
+    Log.notify("Unknown subcommand: " .. (module or ""), vim.log.levels.ERROR)
     return
   end
 
   local actions = COMMANDS[module]
   if not action or not actions[action] then
-    vim.notify("Unknown subcommand: " .. (action or ""), vim.log.levels.ERROR)
+    Log.notify("Unknown subcommand: " .. (action or ""), vim.log.levels.ERROR)
     return
   end
 
@@ -174,7 +218,7 @@ vim.api.nvim_create_user_command("Sf", function(opts)
   if type(handler) == "table" then
     local sub = opts.fargs[3]
     if not sub or not handler[sub] then
-      vim.notify("Unknown subcommand: " .. (sub or ""), vim.log.levels.ERROR)
+      Log.notify("Unknown subcommand: " .. (sub or ""), vim.log.levels.ERROR)
       return
     end
     handler[sub]()
@@ -210,3 +254,4 @@ end, {
   end,
   desc = "Salesforce CLI integration commands",
 })
+TestCodeActions.setup()

@@ -269,6 +269,9 @@ describe("core-utilities", function()
           end
           return path
         end,
+        nvim_buf_get_name = function()
+          return tmpdir .. "/force-app/main/default/classes/FakeClass.cls"
+        end,
       })
       _G._sf_test_tmpdir = tmpdir
     end)

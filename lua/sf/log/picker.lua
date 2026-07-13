@@ -2,6 +2,7 @@
 -- @license MIT
 
 local Const = require("sf.const")
+local Log = require("sf.core.log")
 local Snacks = require("snacks")
 
 local Picker = {}
@@ -11,7 +12,7 @@ local Picker = {}
 --- @param callback function Callback function to handle log selection
 function Picker.create_log_selection_picker(logs, callback)
   if not logs or #logs == 0 then
-    vim.notify("No debug logs found", vim.log.levels.INFO)
+    Log.notify("No debug logs found", vim.log.levels.INFO)
     return
   end
 
@@ -329,7 +330,7 @@ function Picker.create_log_selection_picker(logs, callback)
   -- Call Snacks picker with error handling
   local ok, err = pcall(Snacks.picker, picker_config)
   if not ok then
-    vim.notify("Failed to create picker: " .. tostring(err), vim.log.levels.ERROR)
+    Log.notify("Failed to create picker: " .. tostring(err), vim.log.levels.ERROR)
     --
     -- Fallback to simple notification
     local log_list = {}
@@ -338,7 +339,7 @@ function Picker.create_log_selection_picker(logs, callback)
       table.insert(log_list, string.format("%d. %s (%s)", i, log.id, log.status))
     end
 
-    vim.notify("Available logs:\n" .. table.concat(log_list, "\n"), vim.log.levels.INFO)
+    Log.notify("Available logs:\n" .. table.concat(log_list, "\n"), vim.log.levels.INFO)
   end
 end
 
