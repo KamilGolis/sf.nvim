@@ -99,7 +99,8 @@ describe("debug-levels", function()
     end)
 
     it("get_record_create_args builds DebugLevel record create", function()
-      local args = Const.get_record_create_args("test@example.com", "DebugLevel", "ApexCode=FINE DeveloperName=Test", "65.0")
+      local args =
+        Const.get_record_create_args("test@example.com", "DebugLevel", "ApexCode=FINE DeveloperName=Test", "65.0")
       local s = table.concat(args, " ")
 
       expect.match(s, "data create record")
@@ -112,7 +113,8 @@ describe("debug-levels", function()
     end)
 
     it("get_record_update_args includes record id", function()
-      local args = Const.get_record_update_args("test@example.com", "DebugLevel", "ApexCode=FINE", "7dl00000001", "65.0")
+      local args =
+        Const.get_record_update_args("test@example.com", "DebugLevel", "ApexCode=FINE", "7dl00000001", "65.0")
       local s = table.concat(args, " ")
 
       expect.match(s, "data update record")

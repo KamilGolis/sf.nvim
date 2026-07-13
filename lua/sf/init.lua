@@ -13,6 +13,8 @@ function Sf.setup(opts)
     return
   end
   Sf.config = Config:setup(opts)
+  local Dap = require("sf.dap")
+  Dap.setup(Config:get_options().dap)
 end
 
 return Sf

@@ -114,6 +114,13 @@ require("sf").setup({
   scripts_dir = "scripts",
   anonymous_log_dir = "anonymous",
 
+  -- DAP (Apex Replay Debugger)
+  dap_log_dir = nil, -- defaults to log_dir/dap
+  dap = {
+    adapter_path = nil, -- absolute path to apexReplayDebug.js
+    port = 4712,
+  },
+
   -- Debug mode
   debug = false,
   debug_inspect = false,
@@ -141,6 +148,7 @@ require("sf").setup({
 | `apex_temp_dir` | `string` | `"apex"` | Directory for temp .apex files under cache_path |
 | `scripts_dir` | `string` | `"scripts"` | Directory for persistent Apex scripts under project root |
 | `anonymous_log_dir` | `string` | `"anonymous"` | Subdirectory under log_dir for anonymous Apex logs |
+| `dap_log_dir` | `string` | `nil` | Directory for DAP debug logs (defaults to `log_dir/dap`) |
 | `debug` | `boolean` | `false` | Enable debug logging to file |
 | `debug_inspect` | `boolean` | `false` | Show debug output on screen |
 | `logger_scope` | `table` | `{}` | List of module source patterns to include in debug output (empty = log all modules). Example: `{"test/runner", "core/job_utils"}` |
@@ -211,7 +219,7 @@ All commands are available under the `:Sf` command with subcommands:
 ```vim
 :Sf schema refresh   " Refresh org metadata type list
 :Sf schema retrieve  " Select and retrieve metadata of a type
-:Sf schema cleanup   " Delete cached schema files (like metadata-types.json and all files under metadatas directory)
+:Sf schema cleanup   " Delete cached schema files (like `metadata-types.json` and all files under `metadatas` directory)
 ```
 ### Metadata Retrieval
 
@@ -255,17 +263,18 @@ All commands are available under the `:Sf` command with subcommands:
 
 ```vim
 :Sf log list             " Fetch and list debug logs from org
-:Sf log resume           " Show cached debug logs from logList.json (falls back to list)
+:Sf log resume           " Show cached debug logs from `log-list.json` (falls back to list)
+:Sf log debug            " Resume cached logs and copy selected to DAP directory
 :Sf log analysis basic   " Analyze a selected log with basic tree view and per-token highlighting
-:Sf log cleanup          " Delete cached log files and logList.json
+:Sf log cleanup          " Delete cached log files and `log-list.json`
 ```
 
 ### Anonymous Apex
 
 ```vim
 :Sf apex execute file     " Execute Apex from current buffer
-:Sf apex execute new      " Create new blank Apex script in scripts/
-:Sf apex execute list     " Browse and execute scripts from scripts/
+:Sf apex execute new      " Create new blank Apex script in `scripts/`
+:Sf apex execute list     " Browse and execute scripts from `scripts/`
 :Sf apex execute cleanup  " Delete temp .apex files from cache
 ```
 
