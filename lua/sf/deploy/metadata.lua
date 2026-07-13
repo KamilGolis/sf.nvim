@@ -29,13 +29,12 @@ end
 function Metadata:deploy_metadata(force)
   Connector:check_cli(function()
     -- Validate pre-deployment conditions
-    Log.deb("Starting Deploy Metadata function...")
 
     local valid, err = DeployUtils.validate_deployment_preconditions()
 
     if not valid then
       if err then
-        vim.notify(err, vim.log.levels.WARN)
+        Log.notify(err, vim.log.levels.WARN)
       end
       return
     end
@@ -65,15 +64,13 @@ end
 --- Uses generated callbacks for manifest preparation and deployment with standardized job creation patterns.
 --- @param force boolean|nil Whether to ignore conflicts during deployment
 function Metadata:deploy_changed_metadatas(force)
-  Log.deb("Starting Deploy Changed Metadata function...")
-
   Connector:check_cli(function()
     -- Validate pre-deployment conditions
     local valid, err = DeployUtils.validate_deployment_preconditions()
 
     if not valid then
       if err then
-        vim.notify(err, vim.log.levels.WARN)
+        Log.notify(err, vim.log.levels.WARN)
       end
       return
     end
@@ -108,15 +105,13 @@ end
 --- Uses generated callbacks for manifest preparation and deployment with proper error handling.
 --- @param force boolean|nil Whether to ignore conflicts during deployment
 function Metadata:deploy_selected_metadata(force)
-  Log.deb("Starting Deploy Selected Metadata function...")
-
   Connector:check_cli(function()
     -- Validate pre-deployment conditions
     local valid, err = DeployUtils.validate_deployment_preconditions()
 
     if not valid then
       if err then
-        vim.notify(err, vim.log.levels.WARN)
+        Log.notify(err, vim.log.levels.WARN)
       end
       return
     end
@@ -127,10 +122,10 @@ function Metadata:deploy_selected_metadata(force)
 
     if not quickfix_success then
       if quickfix_error then
-        vim.notify(quickfix_error, vim.log.levels.WARN)
+        Log.notify(quickfix_error, vim.log.levels.WARN)
       end
       if missing_files and #missing_files > 0 then
-        vim.notify("Missing indexed files: " .. table.concat(missing_files, ", "), vim.log.levels.WARN)
+        Log.notify("Missing indexed files: " .. table.concat(missing_files, ", "), vim.log.levels.WARN)
       end
       return
     end
@@ -147,7 +142,7 @@ function Metadata:deploy_selected_metadata(force)
     local prep_success, prep_error = DeployUtils.prepare_quickfix_files_for_deployment(found_files)
 
     if not prep_success then
-      vim.notify(prep_error, vim.log.levels.ERROR)
+      Log.notify(prep_error, vim.log.levels.ERROR)
       context.handle:finish()
       return
     end

@@ -4,6 +4,7 @@
 -- @license MIT
 
 local Const = require("sf.const")
+local Log = require("sf.core.log")
 
 local M = {}
 
@@ -177,7 +178,7 @@ function M.show_actions()
   local actions = M.get_actions_for_buffer(vim.api.nvim_get_current_buf())
 
   if #actions == 0 then
-    vim.notify(Const.SF_ACTIONS.NO_ACTIONS, vim.log.levels.WARN)
+    Log.notify(Const.SF_ACTIONS.NO_ACTIONS, vim.log.levels.WARN)
     return
   end
 
@@ -206,7 +207,7 @@ end
 --- to Apex test class buffers.
 function M.setup()
   if not ensure_client() then
-    vim.notify(Const.SF_ACTIONS.CLIENT_FAILED, vim.log.levels.WARN)
+    Log.notify(Const.SF_ACTIONS.CLIENT_FAILED, vim.log.levels.WARN)
     return
   end
 

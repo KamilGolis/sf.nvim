@@ -20,12 +20,12 @@ function Retrieve.retrieve(on_type_selected, skip_fetch)
   local schema_file = Config:get_options().metadata_types_file
 
   if vim.fn.filereadable(schema_file) == 0 then
-    vim.notify("Metadata types schema not found. Running schema refresh first...", vim.log.levels.INFO)
+    Log.notify("Metadata types schema not found. Running schema refresh first...", vim.log.levels.INFO)
     SchemaRefresh.refresh(function(success)
       if success then
         Retrieve.retrieve(on_type_selected, skip_fetch)
       else
-        vim.notify("Schema refresh failed. Cannot retrieve metadata.", vim.log.levels.ERROR)
+        Log.notify("Schema refresh failed. Cannot retrieve metadata.", vim.log.levels.ERROR)
       end
     end)
     return
@@ -34,7 +34,7 @@ function Retrieve.retrieve(on_type_selected, skip_fetch)
   local file = io.open(schema_file, "r")
 
   if not file then
-    vim.notify("Failed to open schema file: " .. schema_file, vim.log.levels.ERROR)
+    Log.notify("Failed to open schema file: " .. schema_file, vim.log.levels.ERROR)
     return
   end
 
@@ -44,14 +44,14 @@ function Retrieve.retrieve(on_type_selected, skip_fetch)
   local ok, parsed = pcall(vim.json.decode, content)
 
   if not ok or not parsed or not parsed.result or not parsed.result.metadataObjects then
-    vim.notify("Invalid schema file format. Try running :Sf schema refresh", vim.log.levels.ERROR)
+    Log.notify("Invalid schema file format. Try running :Sf schema refresh", vim.log.levels.ERROR)
     return
   end
 
   local metadata_objects = parsed.result.metadataObjects
 
   if #metadata_objects == 0 then
-    vim.notify("No metadata types found in schema.", vim.log.levels.WARN)
+    Log.notify("No metadata types found in schema.", vim.log.levels.WARN)
     return
   end
 
@@ -87,7 +87,7 @@ function Retrieve.fetch_metadata(xml_name, on_type_selected, on_complete)
     local has_default_org, target_org, org_error = OrgUtils.check_default_org()
 
     if not has_default_org then
-      vim.notify(org_error or Const.SF_CLI_MESSAGES.NO_DEFAULT_ORG, vim.log.levels.ERROR)
+      Log.notify(org_error or Const.SF_CLI_MESSAGES.NO_DEFAULT_ORG, vim.log.levels.ERROR)
 
       if on_complete then
         on_complete(false)
@@ -99,7 +99,7 @@ function Retrieve.fetch_metadata(xml_name, on_type_selected, on_complete)
     local cli_valid, executable_path, error_msg = JobUtils.validate_cli_installation(Config:get_options().sf_cli_path)
 
     if not cli_valid or not executable_path then
-      vim.notify(error_msg or Const.SF_CLI_MESSAGES.NOT_FOUND, vim.log.levels.ERROR)
+      Log.notify(error_msg or Const.SF_CLI_MESSAGES.NOT_FOUND, vim.log.levels.ERROR)
 
       if on_complete then
         on_complete(false)
@@ -123,8 +123,6 @@ function Retrieve.fetch_metadata(xml_name, on_type_selected, on_complete)
 
     local job = JobUtils.create_cli_job(executable_path, args, {
       on_success = function(job, return_val)
-        Log.deb("Metadata retrieve success", { xml_name = xml_name, return_val = return_val })
-
         local result = table.concat(job:result(), "\n")
 
         local ok, _, json_err = JobUtils.validate_json_response(result)
@@ -157,7 +155,7 @@ function Retrieve.fetch_metadata(xml_name, on_type_selected, on_complete)
 
         context.handle:report({ message = context.success_message, percentage = 100 })
         context.handle:finish()
-        vim.notify(xml_name .. " metadata info retrieved", vim.log.levels.INFO)
+        Log.notify(xml_name .. " metadata info retrieved", vim.log.levels.INFO)
         if on_type_selected then
           on_type_selected(xml_name)
         end
@@ -169,7 +167,6 @@ function Retrieve.fetch_metadata(xml_name, on_type_selected, on_complete)
       on_error = function(job, return_val)
         local stderr = job:stderr_result()
 
-        Log.deb("Metadata retrieve error", { xml_name = xml_name, return_val = return_val, stderr = stderr })
         JobUtils.handle_cli_error(return_val, context)
 
         if on_complete then

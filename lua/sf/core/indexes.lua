@@ -1,6 +1,8 @@
 --- Module for indexing files in a project directory
 --- @class Indexes
+local Log = require("sf.core.log")
 local PathUtils = require("sf.core.path_utils")
+
 local M = {}
 
 --- Table to store the file index
@@ -25,7 +27,7 @@ function M.index_files(path)
   local function scan_directory(dir_path)
     local handle = vim.uv.fs_scandir(dir_path)
     if not handle then
-      vim.notify("Failed to scan directory: " .. dir_path, vim.log.levels.ERROR)
+      Log.notify("Failed to scan directory: " .. dir_path, vim.log.levels.ERROR)
       return
     end
 
@@ -46,7 +48,7 @@ function M.index_files(path)
   end
 
   scan_directory(cwd)
-  vim.notify("Indexed " .. vim.tbl_count(file_index) .. " files in project directory: " .. cwd, vim.log.levels.INFO)
+  Log.notify("Indexed " .. vim.tbl_count(file_index) .. " files in project directory: " .. cwd, vim.log.levels.INFO)
 end
 
 return M

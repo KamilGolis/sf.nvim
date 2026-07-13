@@ -38,25 +38,25 @@ function Execute:execute_file(file_path, opts)
   end
 
   if not file_path:match("%.apex$") then
-    vim.notify("Not an .apex file", vim.log.levels.ERROR)
+    Log.notify("Not an .apex file", vim.log.levels.ERROR)
     return
   end
 
   Connector:check_cli(function()
     if State.is_busy("apex") then
-      vim.notify("Apex execution already in progress", vim.log.levels.WARN)
+      Log.notify("Apex execution already in progress", vim.log.levels.WARN)
       return
     end
 
     local cli_valid, executable_path, cli_error = JobUtils.validate_cli_installation(Config:get_options().sf_cli_path)
     if not cli_valid or not executable_path then
-      vim.notify(cli_error or Const.SF_CLI_MESSAGES.NOT_FOUND, vim.log.levels.ERROR)
+      Log.notify(cli_error or Const.SF_CLI_MESSAGES.NOT_FOUND, vim.log.levels.ERROR)
       return
     end
 
     local has_default_org, target_org, org_error = OrgUtils.check_default_org()
     if not has_default_org then
-      vim.notify(org_error or Const.SF_CLI_MESSAGES.NO_DEFAULT_ORG, vim.log.levels.ERROR)
+      Log.notify(org_error or Const.SF_CLI_MESSAGES.NO_DEFAULT_ORG, vim.log.levels.ERROR)
       return
     end
 
@@ -178,7 +178,7 @@ function Execute:_handle_success(j, context, options, opts, original_path)
 
     context.handle:report({ message = Const.SF_CLI_MESSAGES.APEX_EXECUTE_FAILED, percentage = 100 })
     context.handle:finish()
-    vim.notify(source.error_message, vim.log.levels.ERROR)
+    Log.notify(source.error_message, vim.log.levels.ERROR)
     return
   end
 
@@ -197,7 +197,7 @@ function Execute:_handle_success(j, context, options, opts, original_path)
 
   context.handle:report({ message = context.success_message, percentage = 100 })
   context.handle:finish()
-  vim.notify(Const.SF_CLI_MESSAGES.APEX_EXECUTE_SUCCESS, vim.log.levels.INFO)
+  Log.notify(Const.SF_CLI_MESSAGES.APEX_EXECUTE_SUCCESS, vim.log.levels.INFO)
 
   if opts.display_mode == "buffer" then
     vim.cmd("edit " .. vim.fn.fnameescape(log_file))
@@ -234,7 +234,7 @@ function Execute:_handle_error(j, return_val, context, original_path)
     context.handle:report({ message = Const.SF_CLI_MESSAGES.APEX_EXECUTE_FAILED, percentage = 100 })
     context.handle:finish()
 
-    vim.notify(source.error_message, vim.log.levels.ERROR)
+    Log.notify(source.error_message, vim.log.levels.ERROR)
 
     return
   end
@@ -252,7 +252,7 @@ function Execute:execute_new()
     vim.fn.mkdir(dir, "p")
 
     if vim.fn.isdirectory(dir) == 0 then
-      vim.notify(Const.SF_CLI_MESSAGES.APEX_EXECUTE_NEW_FAILED, vim.log.levels.ERROR)
+      Log.notify(Const.SF_CLI_MESSAGES.APEX_EXECUTE_NEW_FAILED, vim.log.levels.ERROR)
       return
     end
   end
@@ -265,7 +265,7 @@ function Execute:execute_new()
   end
 
   vim.cmd("edit " .. vim.fn.fnameescape(path))
-  vim.notify("Created: " .. path, vim.log.levels.INFO)
+  Log.notify("Created: " .. path, vim.log.levels.INFO)
 end
 
 --- Cleans up temp apex files from apex_temp_dir.
@@ -273,13 +273,13 @@ function Execute:execute_cleanup()
   local dir = Config:get_options().apex_temp_dir
 
   if vim.fn.isdirectory(dir) == 0 then
-    vim.notify("Nothing to clean up.", vim.log.levels.INFO)
+    Log.notify("Nothing to clean up.", vim.log.levels.INFO)
     return
   end
 
   vim.fn.delete(dir, "rf")
   vim.fn.mkdir(dir, "p")
-  vim.notify(Const.SF_CLI_MESSAGES.APEX_EXECUTE_CLEANUP_SUCCESS, vim.log.levels.INFO)
+  Log.notify(Const.SF_CLI_MESSAGES.APEX_EXECUTE_CLEANUP_SUCCESS, vim.log.levels.INFO)
 end
 
 --- Lists apex scripts from the scripts directory and shows a picker.
@@ -289,7 +289,7 @@ function Execute:execute_list()
   local dir = Utils.get_sf_root() .. "/" .. options.scripts_dir
 
   if vim.fn.isdirectory(dir) == 0 then
-    vim.notify(Const.SF_CLI_MESSAGES.APEX_LIST_DIR_MISSING, vim.log.levels.ERROR)
+    Log.notify(Const.SF_CLI_MESSAGES.APEX_LIST_DIR_MISSING, vim.log.levels.ERROR)
     return
   end
 
@@ -303,7 +303,7 @@ function Execute:execute_list()
   end
 
   if #files == 0 then
-    vim.notify(Const.SF_CLI_MESSAGES.APEX_LIST_NO_SCRIPTS, vim.log.levels.WARN)
+    Log.notify(Const.SF_CLI_MESSAGES.APEX_LIST_NO_SCRIPTS, vim.log.levels.WARN)
     return
   end
 

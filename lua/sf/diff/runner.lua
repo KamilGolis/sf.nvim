@@ -53,7 +53,7 @@ function M.handle_convert_response(sfdx_response, local_path, context)
   local retrieved_file = Utils.find_file(converted_dir, diff_state.filename)
 
   if not retrieved_file or vim.fn.filereadable(retrieved_file) ~= 1 then
-    vim.notify("Failed to locate converted file in " .. converted_dir, vim.log.levels.ERROR)
+    Log.notify("Failed to locate converted file in " .. converted_dir, vim.log.levels.ERROR)
     State.finish("diff")
     vim.fn.delete(diff_state.temp_dir, "rf")
 
@@ -67,7 +67,7 @@ function M.handle_convert_response(sfdx_response, local_path, context)
   local f = io.open(retrieved_file, "r")
 
   if not f then
-    vim.notify("Failed to read retrieved file", vim.log.levels.ERROR)
+    Log.notify("Failed to read retrieved file", vim.log.levels.ERROR)
     State.finish("diff")
     vim.fn.delete(diff_state.temp_dir, "rf")
 
@@ -95,19 +95,19 @@ function M.diff_current_buffer()
       local has_default_org, target_org, org_error = OrgUtils.check_default_org()
 
       if not has_default_org then
-        vim.notify(org_error or Const.SF_CLI_MESSAGES.NO_DEFAULT_ORG, vim.log.levels.ERROR)
+        Log.notify(org_error or Const.SF_CLI_MESSAGES.NO_DEFAULT_ORG, vim.log.levels.ERROR)
         return
       end
 
       if State.is_busy("diff") then
-        vim.notify("Already diffing. Please wait...", vim.log.levels.WARN)
+        Log.notify("Already diffing. Please wait...", vim.log.levels.WARN)
         return
       end
 
       local cli_valid, executable_path, error_msg = JobUtils.validate_cli_installation(Config:get_options().sf_cli_path)
 
       if not cli_valid or not executable_path then
-        vim.notify(error_msg or Const.SF_CLI_MESSAGES.NOT_FOUND, vim.log.levels.ERROR)
+        Log.notify(error_msg or Const.SF_CLI_MESSAGES.NOT_FOUND, vim.log.levels.ERROR)
         return
       end
 
@@ -115,7 +115,7 @@ function M.diff_current_buffer()
       local info, detect_err = Detect.detect_metadata_from_buffer(bufnr)
 
       if not info then
-        vim.notify(detect_err or "Could not determine metadata type.", vim.log.levels.ERROR)
+        Log.notify(detect_err or "Could not determine metadata type.", vim.log.levels.ERROR)
         return
       end
 
@@ -142,7 +142,6 @@ function M.diff_current_buffer()
 
       local retrieve_job = JobUtils.create_cli_job(executable_path, retrieve_args, {
         on_success = function(job, return_val)
-          Log.deb("Diff retrieve success", { return_val = return_val })
           local result = table.concat(job:result(), "\n")
           Log.deb("Diff retrieve result:", result)
 
@@ -174,7 +173,6 @@ function M.diff_current_buffer()
 
           local convert_job = JobUtils.create_cli_job(executable_path, convert_args, {
             on_success = function(conv_job, conv_return_val)
-              Log.deb("Diff convert success", { return_val = conv_return_val })
               local conv_result = table.concat(conv_job:result(), "\n")
               Log.deb("Diff convert result:", conv_result)
 
@@ -198,7 +196,6 @@ function M.diff_current_buffer()
               M.handle_convert_response(conv_parsed, info.local_path, context)
             end,
             on_error = function(conv_job, conv_return_val)
-              Log.deb("Diff convert error", { return_val = conv_return_val })
               M.handle_job_error(conv_return_val, context)
             end,
           })
@@ -206,7 +203,6 @@ function M.diff_current_buffer()
           convert_job:start()
         end,
         on_error = function(job, return_val)
-          Log.deb("Diff retrieve error", { return_val = return_val })
           M.handle_job_error(return_val, context)
         end,
       })

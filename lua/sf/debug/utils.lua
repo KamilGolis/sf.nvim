@@ -18,17 +18,17 @@ function DebugUtils.parse_org_data(json_response)
   local ok, parsed, err = JobUtils.validate_json_response(json_response)
 
   if not ok then
-    return nil, "Invalid org data response: " .. (err or "unknown error")
+    return nil, Const.SF_CLI_MESSAGES.DEBUG_WORKFLOW_INVALID_ORG_DATA .. ": " .. (err or "unknown error")
   end
 
   if parsed.status ~= 0 then
-    return nil, "Org display command failed"
+    return nil, Const.SF_CLI_MESSAGES.DEBUG_WORKFLOW_ORG_CMD_FAILED
   end
 
   local username = parsed.result and parsed.result.username
 
   if not username then
-    return nil, "Could not find Username in org data"
+    return nil, Const.SF_CLI_MESSAGES.DEBUG_WORKFLOW_NO_USERNAME
   end
 
   return username, nil
@@ -41,18 +41,18 @@ function DebugUtils.parse_user_data(json_response)
   local ok, parsed, err = JobUtils.validate_json_response(json_response)
 
   if not ok then
-    return nil, nil, "Invalid user data response: " .. (err or "unknown error")
+    return nil, nil, Const.SF_CLI_MESSAGES.DEBUG_WORKFLOW_INVALID_USER_DATA .. ": " .. (err or "unknown error")
   end
 
   if parsed.status ~= 0 then
-    return nil, nil, "User record get command failed"
+    return nil, nil, Const.SF_CLI_MESSAGES.DEBUG_WORKFLOW_USER_CMD_FAILED
   end
 
   local user_id = parsed.result and parsed.result.Id
   local user_name = parsed.result and parsed.result.Name
 
   if not user_id then
-    return nil, nil, "Could not find Id in user data"
+    return nil, nil, Const.SF_CLI_MESSAGES.DEBUG_WORKFLOW_NO_USER_ID
   end
 
   return user_id, user_name, nil
@@ -65,17 +65,17 @@ function DebugUtils.parse_debug_levels(json_response)
   local ok, parsed, err = JobUtils.validate_json_response(json_response)
 
   if not ok then
-    return nil, "Invalid debug levels response: " .. (err or "unknown error")
+    return nil, Const.SF_CLI_MESSAGES.DEBUG_WORKFLOW_INVALID_DEBUG_DATA .. ": " .. (err or "unknown error")
   end
 
   if parsed.status ~= 0 then
-    return nil, "Debug level query command failed"
+    return nil, Const.SF_CLI_MESSAGES.DEBUG_WORKFLOW_DEBUG_CMD_FAILED
   end
 
   local records = parsed.result and parsed.result.records
 
   if not records or type(records) ~= "table" then
-    return nil, "No debug level records found"
+    return nil, Const.SF_CLI_MESSAGES.DEBUG_WORKFLOW_NO_DEBUG_RECORDS
   end
 
   local debug_levels = {}
@@ -95,11 +95,11 @@ function DebugUtils.parse_trace_flags(json_response)
   local ok, parsed, err = JobUtils.validate_json_response(json_response)
 
   if not ok then
-    return nil, "Invalid trace flags response: " .. (err or "unknown error")
+    return nil, Const.SF_CLI_MESSAGES.DEBUG_WORKFLOW_INVALID_TRACE_DATA .. ": " .. (err or "unknown error")
   end
 
   if parsed.status ~= 0 then
-    return nil, "Trace flag get command failed"
+    return nil, Const.SF_CLI_MESSAGES.DEBUG_WORKFLOW_TRACE_CMD_FAILED
   end
 
   local result = parsed.result
@@ -208,7 +208,7 @@ function DebugUtils.run_workflow(on_complete)
 
     if not has_default_org then
       state.finish("debug")
-      vim.notify(org_error or Const.SF_CLI_MESSAGES.NO_DEFAULT_ORG, vim.log.levels.ERROR)
+      Log.notify(org_error or Const.SF_CLI_MESSAGES.NO_DEFAULT_ORG, vim.log.levels.ERROR)
 
       if on_complete then
         on_complete(false, nil, org_error or Const.SF_CLI_MESSAGES.NO_DEFAULT_ORG)
@@ -220,7 +220,7 @@ function DebugUtils.run_workflow(on_complete)
     local cli_valid, executable_path, error_msg = JobUtils.validate_cli_installation(config.sf_cli_path)
     if not cli_valid or not executable_path then
       state.finish("debug")
-      vim.notify(error_msg or Const.SF_CLI_MESSAGES.NOT_FOUND, vim.log.levels.ERROR)
+      Log.notify(error_msg or Const.SF_CLI_MESSAGES.NOT_FOUND, vim.log.levels.ERROR)
 
       if on_complete then
         on_complete(false, nil, error_msg or Const.SF_CLI_MESSAGES.NOT_FOUND)
@@ -268,10 +268,9 @@ function DebugUtils.run_workflow(on_complete)
         end,
         on_error = function(job, return_val)
           local stderr = job:stderr_result()
-          Log.deb("Trace flags fetch error", { return_val = return_val, stderr = stderr })
           workflow_data.trace_flags = {}
 
-          vim.notify(
+          Log.notify(
             "Failed to fetch trace flags: " .. (table.concat(stderr, "\n") or "unknown error"),
             vim.log.levels.WARN
           )
@@ -290,9 +289,7 @@ function DebugUtils.run_workflow(on_complete)
 
     -- Query all DebugLevel records, then fetch trace flags
     local function fetch_debug_levels_and_proceed()
-      local query =
-        "SELECT Id,ApexCode,ApexProfiling,Callout,CreatedDate,DataAccess,Database,DeveloperName,Language,MasterLabel,Nba,System,Validation,Visualforce,Wave,Workflow FROM DebugLevel"
-      local debug_args = Const.get_query_args(query, target_org, config.api_version)
+      local debug_args = Const.get_query_args(Const.QUERIES.DEBUG_LEVEL_SELECT, target_org, config.api_version)
 
       context = JobUtils.create_progress_context(
         Const.SF_CLI_MESSAGES.DEBUG_LEVEL_FETCHING_LEVELS,
@@ -323,7 +320,6 @@ function DebugUtils.run_workflow(on_complete)
         end,
         on_error = function(job, return_val)
           local stderr = job:stderr_result()
-          Log.deb("Debug levels fetch error", { return_val = return_val, stderr = stderr })
 
           JobUtils.handle_cli_error(return_val, context)
           state.finish("debug")
@@ -374,7 +370,6 @@ function DebugUtils.run_workflow(on_complete)
         on_error = function(job, return_val)
           local stderr = job:stderr_result()
 
-          Log.deb("User fetch error", { return_val = return_val, stderr = stderr })
           JobUtils.handle_cli_error(return_val, context)
           state.finish("debug")
 
@@ -418,7 +413,6 @@ function DebugUtils.run_workflow(on_complete)
       on_error = function(job, return_val)
         local stderr = job:stderr_result()
 
-        Log.deb("Org display error", { return_val = return_val, stderr = stderr })
         JobUtils.handle_cli_error(return_val, context)
         state.finish("debug")
 

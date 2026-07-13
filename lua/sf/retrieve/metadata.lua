@@ -23,7 +23,7 @@ local function show_items_picker(xml_name)
   local file = io.open(json_file, "r")
 
   if not file then
-    vim.notify("Failed to open metadata file: " .. json_file, vim.log.levels.ERROR)
+    Log.notify("Failed to open metadata file: " .. json_file, vim.log.levels.ERROR)
     return
   end
 
@@ -33,14 +33,14 @@ local function show_items_picker(xml_name)
   local ok, parsed = pcall(vim.json.decode, content)
 
   if not ok or not parsed or not parsed.result then
-    vim.notify("Invalid metadata file format.", vim.log.levels.ERROR)
+    Log.notify("Invalid metadata file format.", vim.log.levels.ERROR)
     return
   end
 
   local result = parsed.result
 
   if type(result) ~= "table" or #result == 0 then
-    vim.notify("No metadata items found for " .. xml_name .. ".", vim.log.levels.WARN)
+    Log.notify("No metadata items found for " .. xml_name .. ".", vim.log.levels.WARN)
     return
   end
 
@@ -80,19 +80,19 @@ function Metadata.execute_retrieve(items, xml_name)
       local has_default_org, target_org, org_error = OrgUtils.check_default_org()
 
       if not has_default_org then
-        vim.notify(org_error or Const.SF_CLI_MESSAGES.NO_DEFAULT_ORG, vim.log.levels.ERROR)
+        Log.notify(org_error or Const.SF_CLI_MESSAGES.NO_DEFAULT_ORG, vim.log.levels.ERROR)
         return
       end
 
       if State.is_busy("retrieve") then
-        vim.notify("Already retrieving. Please wait...", vim.log.levels.WARN)
+        Log.notify("Already retrieving. Please wait...", vim.log.levels.WARN)
         return
       end
 
       local cli_valid, executable_path, error_msg = JobUtils.validate_cli_installation(Config:get_options().sf_cli_path)
 
       if not cli_valid or not executable_path then
-        vim.notify(error_msg or Const.SF_CLI_MESSAGES.NOT_FOUND, vim.log.levels.ERROR)
+        Log.notify(error_msg or Const.SF_CLI_MESSAGES.NOT_FOUND, vim.log.levels.ERROR)
         return
       end
 
@@ -122,7 +122,7 @@ function Metadata.execute_retrieve(items, xml_name)
         if file then
           file:write(xml)
           file:close()
-          vim.notify(string.format(Const.SF_CLI_MESSAGES.RETRIEVE_MANIFEST_CREATED, #items), vim.log.levels.INFO)
+          Log.notify(string.format(Const.SF_CLI_MESSAGES.RETRIEVE_MANIFEST_CREATED, #items), vim.log.levels.INFO)
         else
           JobUtils.handle_cli_error(0, context, "Failed to create manifest file: " .. manifest_path)
           return
@@ -141,8 +141,6 @@ function Metadata.execute_retrieve(items, xml_name)
 
       local job = JobUtils.create_cli_job(executable_path, args, {
         on_success = function(job, return_val)
-          Log.deb("Metadata retrieve success", { return_val = return_val })
-
           local result = table.concat(job:result(), "\n")
 
           Log.deb("Retrieve result:", result)
@@ -162,7 +160,7 @@ function Metadata.execute_retrieve(items, xml_name)
 
           if status == "warning" then
             State.finish("retrieve")
-            vim.notify(detail, vim.log.levels.WARN)
+            Log.notify(detail, vim.log.levels.WARN)
             context.handle:report({ message = Const.SF_CLI_MESSAGES.RETRIEVE_WITH_ISSUES, percentage = 100 })
             context.handle:finish()
             return
@@ -172,18 +170,16 @@ function Metadata.execute_retrieve(items, xml_name)
             State.finish("retrieve")
 
             if detail then
-              vim.notify(detail, vim.log.levels.WARN)
+              Log.notify(detail, vim.log.levels.WARN)
             end
 
             context.handle:report({ message = context.success_message, percentage = 100 })
             context.handle:finish()
-            vim.notify("Metadata retrieved successfully.", vim.log.levels.INFO)
+            Log.notify("Metadata retrieved successfully.", vim.log.levels.INFO)
           end
         end,
         on_error = function(job, return_val)
           local stderr = job:stderr_result()
-
-          Log.deb("Metadata retrieve error", { return_val = return_val, stderr = stderr })
 
           if use_manifest and manifest_path then
             os.remove(manifest_path)
@@ -225,19 +221,19 @@ function Metadata.retrieve_all_of_type()
       local has_default_org, target_org, org_error = OrgUtils.check_default_org()
 
       if not has_default_org then
-        vim.notify(org_error or Const.SF_CLI_MESSAGES.NO_DEFAULT_ORG, vim.log.levels.ERROR)
+        Log.notify(org_error or Const.SF_CLI_MESSAGES.NO_DEFAULT_ORG, vim.log.levels.ERROR)
         return
       end
 
       if State.is_busy("retrieve") then
-        vim.notify("Already retrieving. Please wait...", vim.log.levels.WARN)
+        Log.notify("Already retrieving. Please wait...", vim.log.levels.WARN)
         return
       end
 
       local cli_valid, executable_path, error_msg = JobUtils.validate_cli_installation(Config:get_options().sf_cli_path)
 
       if not cli_valid or not executable_path then
-        vim.notify(error_msg or Const.SF_CLI_MESSAGES.NOT_FOUND, vim.log.levels.ERROR)
+        Log.notify(error_msg or Const.SF_CLI_MESSAGES.NOT_FOUND, vim.log.levels.ERROR)
         return
       end
 
@@ -253,8 +249,6 @@ function Metadata.retrieve_all_of_type()
 
       local job = JobUtils.create_cli_job(executable_path, direct_args, {
         on_success = function(job, return_val)
-          Log.deb("Retrieve type success", { xml_name = xml_name, return_val = return_val })
-
           local result = table.concat(job:result(), "\n")
 
           Log.deb("Retrieve type result:", result)
@@ -269,7 +263,7 @@ function Metadata.retrieve_all_of_type()
 
           if status == "warning" then
             State.finish("retrieve")
-            vim.notify(detail, vim.log.levels.WARN)
+            Log.notify(detail, vim.log.levels.WARN)
             context.handle:report({ message = Const.SF_CLI_MESSAGES.RETRIEVE_WITH_ISSUES, percentage = 100 })
             context.handle:finish()
             return
@@ -279,18 +273,16 @@ function Metadata.retrieve_all_of_type()
             State.finish("retrieve")
 
             if detail then
-              vim.notify(detail, vim.log.levels.WARN)
+              Log.notify(detail, vim.log.levels.WARN)
             end
 
             context.handle:report({ message = context.success_message, percentage = 100 })
             context.handle:finish()
-            vim.notify(xml_name .. " metadata retrieved successfully.", vim.log.levels.INFO)
+            Log.notify(xml_name .. " metadata retrieved successfully.", vim.log.levels.INFO)
           end
         end,
         on_error = function(job, return_val)
           local stderr = job:stderr_result()
-
-          Log.deb("Retrieve type error", { xml_name = xml_name, return_val = return_val, stderr = stderr })
 
           State.finish("retrieve")
           JobUtils.handle_cli_error(return_val, context)
@@ -311,7 +303,7 @@ function Metadata.retrieve_current_buffer()
   local info, detect_err = Detect.detect_metadata_from_buffer(bufnr)
 
   if not info then
-    vim.notify(detect_err or "Could not determine metadata type.", vim.log.levels.ERROR)
+    Log.notify(detect_err or "Could not determine metadata type.", vim.log.levels.ERROR)
     return
   end
 
@@ -320,19 +312,19 @@ function Metadata.retrieve_current_buffer()
       local has_default_org, target_org, org_error = OrgUtils.check_default_org()
 
       if not has_default_org then
-        vim.notify(org_error or Const.SF_CLI_MESSAGES.NO_DEFAULT_ORG, vim.log.levels.ERROR)
+        Log.notify(org_error or Const.SF_CLI_MESSAGES.NO_DEFAULT_ORG, vim.log.levels.ERROR)
         return
       end
 
       if State.is_busy("retrieve") then
-        vim.notify("Already retrieving. Please wait...", vim.log.levels.WARN)
+        Log.notify("Already retrieving. Please wait...", vim.log.levels.WARN)
         return
       end
 
       local cli_valid, executable_path, error_msg = JobUtils.validate_cli_installation(Config:get_options().sf_cli_path)
 
       if not cli_valid or not executable_path then
-        vim.notify(error_msg or Const.SF_CLI_MESSAGES.NOT_FOUND, vim.log.levels.ERROR)
+        Log.notify(error_msg or Const.SF_CLI_MESSAGES.NOT_FOUND, vim.log.levels.ERROR)
         return
       end
 
@@ -349,8 +341,6 @@ function Metadata.retrieve_current_buffer()
 
       local job = JobUtils.create_cli_job(executable_path, args, {
         on_success = function(job, return_val)
-          Log.deb("Refresh retrieve success", { return_val = return_val })
-
           local result = table.concat(job:result(), "\n")
           Log.deb("Refresh retrieve result:", result)
 
@@ -365,7 +355,7 @@ function Metadata.retrieve_current_buffer()
           if status == "warning" then
             State.finish("retrieve")
 
-            vim.notify(detail, vim.log.levels.WARN)
+            Log.notify(detail, vim.log.levels.WARN)
             context.handle:report({ message = Const.SF_CLI_MESSAGES.RETRIEVE_WITH_ISSUES, percentage = 100 })
             context.handle:finish()
 
@@ -376,18 +366,17 @@ function Metadata.retrieve_current_buffer()
             State.finish("retrieve")
 
             if detail then
-              vim.notify(detail, vim.log.levels.WARN)
+              Log.notify(detail, vim.log.levels.WARN)
             end
 
             context.handle:report({ message = context.success_message, percentage = 100 })
             context.handle:finish()
 
-            vim.notify(info.type .. ":" .. info.member .. " retrieved successfully.", vim.log.levels.INFO)
+            Log.notify(info.type .. ":" .. info.member .. " retrieved successfully.", vim.log.levels.INFO)
           end
         end,
         on_error = function(job, return_val)
           local stderr = job:stderr_result()
-          Log.deb("Refresh retrieve error", { return_val = return_val, stderr = stderr })
           State.finish("retrieve")
           JobUtils.handle_cli_error(return_val, context)
         end,

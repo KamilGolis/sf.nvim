@@ -1,11 +1,11 @@
-local Snacks = require("snacks")
-
 local Config = require("sf.config")
 local Const = require("sf.const")
 local JobUtils = require("sf.core.job_utils")
 local Log = require("sf.core.log")
 local PathUtils = require("sf.core.path_utils")
 local Utils = require("sf.core.utils")
+
+local Snacks = require("snacks")
 
 local M = {}
 
@@ -162,7 +162,7 @@ function M.set_target_org(org_data, context, callback)
         -- Notify success with org details
         local success_message =
           string.format(Const.SF_CLI_MESSAGES.ORG_SET_SUCCESS_FORMAT, org_data.alias or org_data.username)
-        vim.notify(success_message, vim.log.levels.INFO)
+        Log.notify(success_message, vim.log.levels.INFO)
 
         if callback then
           callback(true, success_message)
@@ -171,7 +171,7 @@ function M.set_target_org(org_data, context, callback)
     end,
     on_error = function(job, return_val)
       JobUtils.handle_cli_result(job, return_val, progress_context, nil, function()
-        vim.notify(Const.SF_CLI_MESSAGES.ORG_SET_ERROR, vim.log.levels.ERROR)
+        Log.notify(Const.SF_CLI_MESSAGES.ORG_SET_ERROR, vim.log.levels.ERROR)
 
         if callback then
           callback(false, Const.SF_CLI_MESSAGES.ORG_SET_ERROR)

@@ -1,7 +1,7 @@
-local Log = require("sf.core.log")
-
 --- sf-nvim coverage display module
 -- @license MIT
+
+local Log = require("sf.core.log")
 
 local Coverage = {}
 
@@ -151,7 +151,7 @@ function Coverage.enable()
     end
   end
 
-  vim.notify("Coverage display enabled", vim.log.levels.INFO)
+  Log.notify("Coverage display enabled", vim.log.levels.INFO)
 end
 
 --- Disable coverage display
@@ -165,7 +165,7 @@ function Coverage.disable()
     end
   end
 
-  vim.notify("Coverage display disabled", vim.log.levels.INFO)
+  Log.notify("Coverage display disabled", vim.log.levels.INFO)
 end
 
 --- Show coverage for a specific buffer

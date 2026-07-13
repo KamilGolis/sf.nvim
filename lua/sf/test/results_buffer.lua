@@ -1,7 +1,9 @@
 --- sf-nvim test results buffer module
 -- @license MIT
 
+local Const = require("sf.const")
 local Indexes = require("sf.core.indexes")
+local Log = require("sf.core.log")
 local PathUtils = require("sf.core.path_utils")
 local Utils = require("sf.core.utils")
 
@@ -52,7 +54,7 @@ end
 --- @param test_name string The name of the test that was executed
 function TestResultsBuffer.show_results(test_results, test_name)
   if not test_results or not test_results.result then
-    vim.notify("No test results to display", vim.log.levels.ERROR)
+    Log.notify("No test results to display", vim.log.levels.ERROR)
     return
   end
 
@@ -263,7 +265,7 @@ end
 --- @param line_number number|nil The specific line number to navigate to (optional)
 function TestResultsBuffer.open_test_source(class_name, method_name, line_number)
   if not class_name then
-    vim.notify("No class name available", vim.log.levels.WARN)
+    Log.notify("No class name available", vim.log.levels.WARN)
     return
   end
 
@@ -287,28 +289,12 @@ function TestResultsBuffer.open_test_source(class_name, method_name, line_number
   -- Fallback: search through known project paths
   if not class_file then
     local sf_root = Utils.get_sf_root()
-    local possible_paths = {
-      PathUtils.join(sf_root, "force-app", "main", "default", "classes", class_name .. ".cls"),
-      PathUtils.join(sf_root, "src", "classes", class_name .. ".cls"),
-    }
-
-    -- Check default package path from sfdx-project.json
     local default_path = Utils.get_default_package_path()
-
-    if default_path then
-      table.insert(possible_paths, 1, PathUtils.join(sf_root, default_path, "classes", class_name .. ".cls"))
-    end
-
-    for _, path in ipairs(possible_paths) do
-      if vim.fn.filereadable(path) == 1 then
-        class_file = path
-        break
-      end
-    end
+    class_file = PathUtils.find_apex_class(class_name, sf_root, default_path)
   end
 
   if not class_file then
-    vim.notify("Could not find class file: " .. class_name .. ".cls", vim.log.levels.ERROR)
+    Log.notify("Could not find class file: " .. class_name .. ".cls", vim.log.levels.ERROR)
     return
   end
 
@@ -328,10 +314,8 @@ function TestResultsBuffer.open_test_source(class_name, method_name, line_number
     -- Use case-insensitive (\c) default-magic patterns; vim.pesc escapes any regex metacharacters in method_name
     local escaped = vim.pesc(method_name)
     local method_patterns = {
-      "\\(public\\|private\\|protected\\|global\\)\\s\\+\\(static\\s\\+\\)\\?\\(testMethod\\s\\+\\)\\?\\w\\+\\s*"
-        .. escaped
-        .. "\\s*(",
-      "\\c@isTest.*\\n.*" .. escaped .. "\\s*(",
+      Const.APEX_PATTERNS.METHOD_SIGNATURE .. escaped .. "\\s*(",
+      Const.APEX_PATTERNS.ISTEST_METHOD .. escaped .. "\\s*(",
       "\\c" .. escaped .. "\\s*(",
     }
 

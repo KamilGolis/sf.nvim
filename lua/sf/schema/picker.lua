@@ -1,6 +1,8 @@
 --- sf-nvim schema picker module
 -- @license MIT
 
+local Log = require("sf.core.log")
+
 local Snacks = require("snacks")
 
 local Picker = {}
@@ -10,7 +12,7 @@ local Picker = {}
 --- @param on_confirm function(item) Called with the selected item on confirm
 function Picker.create_type_picker(items, on_confirm)
   if not items or #items == 0 then
-    vim.notify("No metadata types to display.", vim.log.levels.WARN)
+    Log.notify("No metadata types to display.", vim.log.levels.WARN)
     return
   end
 

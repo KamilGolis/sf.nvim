@@ -18,7 +18,7 @@ function Schema.refresh(on_complete)
     local has_default_org, target_org, org_error = OrgUtils.check_default_org()
 
     if not has_default_org then
-      vim.notify(org_error or Const.SF_CLI_MESSAGES.NO_DEFAULT_ORG, vim.log.levels.ERROR)
+      Log.notify(org_error or Const.SF_CLI_MESSAGES.NO_DEFAULT_ORG, vim.log.levels.ERROR)
 
       if on_complete then
         on_complete(false)
@@ -30,7 +30,7 @@ function Schema.refresh(on_complete)
     local cli_valid, executable_path, error_msg = JobUtils.validate_cli_installation(Config:get_options().sf_cli_path)
 
     if not cli_valid or not executable_path then
-      vim.notify(error_msg or Const.SF_CLI_MESSAGES.NOT_FOUND, vim.log.levels.ERROR)
+      Log.notify(error_msg or Const.SF_CLI_MESSAGES.NOT_FOUND, vim.log.levels.ERROR)
 
       if on_complete then
         on_complete(false)
@@ -54,8 +54,6 @@ function Schema.refresh(on_complete)
 
     local job = JobUtils.create_cli_job(executable_path, args, {
       on_success = function(job, return_val)
-        Log.deb("Schema refresh job success", { return_val = return_val })
-
         local result = table.concat(job:result(), "\n")
 
         Log.deb("Schema refresh raw result:", result)
@@ -97,7 +95,6 @@ function Schema.refresh(on_complete)
       on_error = function(job, return_val)
         local stderr = job:stderr_result()
 
-        Log.deb("Schema refresh job error", { return_val = return_val, stderr = stderr })
         JobUtils.handle_cli_error(return_val, context)
         if on_complete then
           on_complete(false)

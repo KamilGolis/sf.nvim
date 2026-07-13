@@ -8,11 +8,24 @@ M.PLATFORM_PATTERN = "%s+([%S]+)%s+"
 M.NODE_VERSION_PATTERN = "(node%-v[%d%.]+)"
 M.VERSION_NUMBER_PATTERN = "([%d%.]+)"
 
+--- Date/time patterns for trace flag date parsing
+M.DATE_PATTERNS = {
+  ISO_PARSE = "(%d%d%d%d)-(%d%d)-(%d%d)T(%d%d):(%d%d)",
+  LOCAL_PARSE = "^(%d%d)%.(%d%d)%.(%d%d%d%d) (%d%d):(%d%d)$",
+}
+
+--- Regex patterns for Apex code navigation
+M.APEX_PATTERNS = {
+  METHOD_SIGNATURE = "\\(public\\|private\\|protected\\|global\\)\\s\\+\\(static\\s\\+\\)\\?\\(testMethod\\s\\+\\)\\?\\w\\+\\s*",
+  ISTEST_METHOD = "\\c@isTest.*\\n.*",
+}
+
 --- Font icons for UI elements
 M.ICONS = {
   -- Status icons
   SUCCESS = "\u{f00c}",
   ERROR = "\u{f00d}",
+
   WARNING = "\u{f071}",
   INFO = "\u{f05a}",
 
@@ -76,6 +89,18 @@ M.DEBUG_LEVEL_FIELDS = {
     values = { "NONE", "ERROR", "WARN", "INFO", "FINE", "FINER" },
     default = "INFO",
   },
+}
+
+--- Picklist field names on DebugLevel that TraceFlag copies verbatim.
+M.TRACE_FLAG_PICKLIST_FIELDS = {
+  "ApexCode",
+  "ApexProfiling",
+  "Callout",
+  "Database",
+  "System",
+  "Validation",
+  "Visualforce",
+  "Workflow",
 }
 
 --- String format templates for displaying Salesforce org details
@@ -159,6 +184,18 @@ M.SF_CLI_MESSAGES = {
   DEBUG_LEVEL_NONE_FOUND = "No debug levels found",
   DEBUG_LEVEL_NOT_FOUND_ERROR = "Could not find selected debug level",
   DEBUG_LEVEL_NO_ID = "Selected debug level has no Id",
+  -- Debug workflow parse error messages
+  DEBUG_WORKFLOW_INVALID_ORG_DATA = "Invalid org data response",
+  DEBUG_WORKFLOW_ORG_CMD_FAILED = "Org display command failed",
+  DEBUG_WORKFLOW_NO_USERNAME = "Could not find Username in org data",
+  DEBUG_WORKFLOW_INVALID_USER_DATA = "Invalid user data response",
+  DEBUG_WORKFLOW_USER_CMD_FAILED = "User record get command failed",
+  DEBUG_WORKFLOW_NO_USER_ID = "Could not find Id in user data",
+  DEBUG_WORKFLOW_INVALID_DEBUG_DATA = "Invalid debug levels response",
+  DEBUG_WORKFLOW_DEBUG_CMD_FAILED = "Debug level query command failed",
+  DEBUG_WORKFLOW_NO_DEBUG_RECORDS = "No debug level records found",
+  DEBUG_WORKFLOW_INVALID_TRACE_DATA = "Invalid trace flags response",
+  DEBUG_WORKFLOW_TRACE_CMD_FAILED = "Trace flag get command failed",
   -- Trace flag messages
   TRACE_NEW_TITLE = "Creating trace flag.",
   TRACE_NEW_SUCCESS = "Trace flag created successfully.",
@@ -182,6 +219,9 @@ M.SF_CLI_MESSAGES = {
   TRACE_DELETE_IN_PROGRESS = "Trace flag delete already in progress",
   DEBUG_LEVEL_SAVE_IN_PROGRESS = "Debug level save already in progress",
   DEBUG_LEVEL_DELETE_IN_PROGRESS = "Debug level delete already in progress",
+  TRACE_EMPTY_DATE = "Empty date string",
+  TRACE_INVALID_DATE_FORMAT = "Invalid format. Expected: dd.mm.yyyy HH:MM",
+  TRACE_INVALID_DATE_VALUES = "Invalid date/time values",
   -- Anonymous Apex execute messages
   APEX_EXECUTE_TITLE = "Executing Anonymous Apex.",
   APEX_EXECUTE_SUCCESS = "Anonymous Apex executed successfully.",
@@ -193,6 +233,11 @@ M.SF_CLI_MESSAGES = {
   APEX_EXECUTE_CLEANUP_SUCCESS = "Temp files cleaned up.",
   APEX_LIST_NO_SCRIPTS = "No Apex scripts found in scripts directory.",
   APEX_LIST_DIR_MISSING = "Scripts directory does not exist.",
+}
+
+--- SOQL queries used for CLI data operations
+M.QUERIES = {
+  DEBUG_LEVEL_SELECT = "SELECT Id,ApexCode,ApexProfiling,Callout,CreatedDate,DataAccess,Database,DeveloperName,Language,MasterLabel,Nba,System,Validation,Visualforce,Wave,Workflow FROM DebugLevel",
 }
 
 --- SF code actions configuration
