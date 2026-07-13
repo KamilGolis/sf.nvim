@@ -1,6 +1,8 @@
 --- sf-nvim trace flag utility functions
 -- @license MIT
 
+local Const = require("sf.const")
+
 local TraceUtils = {}
 
 --- Format an ISO datetime string to local display format "dd.mm.yyyy HH:MM".
@@ -10,10 +12,12 @@ function TraceUtils.format_datetime_local(iso)
   if not iso or iso == "" then
     return ""
   end
-  local year, month, day, hour, min = string.match(iso, "(%d%d%d%d)-(%d%d)-(%d%d)T(%d%d):(%d%d)")
+
+  local year, month, day, hour, min = string.match(iso, Const.DATE_PATTERNS.ISO_PARSE)
   if not year then
     return ""
   end
+
   -- ISO components are UTC. Compute the epoch, then offset by the local timezone
   -- difference for that specific date (handles DST correctly).
   -- os.time interprets the table as local time and auto-detects DST based on date.
@@ -25,15 +29,18 @@ function TraceUtils.format_datetime_local(iso)
     min = tonumber(min),
     sec = 0,
   })
+
   -- Compute the local timezone offset at local_epoch
   local l = os.date("*t", local_epoch)
   local u = os.date("!*t", local_epoch)
   local offset = (l.hour - u.hour) * 3600 + (l.min - u.min) * 60 + (l.sec - u.sec)
+
   if offset > 43200 then
     offset = offset - 86400
   elseif offset < -43200 then
     offset = offset + 86400
   end
+
   -- Adjust: local_epoch is epoch for H:M local. We want epoch for H:M UTC.
   -- If offset = +7200 (CEST), then H:M local corresponds to (H-2):M UTC.
   -- To get epoch for H:M UTC, add offset.
@@ -47,12 +54,12 @@ end
 --- @return string|nil error_message Error description if parsing fails
 function TraceUtils.parse_datetime_local(local_str)
   if not local_str or local_str == "" then
-    return nil, "Empty date string"
+    return nil, Const.SF_CLI_MESSAGES.TRACE_EMPTY_DATE
   end
 
-  local day, month, year, hour, min = string.match(local_str, "^(%d%d)%.(%d%d)%.(%d%d%d%d) (%d%d):(%d%d)$")
+  local day, month, year, hour, min = string.match(local_str, Const.DATE_PATTERNS.LOCAL_PARSE)
   if not day then
-    return nil, "Invalid format. Expected: dd.mm.yyyy HH:MM"
+    return nil, Const.SF_CLI_MESSAGES.TRACE_INVALID_DATE_FORMAT
   end
 
   local ok, epoch = pcall(os.time, {
@@ -63,8 +70,9 @@ function TraceUtils.parse_datetime_local(local_str)
     min = tonumber(min),
     sec = 0,
   })
+
   if not ok then
-    return nil, "Invalid date/time values"
+    return nil, Const.SF_CLI_MESSAGES.TRACE_INVALID_DATE_VALUES
   end
 
   return os.date("!%Y-%m-%dT%H:%M:%S.000+0000", epoch), nil
@@ -87,18 +95,8 @@ end
 --- @return table { ApexCode, ApexProfiling, Callout, Database, System, Validation, Visualforce, Workflow, LogType }
 function TraceUtils.required_trace_fields_from_debug_level(dl)
   local fields = {}
-  local picklist_fields = {
-    "ApexCode",
-    "ApexProfiling",
-    "Callout",
-    "Database",
-    "System",
-    "Validation",
-    "Visualforce",
-    "Workflow",
-  }
 
-  for _, name in ipairs(picklist_fields) do
+  for _, name in ipairs(Const.TRACE_FLAG_PICKLIST_FIELDS) do
     fields[name] = dl[name] or "NONE"
   end
 
@@ -122,19 +120,9 @@ function TraceUtils.build_trace_value_string(fields, selected_dl, user_id, start
   table.insert(parts, "LogType=" .. fields.LogType)
   table.insert(parts, "TracedEntityId=" .. user_id)
 
-  local picklist_fields = {
-    "ApexCode",
-    "ApexProfiling",
-    "Callout",
-    "Database",
-    "System",
-    "Validation",
-    "Visualforce",
-    "Workflow",
-  }
-
-  for _, name in ipairs(picklist_fields) do
+  for _, name in ipairs(Const.TRACE_FLAG_PICKLIST_FIELDS) do
     local value = fields[name] or "NONE"
+
     -- Enclose values with spaces in single quotes
     if string.find(value, " ") then
       table.insert(parts, name .. "='" .. value .. "'")

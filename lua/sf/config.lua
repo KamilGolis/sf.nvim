@@ -27,6 +27,7 @@ function Config:new()
     scripts_dir = "scripts", -- Default scripts directory for persistent apex scripts
     anonymous_log_dir = "anonymous", -- Default subdirectory under logs/ for anonymous apex logs
     debug = false, -- Debug mode (enables logging to file)
+    logger_scope = {}, -- Module source patterns to log (empty = log everything). Example: {"test/runner", "core/job_utils"}
     debug_inspect = false, -- Show debug output on screen (requires debug = true)
   }
 

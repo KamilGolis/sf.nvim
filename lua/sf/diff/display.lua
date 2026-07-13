@@ -1,7 +1,8 @@
 --- sf-nvim diff display module.
 -- Opens Neovim native diff views using in-memory scratch buffers.
--- Server content is loaded from memory (never on disk) to avoid LSP scanning temp files.
 -- @license MIT
+
+local Log = require("sf.core.log")
 
 local Display = {}
 local diff_augroup = nil
@@ -24,7 +25,7 @@ end
 --- @param server_label string Short label for the scratch buffer name (e.g. filename)
 function Display.open_file_diff(local_file, server_content, server_label)
   if vim.fn.filereadable(local_file) ~= 1 then
-    vim.notify("Local file not found: " .. local_file, vim.log.levels.ERROR)
+    Log.notify("Local file not found: " .. local_file, vim.log.levels.ERROR)
     return
   end
 

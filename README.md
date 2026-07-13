@@ -117,6 +117,7 @@ require("sf").setup({
   -- Debug mode
   debug = false,
   debug_inspect = false,
+  logger_scope = {},
 })
 ```
 
@@ -142,6 +143,7 @@ require("sf").setup({
 | `anonymous_log_dir` | `string` | `"anonymous"` | Subdirectory under log_dir for anonymous Apex logs |
 | `debug` | `boolean` | `false` | Enable debug logging to file |
 | `debug_inspect` | `boolean` | `false` | Show debug output on screen |
+| `logger_scope` | `table` | `{}` | List of module source patterns to include in debug output (empty = log all modules). Example: `{"test/runner", "core/job_utils"}` |
 
 ### Debug Configuration
 
@@ -164,6 +166,35 @@ require("sf").setup({
 ```
 
 View debug logs: `:lua Snacks.debug.log()`
+**Scope filtering** — limit debug output to specific modules:
+```lua
+require("sf").setup({
+  debug = true,
+  logger_scope = { "test/runner", "core/job_utils" }, -- only these modules
+})
+```
+
+Available module names for `logger_scope`:
+| Module path | Description |
+|-------------|-------------|
+| `apex/execute` | Anonymous Apex execution |
+| `config` | Plugin configuration |
+| `core/diagnostics` | Deploy diagnostics system |
+| `core/job_utils` | CLI job creation and management |
+| `core/utils` | Core utilities (project root, etc.) |
+| `debug/level` | Debug level create/edit/delete |
+| `debug/utils` | Debug level workflow (org/user/trace queries) |
+| `deploy/utils` | Deployment utilities |
+| `diff/runner` | Diff job orchestration |
+| `log/list` | Log listing and picking |
+| `log/utils` | Log processing utilities |
+| `org/utils` | Org utilities |
+| `retrieve/metadata` | Metadata retrieval |
+| `schema/refresh` | Schema fetch from org |
+| `schema/retrieve` | Schema record retrieval |
+| `test/coverage` | Code coverage display |
+| `test/runner` | Test execution runner |
+| `trace/flag` | Trace flag create/edit/delete |
 
 ## 🎮 Commands
 
@@ -255,8 +286,6 @@ All commands are available under the `:Sf` command with subcommands:
 
 
 ## 📖 Usage Examples
-
-
 
 ### Basic Workflow
 

@@ -1,6 +1,7 @@
 --- sf-nvim debug level management module
 -- @license MIT
 
+local Buffer = require("sf.core.buffer")
 local Config = require("sf.config")
 local Const = require("sf.const")
 local DebugPicker = require("sf.debug.picker")
@@ -81,13 +82,7 @@ local function render_buffer(buf, fields, is_edit)
   table.insert(lines, "  Press <C-s> to save changes")
   table.insert(lines, "  Press q to close this buffer")
 
-  vim.bo[buf].modifiable = true
-  vim.bo[buf].readonly = false
-  vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
-  vim.b[buf].debug_level_line_map = line_map
-  vim.bo[buf].modified = false
-  vim.bo[buf].readonly = true
-  vim.bo[buf].modifiable = false
+  Buffer.render_accordion(buf, lines, line_map, "debug_level_line_map")
 end
 
 --- Save the debug level buffer: serialize fields, persist JSON, run CLI create/update.
@@ -104,12 +99,12 @@ local function save_buffer(buf)
   local api_version = vim.b[buf].debug_level_api_version
 
   if not fields then
-    vim.notify(Const.SF_CLI_MESSAGES.DEBUG_LEVEL_NO_FIELD_DATA, vim.log.levels.ERROR)
+    Log.notify(Const.SF_CLI_MESSAGES.DEBUG_LEVEL_NO_FIELD_DATA, vim.log.levels.ERROR)
     return
   end
 
   if not target_org then
-    vim.notify(Const.SF_CLI_MESSAGES.DEBUG_LEVEL_NO_TARGET_ORG, vim.log.levels.ERROR)
+    Log.notify(Const.SF_CLI_MESSAGES.DEBUG_LEVEL_NO_TARGET_ORG, vim.log.levels.ERROR)
     return
   end
 
@@ -117,7 +112,7 @@ local function save_buffer(buf)
     local cli_valid, path, err = JobUtils.validate_cli_installation(Config:get_options().sf_cli_path)
 
     if not cli_valid or not path then
-      vim.notify(err or Const.SF_CLI_MESSAGES.NOT_FOUND, vim.log.levels.ERROR)
+      Log.notify(err or Const.SF_CLI_MESSAGES.NOT_FOUND, vim.log.levels.ERROR)
       return
     end
 
@@ -133,7 +128,7 @@ local function save_buffer(buf)
 
   local state = require("sf.core.state")
   if state.is_busy("debug") then
-    vim.notify(Const.SF_CLI_MESSAGES.DEBUG_LEVEL_SAVE_IN_PROGRESS, vim.log.levels.WARN)
+    Log.notify(Const.SF_CLI_MESSAGES.DEBUG_LEVEL_SAVE_IN_PROGRESS, vim.log.levels.WARN)
     return
   end
   state.start("debug")
@@ -164,7 +159,7 @@ local function save_buffer(buf)
         context.handle:finish()
         state.finish("debug")
 
-        vim.notify(context.success_message, vim.log.levels.INFO)
+        Log.notify(context.success_message, vim.log.levels.INFO)
         pcall(vim.api.nvim_buf_delete, buf, { force = true })
       else
         Log.deb("save_buffer on_success non-zero status", parsed)
@@ -209,29 +204,6 @@ local function save_buffer(buf)
     end,
   })
   job:start()
-end
-
---- Setup syntax highlighting for the debug level buffer.
---- @param buf number Buffer handle
-local function setup_syntax(buf)
-  vim.api.nvim_buf_call(buf, function()
-    vim.cmd([[
-      syntax clear
-      syntax match SfDebugLevelLabel /^\s\+\w.*$/ contains=@NoSpell
-      syntax match SfDebugLevelAccordion /^\s*>/ contained
-      syntax match SfDebugLevelValue /^\s*> \zs.*$/ contains=@NoSpell
-      syntax match SfDebugLevelReadOnly /(read-only)$/ contained
-      syntax match SfDebugLevelSeparator /^.*───.*$/
-      syntax match SfDebugLevelFooter /^  Press.*$/
-
-      highlight default link SfDebugLevelLabel Identifier
-      highlight default link SfDebugLevelAccordion Special
-      highlight default link SfDebugLevelValue String
-      highlight default link SfDebugLevelReadOnly Comment
-      highlight default link SfDebugLevelSeparator Comment
-      highlight default link SfDebugLevelFooter Comment
-    ]])
-  end)
 end
 
 --- Open the interactive debug level buffer.
@@ -293,7 +265,7 @@ local function open_level_buffer(existing_dl, extra)
 
     if field_def.readonly_edit and is_edit then
       -- Read-only in edit mode
-      vim.notify(Const.SF_CLI_MESSAGES.DEBUG_LEVEL_READONLY_WARN, vim.log.levels.WARN)
+      Log.notify(Const.SF_CLI_MESSAGES.DEBUG_LEVEL_READONLY_WARN, vim.log.levels.WARN)
       return
     end
 
@@ -332,7 +304,6 @@ local function open_level_buffer(existing_dl, extra)
   -- Open the buffer at 40% right vertical split
   vim.api.nvim_command("vertical rightbelow sbuffer " .. tostring(buf))
   vim.api.nvim_command("vertical resize " .. math.floor(vim.o.columns * 0.25))
-  setup_syntax(buf)
 end
 
 --- Sf debug level new — runs workflow then opens interactive buffer with defaults.
@@ -346,7 +317,7 @@ function Level.new_level()
     local cli_valid, executable_path, error_msg = JobUtils.validate_cli_installation(config.sf_cli_path)
 
     if not cli_valid or not executable_path then
-      vim.notify(error_msg or Const.SF_CLI_MESSAGES.NOT_FOUND, vim.log.levels.ERROR)
+      Log.notify(error_msg or Const.SF_CLI_MESSAGES.NOT_FOUND, vim.log.levels.ERROR)
       return
     end
 
@@ -369,7 +340,7 @@ function Level.delete_level()
     local debug_levels = data.debug_levels
 
     if not debug_levels or #debug_levels == 0 then
-      vim.notify(Const.SF_CLI_MESSAGES.DEBUG_LEVEL_NONE_FOUND, vim.log.levels.INFO)
+      Log.notify(Const.SF_CLI_MESSAGES.DEBUG_LEVEL_NONE_FOUND, vim.log.levels.INFO)
       return
     end
 
@@ -377,7 +348,7 @@ function Level.delete_level()
       local record_id = selected_dl.Id
 
       if not record_id then
-        vim.notify(Const.SF_CLI_MESSAGES.DEBUG_LEVEL_NO_ID, vim.log.levels.ERROR)
+        Log.notify(Const.SF_CLI_MESSAGES.DEBUG_LEVEL_NO_ID, vim.log.levels.ERROR)
 
         return
       end
@@ -386,12 +357,12 @@ function Level.delete_level()
       local cli_valid, executable_path, _ = JobUtils.validate_cli_installation(config.sf_cli_path)
 
       if not cli_valid or not executable_path then
-        vim.notify(Const.SF_CLI_MESSAGES.NOT_FOUND, vim.log.levels.ERROR)
+        Log.notify(Const.SF_CLI_MESSAGES.NOT_FOUND, vim.log.levels.ERROR)
         return
       end
       local state = require("sf.core.state")
       if state.is_busy("debug") then
-        vim.notify(Const.SF_CLI_MESSAGES.DEBUG_LEVEL_DELETE_IN_PROGRESS, vim.log.levels.WARN)
+        Log.notify(Const.SF_CLI_MESSAGES.DEBUG_LEVEL_DELETE_IN_PROGRESS, vim.log.levels.WARN)
         return
       end
       state.start("debug")
@@ -412,7 +383,7 @@ function Level.delete_level()
             context.handle:finish()
 
             state.finish("debug")
-            vim.notify(Const.SF_CLI_MESSAGES.DEBUG_LEVEL_DELETE_SUCCESS, vim.log.levels.INFO)
+            Log.notify(Const.SF_CLI_MESSAGES.DEBUG_LEVEL_DELETE_SUCCESS, vim.log.levels.INFO)
           else
             local err_msg = Const.SF_CLI_MESSAGES.DEBUG_LEVEL_DELETE_FAILED
 
@@ -456,7 +427,7 @@ function Level.edit_level()
     local debug_levels = data.debug_levels
 
     if not debug_levels or #debug_levels == 0 then
-      vim.notify(Const.SF_CLI_MESSAGES.DEBUG_LEVEL_NONE_FOUND, vim.log.levels.INFO)
+      Log.notify(Const.SF_CLI_MESSAGES.DEBUG_LEVEL_NONE_FOUND, vim.log.levels.INFO)
       return
     end
 
@@ -464,7 +435,7 @@ function Level.edit_level()
     local cli_valid, executable_path, _ = JobUtils.validate_cli_installation(config.sf_cli_path)
 
     if not cli_valid or not executable_path then
-      vim.notify(Const.SF_CLI_MESSAGES.NOT_FOUND, vim.log.levels.ERROR)
+      Log.notify(Const.SF_CLI_MESSAGES.NOT_FOUND, vim.log.levels.ERROR)
 
       return
     end

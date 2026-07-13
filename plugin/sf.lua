@@ -15,6 +15,7 @@ local Connector = require("sf.org.connect")
 local Deployment = require("sf.deploy.metadata")
 local Diagnostics = require("sf.core.diagnostics")
 local Diff = require("sf.diff.runner")
+local Log = require("sf.core.log")
 local LogList = require("sf.log.list")
 local RetrieveMetadata = require("sf.retrieve.metadata")
 local SchemaCleanup = require("sf.schema.cleanup")
@@ -198,17 +199,18 @@ local COMMANDS = {
   },
 }
 vim.api.nvim_create_user_command("Sf", function(opts)
+  Log.log("Sf command:", opts.fargs)
   local module = opts.fargs[1]
   local action = opts.fargs[2]
 
   if not module or not COMMANDS[module] then
-    vim.notify("Unknown subcommand: " .. (module or ""), vim.log.levels.ERROR)
+    Log.notify("Unknown subcommand: " .. (module or ""), vim.log.levels.ERROR)
     return
   end
 
   local actions = COMMANDS[module]
   if not action or not actions[action] then
-    vim.notify("Unknown subcommand: " .. (action or ""), vim.log.levels.ERROR)
+    Log.notify("Unknown subcommand: " .. (action or ""), vim.log.levels.ERROR)
     return
   end
 
@@ -216,7 +218,7 @@ vim.api.nvim_create_user_command("Sf", function(opts)
   if type(handler) == "table" then
     local sub = opts.fargs[3]
     if not sub or not handler[sub] then
-      vim.notify("Unknown subcommand: " .. (sub or ""), vim.log.levels.ERROR)
+      Log.notify("Unknown subcommand: " .. (sub or ""), vim.log.levels.ERROR)
       return
     end
     handler[sub]()

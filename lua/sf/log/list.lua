@@ -20,7 +20,7 @@ local retrieve_selected_log
 --- @param on_select function|nil Callback when a log is selected (receives item)
 local function display_log_picker(logs, on_select)
   if not logs or #logs == 0 then
-    vim.notify("No debug logs found", vim.log.levels.INFO)
+    Log.notify("No debug logs found", vim.log.levels.INFO)
     return
   end
 
@@ -30,7 +30,7 @@ local function display_log_picker(logs, on_select)
   -- Create picker for log selection with error handling
   Picker.create_log_selection_picker(logs, function(item)
     if not item then
-      vim.notify("No item selected", vim.log.levels.WARN)
+      Log.notify("No item selected", vim.log.levels.WARN)
       return
     end
 
@@ -47,7 +47,7 @@ function LogList.ensure_log_file(item, on_ready)
   local log_id = item.id
 
   if not log_id or log_id == "Unknown" then
-    vim.notify("Invalid log ID", vim.log.levels.ERROR)
+    Log.notify("Invalid log ID", vim.log.levels.ERROR)
     return
   end
 
@@ -56,7 +56,7 @@ function LogList.ensure_log_file(item, on_ready)
   local file = io.open(result_file, "r")
 
   if not file then
-    vim.notify(Const.SF_CLI_MESSAGES.LOG_NOT_IN_CACHE, vim.log.levels.WARN)
+    Log.notify(Const.SF_CLI_MESSAGES.LOG_NOT_IN_CACHE, vim.log.levels.WARN)
     LogList.list_logs()
     return
   end
@@ -67,7 +67,7 @@ function LogList.ensure_log_file(item, on_ready)
   local ok, parsed = pcall(vim.json.decode, content)
 
   if not ok or not parsed or not parsed.result then
-    vim.notify(Const.SF_CLI_MESSAGES.LOG_NOT_IN_CACHE, vim.log.levels.WARN)
+    Log.notify(Const.SF_CLI_MESSAGES.LOG_NOT_IN_CACHE, vim.log.levels.WARN)
     LogList.list_logs()
     return
   end
@@ -83,7 +83,7 @@ function LogList.ensure_log_file(item, on_ready)
   end
 
   if not found then
-    vim.notify(Const.SF_CLI_MESSAGES.LOG_NOT_IN_CACHE, vim.log.levels.WARN)
+    Log.notify(Const.SF_CLI_MESSAGES.LOG_NOT_IN_CACHE, vim.log.levels.WARN)
     LogList.list_logs()
     return
   end
@@ -106,14 +106,14 @@ function LogList.ensure_log_file(item, on_ready)
     local has_org, _, org_error = OrgUtils.check_default_org()
 
     if not has_org then
-      vim.notify(org_error or Const.SF_CLI_MESSAGES.NO_DEFAULT_ORG, vim.log.levels.ERROR)
+      Log.notify(org_error or Const.SF_CLI_MESSAGES.NO_DEFAULT_ORG, vim.log.levels.ERROR)
       return
     end
 
     local cli_valid, executable_path, cli_error = JobUtils.validate_cli_installation(Config:get_options().sf_cli_path)
 
     if not cli_valid or not executable_path then
-      vim.notify(cli_error or Const.SF_CLI_MESSAGES.NOT_FOUND, vim.log.levels.ERROR)
+      Log.notify(cli_error or Const.SF_CLI_MESSAGES.NOT_FOUND, vim.log.levels.ERROR)
       return
     end
 
@@ -139,7 +139,6 @@ function LogList.ensure_log_file(item, on_ready)
       end,
       on_error = function(job, return_val)
         local stderr = job:stderr_result()
-        Log.deb("Log retrieval error", { return_val = return_val, stderr = stderr })
         JobUtils.handle_cli_error(return_val, context)
       end,
     })
@@ -153,7 +152,7 @@ end
 retrieve_selected_log = function(item)
   LogList.ensure_log_file(item, function(log_file)
     vim.cmd("edit " .. vim.fn.fnameescape(log_file))
-    vim.notify("Log file opened: " .. log_file, vim.log.levels.INFO)
+    Log.notify("Log file opened: " .. log_file, vim.log.levels.INFO)
   end)
 end
 function LogList.list_logs(options)
@@ -166,7 +165,7 @@ function LogList.list_logs(options)
     local has_default_org, target_org, org_error = OrgUtils.check_default_org()
 
     if not has_default_org then
-      vim.notify(org_error or Const.SF_CLI_MESSAGES.NO_DEFAULT_ORG, vim.log.levels.ERROR)
+      Log.notify(org_error or Const.SF_CLI_MESSAGES.NO_DEFAULT_ORG, vim.log.levels.ERROR)
       return
     end
 
@@ -174,7 +173,7 @@ function LogList.list_logs(options)
     local cli_valid, executable_path, error_msg = JobUtils.validate_cli_installation(Config:get_options().sf_cli_path)
 
     if not cli_valid or not executable_path then
-      vim.notify(error_msg or Const.SF_CLI_MESSAGES.NOT_FOUND, vim.log.levels.ERROR)
+      Log.notify(error_msg or Const.SF_CLI_MESSAGES.NOT_FOUND, vim.log.levels.ERROR)
       return
     end
 
@@ -197,8 +196,6 @@ function LogList.list_logs(options)
     -- Create and start the job
     local job = JobUtils.create_cli_job(executable_path, args, {
       on_success = function(job, return_val)
-        Log.deb("Log list job success", { return_val = return_val })
-
         local result = table.concat(job:result(), "\n")
 
         Log.deb("Log list raw result:", result)
@@ -237,7 +234,6 @@ function LogList.list_logs(options)
       end,
       on_error = function(job, return_val)
         local stderr = job:stderr_result()
-        Log.deb("Log list job error", { return_val = return_val, stderr = stderr })
         JobUtils.handle_cli_error(return_val, context)
       end,
     })
@@ -263,7 +259,7 @@ function LogList.pick_cached_logs(on_select)
   local file = io.open(result_file, "r")
 
   if not file then
-    vim.notify("Cannot read cached log list file", vim.log.levels.ERROR)
+    Log.notify("Cannot read cached log list file", vim.log.levels.ERROR)
     return
   end
 
@@ -271,7 +267,7 @@ function LogList.pick_cached_logs(on_select)
   file:close()
 
   if not result or result == "" then
-    vim.notify("Cached log list file is empty", vim.log.levels.WARN)
+    Log.notify("Cached log list file is empty", vim.log.levels.WARN)
     return
   end
 
@@ -279,12 +275,12 @@ function LogList.pick_cached_logs(on_select)
   local success, logs, error_message = Utils.process_log_list(result)
 
   if not success or not logs then
-    vim.notify(error_message or "Failed to processed cached log list", vim.log.levels.ERROR)
+    Log.notify(error_message or "Failed to processed cached log list", vim.log.levels.ERROR)
     return
   end
 
   if #logs == 0 then
-    vim.notify("No debug logs found in cached file", vim.log.levels.WARN)
+    Log.notify("No debug logs found in cached file", vim.log.levels.WARN)
     return
   end
 

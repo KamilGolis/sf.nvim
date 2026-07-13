@@ -2,6 +2,7 @@
 -- @license MIT
 
 local Config = require("sf.config")
+local Log = require("sf.core.log")
 local PathUtils = require("sf.core.path_utils")
 local Snacks = require("snacks")
 local Utils = require("sf.log.utils")
@@ -19,7 +20,7 @@ function Cleanup.cleanup_logs()
     default = "N",
   }, function(value)
     if not value or not value:lower():match("^y") then
-      vim.notify("Log cleanup cancelled", vim.log.levels.INFO)
+      Log.notify("Log cleanup cancelled", vim.log.levels.INFO)
       return
     end
 
@@ -57,7 +58,7 @@ function Cleanup.cleanup_logs()
       table.insert(message_parts, "log list removed")
     end
 
-    vim.notify("Log cleanup complete: " .. table.concat(message_parts, ", "), vim.log.levels.INFO)
+    Log.notify("Log cleanup complete: " .. table.concat(message_parts, ", "), vim.log.levels.INFO)
   end)
 end
 

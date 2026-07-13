@@ -19,7 +19,7 @@ end
 --- @return table|nil logs Array of log items for picker, or nil if processing failed
 --- @return string|nil error_message Error message if processing fails
 function Utils.process_log_list(json_response)
-  Log.deb("Log list JSON response:", json_response)
+  Log.deb("Processing log list...")
 
   -- Validate and parse the JSON response
   local success, parsed, error_message = JobUtils.validate_json_response(json_response, {

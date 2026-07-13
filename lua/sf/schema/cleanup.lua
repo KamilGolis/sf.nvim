@@ -2,6 +2,7 @@
 -- @license MIT
 
 local Config = require("sf.config")
+local Log = require("sf.core.log")
 local PathUtils = require("sf.core.path_utils")
 local Snacks = require("snacks")
 
@@ -20,7 +21,7 @@ function Cleanup.cleanup_schema()
     default = "N",
   }, function(value)
     if not value or not value:lower():match("^y") then
-      vim.notify("Schema cleanup cancelled", vim.log.levels.INFO)
+      Log.notify("Schema cleanup cancelled", vim.log.levels.INFO)
       return
     end
 
@@ -48,7 +49,7 @@ function Cleanup.cleanup_schema()
     local message_parts = {}
     table.insert(message_parts, string.format("%d cached file(s) removed", deleted_count))
 
-    vim.notify("Schema cleanup complete: " .. table.concat(message_parts, ", "), vim.log.levels.INFO)
+    Log.notify("Schema cleanup complete: " .. table.concat(message_parts, ", "), vim.log.levels.INFO)
   end)
 end
 

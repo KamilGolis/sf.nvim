@@ -190,7 +190,7 @@ end
 --- @return string|nil error_message Error message if validation fails
 --- @usage local ok, data, err = JobUtils.validate_json_response('{"result": {}}', {result = "table"})
 function M.validate_json_response(json_string, expected_structure)
-  Log.deb("Validate JSON response", json_string)
+  Log.deb("Validating JSON response...")
 
   if not json_string or json_string == "" then
     return false, nil, "Empty JSON response"
@@ -202,7 +202,7 @@ function M.validate_json_response(json_string, expected_structure)
     return false, nil, Const.SF_CLI_MESSAGES.JSON_PARSE_ERROR
   end
 
-  Log.deb("Parsed JSON:", parsed)
+  Log.deb("Parsed JSON: OK")
 
   -- If expected structure is provided, validate it
   if expected_structure then
@@ -234,8 +234,7 @@ function M.handle_cli_error(_, context, custom_error_message)
   context.handle:finish()
 
   -- Log the error for debugging
-  vim.notify(error_message, vim.log.levels.ERROR)
-  Log.deb("CLI Error", error_message)
+  Log.notify(error_message, vim.log.levels.ERROR)
   Log.trace()
 end
 
@@ -250,14 +249,13 @@ function M.notify_operation_result(success, context, details)
     context.handle:finish()
 
     local message = details or context.success_message
-    vim.notify(message, vim.log.levels.INFO)
+    Log.notify(message, vim.log.levels.INFO)
   else
     context.handle:report({ message = context.failure_message, percentage = 100 })
     context.handle:finish()
 
     local message = details or context.failure_message
-    vim.notify(message, vim.log.levels.ERROR)
-    Log.deb("Job failure message", message)
+    Log.notify(message, vim.log.levels.ERROR)
   end
 end
 

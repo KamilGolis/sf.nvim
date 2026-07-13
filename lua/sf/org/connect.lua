@@ -1,6 +1,7 @@
 local Config = require("sf.config")
 local Const = require("sf.const")
 local JobUtils = require("sf.core.job_utils")
+local Log = require("sf.core.log")
 local OrgUtils = require("sf.org.utils")
 
 --- Connect class for managing Salesforce CLI operations and org connections
@@ -33,7 +34,7 @@ local function check_sf_cli(callback)
   local cli_valid, executable_path, error_msg = JobUtils.validate_cli_installation(Config:get_options().sf_cli_path)
   if not cli_valid or not executable_path then
     callback(false)
-    vim.notify(error_msg or Const.SF_CLI_MESSAGES.NOT_FOUND, vim.log.levels.ERROR)
+    Log.notify(error_msg or Const.SF_CLI_MESSAGES.NOT_FOUND, vim.log.levels.ERROR)
     return
   end
 
@@ -99,7 +100,7 @@ function Connect:select_default_org()
     -- Validate CLI installation using utility function
     local cli_valid, executable_path, error_msg = JobUtils.validate_cli_installation(Config:get_options().sf_cli_path)
     if not cli_valid or not executable_path then
-      vim.notify(error_msg or Const.SF_CLI_MESSAGES.NOT_FOUND, vim.log.levels.ERROR)
+      Log.notify(error_msg or Const.SF_CLI_MESSAGES.NOT_FOUND, vim.log.levels.ERROR)
       return
     end
 

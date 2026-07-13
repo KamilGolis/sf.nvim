@@ -2,6 +2,7 @@
 -- @license MIT
 
 local Const = require("sf.const")
+local Log = require("sf.core.log")
 local Snacks = require("snacks")
 
 local Picker = {}
@@ -11,7 +12,7 @@ local Picker = {}
 --- @param callback function Callback function to handle script selection
 function Picker.create_scripts_picker(items, callback)
   if not items or #items == 0 then
-    vim.notify("No scripts available", vim.log.levels.INFO)
+    Log.notify("No scripts available", vim.log.levels.INFO)
     return
   end
 
@@ -55,8 +56,8 @@ function Picker.create_scripts_picker(items, callback)
       table.insert(script_list, item.file_name)
     end
 
-    vim.notify("Failed to create picker: " .. tostring(err), vim.log.levels.ERROR)
-    vim.notify("Available scripts:\n" .. table.concat(script_list, "\n"), vim.log.levels.INFO)
+    Log.notify("Failed to create picker: " .. tostring(err), vim.log.levels.ERROR)
+    Log.notify("Available scripts:\n" .. table.concat(script_list, "\n"), vim.log.levels.INFO)
   end
 end
 
