@@ -43,6 +43,11 @@ describe("dap-debug-log", function()
   describe("Dap.copy_log_for_debug", function()
     local temp_src
 
+    before_each(function()
+      local Config = require("sf.config")
+      Config:setup({ dap = { adapter_path = "/tmp/fake-dap-adapter.js" } })
+    end)
+
     after_each(function()
       if temp_src then
         vim.fn.delete(temp_src)
@@ -102,6 +107,43 @@ describe("dap-debug-log", function()
       eq(result, false, "copy_log_for_debug should return false for empty file")
 
       local found = Helper.mock_notify.find("DAP: log file is empty")
+      expect.no_equality(found, nil)
+    end)
+  end)
+
+  describe("Config dap.lsp_client_name", function()
+    it("defaults to apex_ls", function()
+      local Config = require("sf.config")
+      local fresh = Config:new()
+      eq(fresh:get_options().dap.lsp_client_name, "apex_ls")
+    end)
+  end)
+
+  describe("Dap.is_configured", function()
+    it("returns false when adapter_path is nil", function()
+      local Dap = require("sf.dap")
+      eq(Dap.is_configured(), false)
+    end)
+  end)
+
+  describe("Dap.copy_log_for_debug guard", function()
+    local temp_src
+
+    after_each(function()
+      if temp_src then
+        vim.fn.delete(temp_src)
+      end
+    end)
+
+    it("returns false and warns when adapter_path is nil", function()
+      local Dap = require("sf.dap")
+      temp_src = vim.fn.tempname()
+      vim.fn.writefile({ "test" }, temp_src)
+
+      local result = Dap.copy_log_for_debug(temp_src)
+      eq(result, false, "copy_log_for_debug should return false when adapter_path is nil")
+
+      local found = Helper.mock_notify.find("not configured")
       expect.no_equality(found, nil)
     end)
   end)

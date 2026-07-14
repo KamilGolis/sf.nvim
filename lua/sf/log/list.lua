@@ -300,7 +300,9 @@ local retrieve_selected_log_for_debug = function(item)
     vim.cmd("edit " .. vim.fn.fnameescape(log_file))
     Log.notify("Log file opened: " .. log_file, vim.log.levels.INFO)
     local Dap = require("sf.dap")
-    Dap.copy_log_for_debug(log_file)
+    if Dap.copy_log_for_debug(log_file) then
+      Dap.launch()
+    end
   end)
 end
 

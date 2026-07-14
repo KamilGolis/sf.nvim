@@ -30,6 +30,7 @@ function Config:new()
     dap = {
       adapter_path = nil, -- absolute path to apexReplayDebug.js
       port = 4712, -- DAP server port
+      lsp_client_name = "apex_ls", -- LSP client name for breakpoint info (apex_ls or apex_ls_ts etc.)
     },
     debug = false, -- Debug mode (enables logging to file)
     logger_scope = {}, -- Module source patterns to log (empty = log everything). Example: {"test/runner", "core/job_utils"}

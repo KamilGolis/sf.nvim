@@ -149,6 +149,7 @@ require("sf").setup({
 | `scripts_dir` | `string` | `"scripts"` | Directory for persistent Apex scripts under project root |
 | `anonymous_log_dir` | `string` | `"anonymous"` | Subdirectory under log_dir for anonymous Apex logs |
 | `dap_log_dir` | `string` | `nil` | Directory for DAP debug logs (defaults to `log_dir/dap`) |
+| `dap.lsp_client_name` | `string` | `"apex_ls"` | Apex LSP client name for breakpoint resolution (e.g. `apex_ls` or `apex_ls_ts`) |
 | `debug` | `boolean` | `false` | Enable debug logging to file |
 | `debug_inspect` | `boolean` | `false` | Show debug output on screen |
 | `logger_scope` | `table` | `{}` | List of module source patterns to include in debug output (empty = log all modules). Example: `{"test/runner", "core/job_utils"}` |
@@ -293,6 +294,73 @@ All commands are available under the `:Sf` command with subcommands:
 :Sf debug trace delete  " Delete a trace flag
 ```
 
+
+
+## 🐛 Apex Replay Debugger (DAP)
+
+sf.nvim integrates with nvim-dap to provide Apex Replay Debugger support. This allows you to debug Apex code by replaying debug logs through the Salesforce Apex Debugger adapter.
+
+### Prerequisites
+
+- [nvim-dap](https://github.com/mfussenegger/nvim-dap) plugin installed
+- [Apex Language Server](https://github.com/forcedotcom/salesforcedx-vscode/tree/develop/packages/salesforcedx-vscode-apex) (`apex_ls`) — the official Java-based LSP for Apex. Install via [Mason](https://github.com/williamboman/mason.nvim) (`:MasonInstall apex-language-server`) or as a standalone JAR.
+- [Apex Replay Debugger adapter](https://github.com/forcedotcom/salesforcedx-vscode/tree/develop/packages/salesforcedx-apex-replay-debugger) — the `apexReplayDebug.js` adapter script from the official Salesforce Extension Pack for VS Code.
+
+### Adapter Setup
+
+The debug adapter is part of the [salesforcedx-vscode](https://github.com/forcedotcom/salesforcedx-vscode) monorepo, written in TypeScript. It must be compiled to JavaScript before use:
+
+```bash
+# Clone the repo
+git clone https://github.com/forcedotcom/salesforcedx-vscode.git
+cd salesforcedx-vscode
+
+# Install dependencies and compile
+npm install
+npm run compile
+
+# The compiled adapter is at:
+# packages/salesforcedx-apex-replay-debugger/out/src/adapter/apexReplayDebug.js
+```
+
+The `adapter_path` config option must point to the compiled `.js` file. Example:
+
+```lua
+adapter_path = "/home/user/salesforcedx-vscode/packages/salesforcedx-apex-replay-debugger/out/src/adapter/apexReplayDebug.js"
+```
+
+### Configuration
+
+```lua
+require("sf").setup({
+  dap = {
+    adapter_path = "/path/to/apexReplayDebug.js",   -- REQUIRED: absolute path to the compiled adapter
+    port = 4712,                                    -- DAP adapter port (default)
+    lsp_client_name = "apex_ls",                    -- LSP client name (apex_ls or apex_ls_ts)
+  },
+  dap_log_dir = nil,                                -- defaults to {cache_path}/logs/dap
+})
+```
+
+If `adapter_path` is left as `nil`, all DAP functionality is disabled (no-op).
+
+### Workflow
+
+1. Set breakpoints in your Apex code using nvim-dap (`:DapToggleBreakpoint`)
+2. Enable debug logging for your user in Salesforce (`:Sf debug trace new`)
+3. Reproduce the issue in Salesforce (execute the Apex code you want to debug)
+4. Run `:Sf log debug` — this resumes cached logs, downloads the selected one, copies it to the DAP log directory, and automatically launches the Apex Replay Debugger session
+5. Step through your code with standard nvim-dap controls
+
+### Manual DAP Launch
+
+If you already have a debug log in the DAP directory, you can launch the debugger manually:
+
+```vim
+:lua require("dap").continue()
+```
+
+The `Sf log debug` command does everything automatically: select log → copy → launch.
 
 ## 📖 Usage Examples
 

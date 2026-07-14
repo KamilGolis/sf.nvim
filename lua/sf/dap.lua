@@ -2,6 +2,7 @@
 -- @license MIT
 
 local Config = require("sf.config")
+local Const = require("sf.const")
 local PathUtils = require("sf.core.path_utils")
 
 local Dap = {}
@@ -10,6 +11,8 @@ local Dap = {}
 --- @param dap_opts table Options: { adapter_path, port }
 function Dap.setup(dap_opts)
   dap_opts = dap_opts or {}
+  -- "apex_ls" is the default LSP tho be used. It is required to run DAP.
+  local lsp_name = dap_opts.lsp_client_name or "apex_ls"
 
   local ok, dap = pcall(require, "dap")
   if not ok then
@@ -53,13 +56,13 @@ function Dap.setup(dap_opts)
       stopOnEntry = true,
       trace = true,
       lineBreakpointInfo = function()
-        for _, client in pairs(vim.lsp.get_clients({ name = "apex_ls" })) do
+        for _, client in pairs(vim.lsp.get_clients({ name = lsp_name })) do
           local done = false
           local result = nil
 
           client.request("debugger/lineBreakpoints", {}, function(err, res)
             if err then
-              vim.notify("Apex LSP breakpoint info error: " .. vim.inspect(err), vim.log.levels.ERROR)
+              vim.notify(Const.DAP_MESSAGES.LSP_BREAKPOINT_ERROR .. vim.inspect(err), vim.log.levels.ERROR)
             end
             done = true
             result = res
@@ -72,7 +75,7 @@ function Dap.setup(dap_opts)
           return result
         end
 
-        vim.notify("Apex Language Server is not available.", vim.log.levels.WARN)
+        vim.notify(Const.DAP_MESSAGES.LSP_NOT_AVAILABLE, vim.log.levels.WARN)
       end,
       projectPath = function()
         return vim.fn.getcwd()
@@ -81,10 +84,22 @@ function Dap.setup(dap_opts)
   }
 end
 
+--- Check if nvim-dap is available and adapter_path is configured
+--- @return boolean
+function Dap.is_configured()
+  local ok, _ = pcall(require, "dap")
+  return ok and Config:get_options().dap.adapter_path ~= nil
+end
+
 --- Copy a log file to the DAP debug directory (dap/current.log)
 --- @param log_path string Path to the log file to copy
 --- @return boolean success
 function Dap.copy_log_for_debug(log_path)
+  if not Config:get_options().dap.adapter_path then
+    vim.notify(Const.DAP_MESSAGES.NOT_CONFIGURED, vim.log.levels.WARN)
+    return false
+  end
+
   local dest_dir = Config:get_options().dap_log_dir
   local dest_file = PathUtils.join(dest_dir, "current.log")
 
@@ -93,13 +108,30 @@ function Dap.copy_log_for_debug(log_path)
   local lines = vim.fn.readfile(log_path)
 
   if #lines == 0 then
-    vim.notify("DAP: log file is empty or unreadable", vim.log.levels.ERROR)
+    vim.notify(Const.DAP_MESSAGES.LOG_EMPTY, vim.log.levels.ERROR)
     return false
   end
 
   vim.fn.writefile(lines, dest_file)
-  vim.notify("DAP: log copied to " .. dest_file, vim.log.levels.INFO)
+  vim.notify(Const.DAP_MESSAGES.LOG_COPIED .. dest_file, vim.log.levels.INFO)
 
+  return true
+end
+
+--- Launch the Apex Replay Debugger session
+--- @return boolean success
+function Dap.launch()
+  if not Dap.is_configured() then
+    vim.notify(Const.DAP_MESSAGES.CANNOT_LAUNCH, vim.log.levels.WARN)
+    return false
+  end
+  local dap = require("dap")
+  local configs = dap.configurations.apex
+  if not configs or #configs == 0 then
+    vim.notify(Const.DAP_MESSAGES.NO_CONFIGURATION, vim.log.levels.ERROR)
+    return false
+  end
+  dap.run(configs[1])
   return true
 end
 
