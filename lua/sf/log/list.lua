@@ -293,4 +293,22 @@ function LogList.resume_logs()
   LogList.pick_cached_logs(retrieve_selected_log)
 end
 
+--- Retrieve a debug log and copy it to the DAP directory.
+--- @param item table The selected picker item
+local retrieve_selected_log_for_debug = function(item)
+  LogList.ensure_log_file(item, function(log_file)
+    vim.cmd("edit " .. vim.fn.fnameescape(log_file))
+    Log.notify("Log file opened: " .. log_file, vim.log.levels.INFO)
+    local Dap = require("sf.dap")
+    if Dap.copy_log_for_debug(log_file) then
+      Dap.launch()
+    end
+  end)
+end
+
+--- Display cached debug logs and copy the selected one to the DAP directory.
+function LogList.debug_logs()
+  LogList.pick_cached_logs(retrieve_selected_log_for_debug)
+end
+
 return LogList

@@ -235,6 +235,17 @@ M.SF_CLI_MESSAGES = {
   APEX_LIST_DIR_MISSING = "Scripts directory does not exist.",
 }
 
+--- DAP notification message constants
+M.DAP_MESSAGES = {
+  LSP_BREAKPOINT_ERROR = "Apex LSP breakpoint info error: ",
+  LSP_NOT_AVAILABLE = "Apex Language Server is not available.",
+  NOT_CONFIGURED = "DAP: not configured (set dap.adapter_path)",
+  LOG_EMPTY = "DAP: log file is empty or unreadable",
+  LOG_COPIED = "DAP: log copied to ",
+  CANNOT_LAUNCH = "DAP: cannot launch — nvim-dap or adapter_path not configured",
+  NO_CONFIGURATION = "DAP: no Apex Replay configuration found",
+}
+
 --- SOQL queries used for CLI data operations
 M.QUERIES = {
   DEBUG_LEVEL_SELECT = "SELECT Id,ApexCode,ApexProfiling,Callout,CreatedDate,DataAccess,Database,DeveloperName,Language,MasterLabel,Nba,System,Validation,Visualforce,Wave,Workflow FROM DebugLevel",

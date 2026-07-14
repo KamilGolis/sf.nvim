@@ -137,6 +137,9 @@ local COMMANDS = {
     resume = function()
       LogList.resume_logs()
     end,
+    debug = function()
+      LogList.debug_logs()
+    end,
     cleanup = function()
       Cleanup.cleanup_logs()
     end,
