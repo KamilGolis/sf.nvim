@@ -3,7 +3,7 @@
 
 local Config = require("sf.config")
 local JobUtils = require("sf.core.job_utils")
-local Log = require("sf.core.log")
+local Log = require("sf.core.log").scoped("log/utils")
 
 local Utils = {}
 

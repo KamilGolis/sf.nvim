@@ -2,7 +2,7 @@ local Progress = require("sf.core.progress")
 
 local Const = require("sf.const")
 local Diagnostics = require("sf.core.diagnostics")
-local Log = require("sf.core.log")
+local Log = require("sf.core.log").scoped("deploy/utils")
 local State = require("sf.core.state")
 
 local DeployUtils = {}

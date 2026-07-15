@@ -1,5 +1,5 @@
 local Const = require("sf.const")
-local Log = require("sf.core.log")
+local Log = require("sf.core.log").scoped("core/job_utils")
 local Progress = require("sf.core.progress")
 
 local M = {}

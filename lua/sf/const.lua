@@ -233,6 +233,32 @@ M.SF_CLI_MESSAGES = {
   APEX_EXECUTE_CLEANUP_SUCCESS = "Temp files cleaned up.",
   APEX_LIST_NO_SCRIPTS = "No Apex scripts found in scripts directory.",
   APEX_LIST_DIR_MISSING = "Scripts directory does not exist.",
+  -- Faux class cache messages
+  SOBJECT_REBUILD_TITLE = "Rebuilding sObject cache",
+  SOBJECT_REBUILD_SUCCESS = "sObject cache rebuild complete.",
+  SOBJECT_REBUILD_FAILED = "sObject cache rebuild failed.",
+  SOBJECT_LISTING = "Listing sObjects...",
+  SOBJECT_LIST_FAILED = "Failed to list sObjects.",
+  SOBJECT_LIST_PARSE_FAILED = "Failed to parse sObject list.",
+  SOBJECT_LIST_EMPTY = "No sObjects found in org.",
+  SOBJECT_REBUILD_COMPLETE_FORMAT = "Cache rebuild complete. %d standard, %d custom sObjects.",
+  SOBJECT_DESCRIBE_PROGRESS_FORMAT = "Describing (%d/%d): %s",
+  SOBJECT_WRITE_FAILED_FORMAT = "Failed to write %s: %s",
+  SOBJECT_DESCRIBE_FAILED_FORMAT = "Failed to describe %s: empty or invalid response",
+  SOBJECT_DESCRIBE_ERROR_FORMAT = "Failed to describe %s (exit %d): %s",
+  SOBJECT_CLEARED_FORMAT = "Cleared %d faux class files from %s",
+  SOBJECT_CACHE_STATUS_FORMAT = "sObject cache (%s): %d standard, %d custom, %d total files",
+  -- REST credential messages
+  REST_ORG_DISPLAY_FAILED = "org display failed",
+  REST_PARSE_ORG_INFO_FAILED = "parse org info failed",
+  REST_TOKEN_FETCH_FAILED = "token fetch failed",
+  REST_PARSE_TOKEN_FAILED = "parse token failed",
+  REST_LIST_SOBJECTS_FAILED = "list sobjects REST failed",
+  REST_PARSE_LIST_FAILED = "parse sobjects list failed",
+  REST_BATCH_DESCRIBE_FAILED = "Batch describe failed: ",
+  REST_CREDENTIALS_FAILED_PREFIX = "Failed: ",
+  -- Batch progress format
+  SOBJECT_BATCH_PROGRESS_FORMAT = "Batch %d/%d (%d objects)",
 }
 
 --- DAP notification message constants
@@ -277,6 +303,71 @@ M.SF_ACTIONS = {
   -- Picker
   PICKER_TITLE = "Test Actions",
 }
+
+--- sObject directory constants (matching VS Code .sfdx/tools/sobjects/ layout)
+M.SOBJECTS_DIR = ".sfdx/tools/sobjects"
+M.STANDARD_DIR = "standardObjects"
+M.CUSTOM_DIR = "customObjects"
+M.SOBJECT_BATCH_SIZE = 25
+
+--- Salesforce REST API constants
+M.REST = {
+  SERVICES_DATA = "/services/data",
+  COMPOSITE_BATCH = "composite/batch",
+  SOBJECTS = "sobjects",
+  DESCRIBE = "describe",
+  VERSION_PREFIX = "v",
+  BATCH_REQUESTS = "batchRequests",
+  METHOD_GET = "GET",
+  METHOD_POST = "POST",
+  HEADER_AUTH = "Authorization: Bearer ",
+  HEADER_CONTENT = "Content-Type: application/json",
+  DATA_BINARY = "--data-binary",
+  STDIN = "@-",
+}
+
+--- REST API CLI wrappers
+M.REST_CLI = {
+  CURL = "curl",
+  FLAGS = { "-s", "-S", "-f" },
+}
+
+--- REST API SF CLI commands for credential retrieval
+M.REST_SF = {
+  ORG_DISPLAY = { CMD = "org display", ARGS = { ORG = "-o", JSON = "--json" } },
+  ACCESS_TOKEN = { CMD = "org auth show-access-token", ARGS = { ORG = "-o", JSON = "--json" } },
+}
+
+--- Field type to Apex type mapping table
+--- Ported from salesforcedx-vscode-metadata/src/sobjects/declarationGenerator.ts
+M.TYPE_MAPPING = {
+  string = "String",
+  double = "Double",
+  reference = "",
+  boolean = "Boolean",
+  currency = "Decimal",
+  date = "Date",
+  datetime = "Datetime",
+  email = "String",
+  location = "Location",
+  percent = "Double",
+  phone = "String",
+  picklist = "String",
+  multipicklist = "String",
+  textarea = "String",
+  encryptedstring = "String",
+  url = "String",
+  id = "Id",
+  base64 = "Blob",
+  address = "Address",
+  int = "Integer",
+  anyType = "Object",
+  combobox = "String",
+  time = "Time",
+  complexvalue = "Object",
+}
+
+M.MANIFEST_THRESHOLD = 10
 
 --- Salesforce CLI commands and their arguments
 --- Supported commands:
@@ -384,6 +475,26 @@ M.SF_CLI = {
         METADATA_TYPE = "-m",
         JSON = "--json",
         TARGET_ORG = "-o",
+      },
+    },
+  },
+  SOBJECT = {
+    LIST = {
+      CMD = "sobject list",
+      ARGS = {
+        SOBJECT = "-s",
+        TARGET_ORG = "-o",
+        JSON = "--json",
+        API_VERSION = "--api-version",
+      },
+    },
+    DESCRIBE = {
+      CMD = "sobject describe",
+      ARGS = {
+        SOBJECT = "-s",
+        TARGET_ORG = "-o",
+        JSON = "--json",
+        API_VERSION = "--api-version",
       },
     },
   },
@@ -840,6 +951,44 @@ function M.get_sgd_delta_args(output_dir)
   return args
 end
 
+--- Constructs arguments for sf sobject list command
+--- @param sobject_filter string Category of objects to list (default "ALL")
+--- @param api_version string|nil Optional API version
+--- @param target_org string|nil Optional target org username
+--- @return table Complete argument list for sf sobject list command
+function M.get_sobject_list_args(sobject_filter, api_version, target_org)
+  local args = {}
+  vim.list_extend(args, split_cmd(M.SF_CLI.SOBJECT.LIST.CMD))
+  vim.list_extend(args, { M.SF_CLI.SOBJECT.LIST.ARGS.SOBJECT, sobject_filter or "all" })
+  if target_org then
+    vim.list_extend(args, { M.SF_CLI.SOBJECT.LIST.ARGS.TARGET_ORG, target_org })
+  end
+  if api_version then
+    vim.list_extend(args, { M.SF_CLI.SOBJECT.LIST.ARGS.API_VERSION, api_version })
+  end
+  vim.list_extend(args, { M.SF_CLI.SOBJECT.LIST.ARGS.JSON })
+  return args
+end
+
+--- Constructs arguments for sf sobject describe command
+--- @param sobject_name string The API name of the sObject to describe
+--- @param api_version string|nil Optional API version
+--- @param target_org string|nil Optional target org username
+--- @return table Complete argument list for sf sobject describe command
+function M.get_sobject_describe_args(sobject_name, api_version, target_org)
+  local args = {}
+  vim.list_extend(args, split_cmd(M.SF_CLI.SOBJECT.DESCRIBE.CMD))
+  vim.list_extend(args, { M.SF_CLI.SOBJECT.DESCRIBE.ARGS.SOBJECT, sobject_name })
+  if target_org then
+    vim.list_extend(args, { M.SF_CLI.SOBJECT.DESCRIBE.ARGS.TARGET_ORG, target_org })
+  end
+  if api_version then
+    vim.list_extend(args, { M.SF_CLI.SOBJECT.DESCRIBE.ARGS.API_VERSION, api_version })
+  end
+  vim.list_extend(args, { M.SF_CLI.SOBJECT.DESCRIBE.ARGS.JSON })
+  return args
+end
+
 --- Constructs arguments for sf project retrieve start using individual -m flags.
 --- Each item is formatted as "<xmlName>:<fullName>" (e.g. "ApexClass:MyClass").
 --- @param items table Array of { fullName = "...", type_name = "..." } items
@@ -1130,5 +1279,4 @@ function M.get_apex_run_args(file_path, api_version, target_org)
   return args
 end
 
-M.MANIFEST_THRESHOLD = 10
 return M
