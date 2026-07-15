@@ -15,7 +15,7 @@ local Connector = require("sf.org.connect")
 local Deployment = require("sf.deploy.metadata")
 local Diagnostics = require("sf.core.diagnostics")
 local Diff = require("sf.diff.runner")
-local Log = require("sf.core.log")
+local Log = require("sf.core.log").scoped("plugin")
 local LogList = require("sf.log.list")
 local RetrieveMetadata = require("sf.retrieve.metadata")
 local SchemaCleanup = require("sf.schema.cleanup")
@@ -162,6 +162,17 @@ local COMMANDS = {
       end,
       list = function()
         ApexExecute:execute_list()
+      end,
+    },
+    cache = {
+      rebuild = function()
+        require("sf.faux.runner"):rebuild()
+      end,
+      clear = function()
+        require("sf.faux.runner"):clear()
+      end,
+      status = function()
+        require("sf.faux.runner"):status()
       end,
     },
   },

@@ -1,4 +1,4 @@
-local Log = require("sf.core.log")
+local Log = require("sf.core.log").scoped("core/utils")
 local PathUtils = require("sf.core.path_utils")
 
 local M = {}

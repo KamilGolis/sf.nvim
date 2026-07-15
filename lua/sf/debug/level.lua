@@ -7,7 +7,7 @@ local Const = require("sf.const")
 local DebugPicker = require("sf.debug.picker")
 local DebugUtils = require("sf.debug.utils")
 local JobUtils = require("sf.core.job_utils")
-local Log = require("sf.core.log")
+local Log = require("sf.core.log").scoped("debug/level")
 
 local Level = {}
 

@@ -6,6 +6,8 @@
 --- process is spawned — the client is created entirely in-process.
 
 local M = {}
+local Config = require("sf.config")
+local Log = require("sf.core.log")
 
 local null_client_id = nil
 local token_counter = 0
@@ -15,7 +17,7 @@ local has_lsp_status = nil -- lazily resolved
 --- @return boolean
 local function check_lsp_status_available()
   if has_lsp_status == nil then
-    has_lsp_status = type(vim.lsp.status) == "function"
+    has_lsp_status = type(vim.lsp.status) == "function" and type(vim.lsp.handlers["$/progress"]) == "function"
   end
 
   return has_lsp_status
@@ -128,7 +130,9 @@ function M.create_handle(params)
   }
 
   -- Notify begin
-  pcall(vim.lsp.handlers["$/progress"], nil, {
+  local handle_title = params.title
+
+  vim.lsp.handlers["$/progress"](nil, {
     token = token,
     value = {
       kind = "begin",
@@ -137,27 +141,43 @@ function M.create_handle(params)
     },
   }, ctx)
 
+  do
+    local status = vim.lsp.status()
+    local diag_msg = string.format(
+      "[progress diag] ensure_client=%s client_id=%d status='%s'",
+      tostring(ensure_client()),
+      null_client_id or -1,
+      status or "nil"
+    )
+    Log.deb(diag_msg)
+    if Config:get_options().debug_inspect then
+      vim.notify(diag_msg, vim.log.levels.INFO)
+    end
+  end
+
   return {
     report = function(report_params)
-      local value = { kind = "report" }
-
+      local value = {
+        kind = "report",
+        title = handle_title,
+      }
       if report_params.message then
         value.message = report_params.message
       end
-
       if report_params.percentage ~= nil then
         value.percentage = report_params.percentage
       end
-
-      pcall(vim.lsp.handlers["$/progress"], nil, {
+      Log.deb("[progress] report", { message = report_params.message, percentage = report_params.percentage })
+      vim.lsp.handlers["$/progress"](nil, {
         token = token,
         value = value,
       }, ctx)
     end,
     finish = function()
-      pcall(vim.lsp.handlers["$/progress"], nil, {
+      Log.deb("[progress] finish", handle_title)
+      vim.lsp.handlers["$/progress"](nil, {
         token = token,
-        value = { kind = "end" },
+        value = { kind = "end", title = handle_title },
       }, ctx)
     end,
   }

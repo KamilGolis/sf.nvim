@@ -1,7 +1,7 @@
 local Config = require("sf.config")
 local Const = require("sf.const")
 local JobUtils = require("sf.core.job_utils")
-local Log = require("sf.core.log")
+local Log = require("sf.core.log").scoped("org/utils")
 local PathUtils = require("sf.core.path_utils")
 local Utils = require("sf.core.utils")
 

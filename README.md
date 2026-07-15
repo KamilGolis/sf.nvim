@@ -37,6 +37,7 @@ As a Salesforce developer, I’ve mostly used VS Code and WebStorm with Illumina
 - [Salesforce CLI](https://developer.salesforce.com/tools/salesforcecli) (`sf` command)
 - [Snacks.nvim](https://github.com/folke/snacks.nvim) - For UI components
 - **Optional:** [sgd plugin](https://github.com/scolladon/sfdx-git-delta) - For delta deployments of changed files
+- **Optional:** [curl](https://curl.se/) - For batch REST API calls when rebuilding sObject cache (auto-detected, ~10x faster than sequential CLI)
 - **Optional:** Progress is displayed via Neovim's built-in LSP statusline indicator. Add `%{%v:lua.vim.lsp.status()%}` to your statusline if not already present.
 
 ## 📦 Installation
@@ -192,6 +193,7 @@ Available module names for `logger_scope`:
 | `core/job_utils` | CLI job creation and management |
 | `core/utils` | Core utilities (project root, etc.) |
 | `debug/level` | Debug level create/edit/delete |
+| `faux/runner` | sObject cache rebuild orchestration |
 | `debug/utils` | Debug level workflow (org/user/trace queries) |
 | `deploy/utils` | Deployment utilities |
 | `diff/runner` | Diff job orchestration |
