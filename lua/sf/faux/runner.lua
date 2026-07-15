@@ -9,7 +9,6 @@
 --   4. Output lands in .sfdx/tools/sobjects/{standardObjects,customObjects}/
 
 local Config = require("sf.config")
-local Connector = require("sf.org.connect")
 local Const = require("sf.const")
 local DeclGen = require("sf.faux.declgen")
 local FauxGen = require("sf.faux.fauxgen")
@@ -442,19 +441,20 @@ end
 
 --- Run rebuild: list all sObjects, describe each, generate & write faux classes
 function Runner:rebuild()
-  Connector:check_cli(function()
+  local Async = require("sf.core.async")
+
+  Async.async(function()
+    if not Async.await_cli_check() then
+      return
+    end
+
     local has_org, target_org, org_error = OrgUtils.check_default_org()
     if not has_org then
       Log.notify(org_error or Const.SF_CLI_MESSAGES.NO_DEFAULT_ORG, vim.log.levels.ERROR)
       return
     end
 
-    local cli_valid, executable_path, error_msg = JobUtils.validate_cli_installation(Config:get_options().sf_cli_path)
-    if not cli_valid or not executable_path then
-      Log.notify(error_msg or Const.SF_CLI_MESSAGES.NOT_FOUND, vim.log.levels.ERROR)
-      return
-    end
-
+    local executable_path = Config:get_options().sf_cli_path or "sf"
     local context = JobUtils.create_progress_context(
       Const.SF_CLI_MESSAGES.SOBJECT_REBUILD_TITLE,
       Const.SF_CLI_MESSAGES.SOBJECT_REBUILD_SUCCESS,
@@ -464,64 +464,70 @@ function Runner:rebuild()
     -- Step 1: List all sObjects
     context.handle:report({ message = Const.SF_CLI_MESSAGES.SOBJECT_LISTING, percentage = 0 })
 
-    local function on_list_complete(sobjects, err)
-      if err then
-        context.handle:report({ message = "List failed: " .. err, percentage = 100 })
-        context.handle:finish()
-        return
-      end
-
-      if #sobjects == 0 then
-        context.handle:report({ message = Const.SF_CLI_MESSAGES.SOBJECT_LIST_EMPTY, percentage = 100 })
-        context.handle:finish()
-        return
-      end
-
-      context.handle:finish()
-      local Picker = require("sf.faux.picker")
-
-      Picker.show_sobject_picker(sobjects, function(selection)
-        local describe_context = JobUtils.create_progress_context(
-          Const.SF_CLI_MESSAGES.SOBJECT_REBUILD_TITLE,
-          Const.SF_CLI_MESSAGES.SOBJECT_REBUILD_SUCCESS,
-          Const.SF_CLI_MESSAGES.SOBJECT_REBUILD_FAILED
-        )
-        if check_curl() then
-          Log.deb("using REST batch API for describe")
-          describe_batch_rest(selection.names, selection.mode, target_org, describe_context)
-        else
-          Log.deb("curl not found, using sequential sf CLI")
-          run_describe_loop(selection.names, selection.mode, target_org, executable_path, describe_context)
-        end
-      end)
-    end
-
+    local sobjects
     if check_curl() then
       Log.deb("using REST list API")
-      list_sobjects_rest(target_org, on_list_complete)
+      local co = coroutine.running()
+
+      list_sobjects_rest(target_org, function(s, e)
+        vim.schedule(function()
+          coroutine.resume(co, s, e)
+        end)
+      end)
+
+      sobjects = coroutine.yield()
     else
       local list_args = Const.get_sobject_list_args("all", nil, target_org)
-
       Log.deb("list args: ", vim.inspect(list_args))
+      local stdout, code = Async.await_system(executable_path, list_args)
 
-      local list_job = JobUtils.create_cli_job(executable_path, list_args, {
-        on_success = function(job)
-          local parsed = parse_json_result(job)
+      if code ~= 0 then
+        context.handle:report({ message = "List failed", percentage = 100 })
+        context.handle:finish()
+        return
+      end
 
-          if not parsed or not parsed.result then
-            on_list_complete(nil, "parse failed")
-            return
-          end
-
-          on_list_complete(parsed.result, nil)
-        end,
-        on_error = function(job2, code)
-          on_list_complete(nil, "list failed exit=" .. code)
+      local parsed = parse_json_result({
+        result = function()
+          return { stdout }
         end,
       })
-      list_job:start()
+
+      if not parsed or not parsed.result then
+        context.handle:report({ message = "List failed: parse error", percentage = 100 })
+        context.handle:finish()
+
+        return
+      end
+
+      sobjects = parsed.result
     end
-  end)
+
+    if not sobjects or #sobjects == 0 then
+      context.handle:report({ message = Const.SF_CLI_MESSAGES.SOBJECT_LIST_EMPTY, percentage = 100 })
+      context.handle:finish()
+      return
+    end
+
+    context.handle:finish()
+    local Picker = require("sf.faux.picker")
+
+    Picker.show_sobject_picker(sobjects, function(selection)
+      local describe_context = JobUtils.create_progress_context(
+        Const.SF_CLI_MESSAGES.SOBJECT_REBUILD_TITLE,
+        Const.SF_CLI_MESSAGES.SOBJECT_REBUILD_SUCCESS,
+        Const.SF_CLI_MESSAGES.SOBJECT_REBUILD_FAILED
+      )
+
+      if check_curl() then
+        Log.deb("using REST batch API for describe")
+        describe_batch_rest(selection.names, selection.mode, target_org, describe_context)
+      else
+        Log.deb("curl not found, using sequential sf CLI")
+        run_describe_loop(selection.names, selection.mode, target_org, executable_path, describe_context)
+      end
+    end)
+  end)()
 end
 
 --- Clear all generated .cls files from the cache directories

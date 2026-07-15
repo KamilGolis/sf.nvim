@@ -1,9 +1,7 @@
 --- sf-nvim test runner module
 -- @license MIT
 
-local Connector = require("sf.org.connect")
 local Const = require("sf.const")
-local JobUtils = require("sf.core.job_utils")
 local Log = require("sf.core.log").scoped("test/runner")
 local Progress = require("sf.core.progress")
 local State = require("sf.core.state")
@@ -203,11 +201,17 @@ end
 --- @param class_name string The name of the test class to run
 --- @param options table|nil Additional options
 function TestRunner.run_class_tests(class_name, options)
-  Connector:check_cli(function()
-    options = options or {}
+  options = options or {}
 
-    if not class_name then
-      Log.notify("No test class name provided", vim.log.levels.ERROR)
+  if not class_name then
+    Log.notify("No test class name provided", vim.log.levels.ERROR)
+    return
+  end
+
+  local Async = require("sf.core.async")
+
+  Async.async(function()
+    if not Async.await_cli_check() then
       return
     end
 
@@ -216,65 +220,43 @@ function TestRunner.run_class_tests(class_name, options)
 
     local sf_cli_path = options.sf_cli_path or "sf"
     local result_file = get_test_result_path()
-
     local result_dir = vim.fn.fnamemodify(result_file, ":h")
     vim.fn.mkdir(result_dir, "p")
 
     local args = Const.get_apex_test_class_args(class_name)
-
     Log.deb("Test CLI args:", args)
 
-    local job = JobUtils.create_system_job({
-      command = sf_cli_path,
-      args = args,
-      on_start = function()
-        handle:report({ message = "Executing tests...", percentage = 50 })
-      end,
-      on_exit = function(j, return_val)
-        vim.schedule(function()
-          local stdout = j:result()
-          local json_output = table.concat(stdout, "\n")
-
-          Log.deb("Test Results Job output JSON", json_output)
-
-          local file = io.open(result_file, "w")
-
-          if file then
-            file:write(json_output)
-            file:close()
-          end
-
-          if (return_val == 0 or return_val == 100) and json_output and json_output ~= "" then
-            handle:report({ message = "Processing test results...", percentage = 90 })
-
-            local tests_passed = process_test_results(json_output, class_name)
-            local final_message = tests_passed and "Tests completed successfully" or "Tests completed with failures"
-
-            handle:report({ message = final_message, percentage = 100 })
-            Log.notify("Test execution completed for class: " .. class_name, vim.log.levels.INFO)
-          else
-            handle:report({ message = "Test execution failed", percentage = 100 })
-            Log.notify("Failed to execute tests for class: " .. class_name, vim.log.levels.ERROR)
-
-            local stderr = j:stderr_result()
-            Log.deb("Test execution error", { stderr = stderr, return_val = return_val, stdout = stdout })
-
-            if options.debug then
-              if stderr and #stderr > 0 then
-                Log.deb("Test execution stderr (debug mode)", { stderr = stderr, return_val = return_val })
-              end
-            end
-          end
-
-          handle:finish()
-          State.finish("test")
-        end)
-      end,
-    })
-
     State.start("test")
-    job:start()
-  end)
+    handle:report({ message = "Executing tests...", percentage = 50 })
+
+    local stdout, code = Async.await_system(sf_cli_path, args)
+
+    local json_output = stdout
+    Log.deb("Test Results output JSON", json_output)
+
+    local file = io.open(result_file, "w")
+    if file then
+      file:write(json_output)
+      file:close()
+    end
+
+    if (code == 0 or code == 100) and json_output and json_output ~= "" then
+      handle:report({ message = "Processing test results...", percentage = 90 })
+
+      local tests_passed = process_test_results(json_output, class_name)
+      local final_message = tests_passed and "Tests completed successfully" or "Tests completed with failures"
+
+      handle:report({ message = final_message, percentage = 100 })
+      Log.notify("Test execution completed for class: " .. class_name, vim.log.levels.INFO)
+    else
+      handle:report({ message = "Test execution failed", percentage = 100 })
+      Log.notify("Failed to execute tests for class: " .. class_name, vim.log.levels.ERROR)
+      Log.deb("Test execution error", { return_val = code, stdout = stdout })
+    end
+
+    handle:finish()
+    State.finish("test")
+  end)()
 end
 
 --- Run Apex test for a specific method
@@ -282,78 +264,62 @@ end
 --- @param method_name string The name of the test method
 --- @param options table|nil Additional options
 function TestRunner.run_method_test(class_name, method_name, options)
-  Connector:check_cli(function()
-    options = options or {}
+  options = options or {}
 
-    if not class_name or not method_name then
-      Log.notify("Class name and method name are required", vim.log.levels.ERROR)
+  if not class_name or not method_name then
+    Log.notify("Class name and method name are required", vim.log.levels.ERROR)
+    return
+  end
+
+  local test_name = class_name .. "." .. method_name
+  local Async = require("sf.core.async")
+
+  Async.async(function()
+    if not Async.await_cli_check() then
       return
     end
 
-    local test_name = class_name .. "." .. method_name
     local handle = Progress.create_handle({ title = "Running test: " .. test_name })
     handle:report({ message = "Starting test execution...", percentage = 0 })
 
     local sf_cli_path = options.sf_cli_path or "sf"
     local result_file = get_test_result_path()
-
     local result_dir = vim.fn.fnamemodify(result_file, ":h")
     vim.fn.mkdir(result_dir, "p")
 
     local args = Const.get_apex_test_method_args(test_name)
-
     Log.deb("Test CLI args:", args)
 
-    local job = JobUtils.create_system_job({
-      command = sf_cli_path,
-      args = args,
-      on_start = function()
-        handle:report({ message = "Executing test method...", percentage = 50 })
-      end,
-      on_exit = function(j, return_val)
-        vim.schedule(function()
-          local stdout = j:result()
-          local json_output = table.concat(stdout, "\n")
-
-          Log.deb("Test Results Job output JSON", json_output)
-
-          local file = io.open(result_file, "w")
-          if file then
-            file:write(json_output)
-            file:close()
-          end
-
-          if (return_val == 0 or return_val == 100) and json_output and json_output ~= "" then
-            handle:report({ message = "Processing test results...", percentage = 90 })
-
-            local tests_passed = process_test_results(json_output, test_name)
-            local final_message = tests_passed and "Test completed successfully" or "Test completed with failures"
-
-            handle:report({ message = final_message, percentage = 100 })
-            Log.notify("Test execution completed: " .. test_name, vim.log.levels.INFO)
-          else
-            handle:report({ message = "Test execution failed", percentage = 100 })
-            Log.notify("Failed to execute test: " .. test_name, vim.log.levels.ERROR)
-
-            local stderr = j:stderr_result()
-            Log.deb("Test execution error", { stderr = stderr, return_val = return_val, stdout = stdout })
-
-            if options.debug then
-              if stderr and #stderr > 0 then
-                Log.deb("Test execution stderr (debug mode)", { stderr = stderr, return_val = return_val })
-              end
-            end
-          end
-
-          handle:finish()
-          State.finish("test")
-        end)
-      end,
-    })
-
     State.start("test")
-    job:start()
-  end)
+    handle:report({ message = "Executing test method...", percentage = 50 })
+
+    local stdout, code = Async.await_system(sf_cli_path, args)
+    local json_output = stdout
+    Log.deb("Test Results output JSON", json_output)
+
+    local file = io.open(result_file, "w")
+    if file then
+      file:write(json_output)
+      file:close()
+    end
+
+    if (code == 0 or code == 100) and json_output and json_output ~= "" then
+      handle:report({ message = "Processing test results...", percentage = 90 })
+
+      local tests_passed = process_test_results(json_output, test_name)
+      local final_message = tests_passed and "Test completed successfully" or "Test completed with failures"
+
+      handle:report({ message = final_message, percentage = 100 })
+      Log.notify("Test execution completed: " .. test_name, vim.log.levels.INFO)
+    else
+      handle:report({ message = "Test execution failed", percentage = 100 })
+      Log.notify("Failed to execute test: " .. test_name, vim.log.levels.ERROR)
+      Log.deb("Test execution error", { return_val = code, stdout = stdout })
+    end
+
+    handle:finish()
+    State.finish("test")
+  end)()
 end
 
 --- Display the last executed test results from saved file
@@ -430,62 +396,62 @@ function TestRunner.run_current_tests(test_type, options)
     return
   end
 
-  Connector:check_cli(function()
-    options = options or {}
+  options = options or {}
 
-    if not is_test_class() then
-      Log.notify("Current file is not a test class", vim.log.levels.WARN)
+  if not is_test_class() then
+    Log.notify("Current file is not a test class", vim.log.levels.WARN)
+    return
+  end
+
+  local node = get_node_at_cursor()
+
+  if not node then
+    Log.notify("Could not analyze current position", vim.log.levels.ERROR)
+    return
+  end
+
+  local class_name = find_class_name(node)
+
+  if not class_name then
+    local bufnr = vim.api.nvim_get_current_buf()
+    class_name = find_class_name_in_file(bufnr)
+  end
+
+  if not class_name then
+    Log.notify("Could not find class name", vim.log.levels.ERROR)
+    return
+  end
+
+  if test_type == "class" then
+    TestRunner.run_class_tests(class_name, options)
+  elseif test_type == "method" then
+    local method_name = find_method_name(node)
+
+    if not method_name then
+      Log.notify("Could not find method name at cursor position", vim.log.levels.ERROR)
       return
     end
 
-    local node = get_node_at_cursor()
-
-    if not node then
-      Log.notify("Could not analyze current position", vim.log.levels.ERROR)
-      return
-    end
-
-    local class_name = find_class_name(node)
-
-    if not class_name then
-      -- Fallback: cursor may be on a top-level comment/blank line
-      -- whose parent is the program root, not the class_declaration.
-      -- Search the whole file for the first class_declaration.
-      local bufnr = vim.api.nvim_get_current_buf()
-      class_name = find_class_name_in_file(bufnr)
-    end
-
-    if not class_name then
-      Log.notify("Could not find class name", vim.log.levels.ERROR)
-      return
-    end
-
-    if test_type == "class" then
-      TestRunner.run_class_tests(class_name, options)
-    elseif test_type == "method" then
-      local method_name = find_method_name(node)
-
-      if not method_name then
-        Log.notify("Could not find method name at cursor position", vim.log.levels.ERROR)
-        return
-      end
-
-      TestRunner.run_method_test(class_name, method_name, options)
-    else
-      Log.notify("Invalid test type: " .. test_type, vim.log.levels.ERROR)
-    end
-  end)
+    TestRunner.run_method_test(class_name, method_name, options)
+  else
+    Log.notify("Invalid test type: " .. test_type, vim.log.levels.ERROR)
+  end
 end
 
 --- Run tests for a specific class with coverage report
 --- @param class_name string The name of the test class to run
 --- @param options table|nil Additional options
 function TestRunner.run_class_coverage(class_name, options)
-  Connector:check_cli(function()
-    options = options or {}
+  options = options or {}
 
-    if not class_name then
-      Log.notify("No test class name provided", vim.log.levels.ERROR)
+  if not class_name then
+    Log.notify("No test class name provided", vim.log.levels.ERROR)
+    return
+  end
+
+  local Async = require("sf.core.async")
+  Async.async(function()
+    if not Async.await_cli_check() then
       return
     end
 
@@ -494,64 +460,42 @@ function TestRunner.run_class_coverage(class_name, options)
 
     local sf_cli_path = options.sf_cli_path or "sf"
     local result_file = get_coverage_result_path()
-
     local result_dir = vim.fn.fnamemodify(result_file, ":h")
     vim.fn.mkdir(result_dir, "p")
 
     local args = Const.get_apex_test_class_args(class_name, true)
-
     Log.deb("Test CLI args:", args)
 
-    local job = JobUtils.create_system_job({
-      command = sf_cli_path,
-      args = args,
-      on_start = function()
-        handle:report({ message = "Executing tests with coverage...", percentage = 50 })
-      end,
-      on_exit = function(j, return_val)
-        vim.schedule(function()
-          local stdout = j:result()
-          local json_output = table.concat(stdout, "\n")
-
-          local file = io.open(result_file, "w")
-
-          if file then
-            file:write(json_output)
-            file:close()
-          end
-
-          if (return_val == 0 or return_val == 100) and json_output and json_output ~= "" then
-            handle:report({ message = "Processing coverage results...", percentage = 90 })
-
-            local tests_passed = process_test_results(json_output, class_name)
-            local final_message = tests_passed and "Coverage completed successfully"
-              or "Coverage completed with test failures"
-
-            handle:report({ message = final_message, percentage = 100 })
-            Log.notify("Coverage execution completed for class: " .. class_name, vim.log.levels.INFO)
-          else
-            handle:report({ message = "Coverage execution failed", percentage = 100 })
-            Log.notify("Failed to execute coverage for class: " .. class_name, vim.log.levels.ERROR)
-
-            local stderr = j:stderr_result()
-            Log.deb("Coverage execution error", { stderr = stderr, return_val = return_val, stdout = stdout })
-
-            if options.debug then
-              if stderr and #stderr > 0 then
-                Log.deb("Coverage execution stderr (debug mode)", { stderr = stderr, return_val = return_val })
-              end
-            end
-          end
-
-          handle:finish()
-          State.finish("test")
-        end)
-      end,
-    })
-
     State.start("test")
-    job:start()
-  end)
+    handle:report({ message = "Executing tests with coverage...", percentage = 50 })
+
+    local stdout, code = Async.await_system(sf_cli_path, args)
+    local json_output = stdout
+
+    local file = io.open(result_file, "w")
+    if file then
+      file:write(json_output)
+      file:close()
+    end
+
+    if (code == 0 or code == 100) and json_output and json_output ~= "" then
+      handle:report({ message = "Processing coverage results...", percentage = 90 })
+
+      local tests_passed = process_test_results(json_output, class_name)
+      local final_message = tests_passed and "Coverage completed successfully"
+        or "Coverage completed with test failures"
+
+      handle:report({ message = final_message, percentage = 100 })
+      Log.notify("Coverage execution completed for class: " .. class_name, vim.log.levels.INFO)
+    else
+      handle:report({ message = "Coverage execution failed", percentage = 100 })
+      Log.notify("Failed to execute coverage for class: " .. class_name, vim.log.levels.ERROR)
+      Log.deb("Coverage execution error", { return_val = code, stdout = stdout })
+    end
+
+    handle:finish()
+    State.finish("test")
+  end)()
 end
 
 --- Run tests for a specific method with coverage report
@@ -559,78 +503,61 @@ end
 --- @param method_name string The name of the test method
 --- @param options table|nil Additional options
 function TestRunner.run_method_coverage(class_name, method_name, options)
-  Connector:check_cli(function()
-    options = options or {}
+  options = options or {}
 
-    if not class_name or not method_name then
-      Log.notify("Class name and method name are required", vim.log.levels.ERROR)
+  if not class_name or not method_name then
+    Log.notify("Class name and method name are required", vim.log.levels.ERROR)
+    return
+  end
+
+  local test_name = class_name .. "." .. method_name
+  local Async = require("sf.core.async")
+  Async.async(function()
+    if not Async.await_cli_check() then
       return
     end
 
-    local test_name = class_name .. "." .. method_name
     local handle = Progress.create_handle({ title = "Running coverage for " .. test_name })
     handle:report({ message = "Starting test execution with coverage...", percentage = 0 })
 
     local sf_cli_path = options.sf_cli_path or "sf"
     local result_file = get_coverage_result_path()
-
     local result_dir = vim.fn.fnamemodify(result_file, ":h")
     vim.fn.mkdir(result_dir, "p")
 
     local args = Const.get_apex_test_method_args(test_name, true)
-
     Log.deb("Test CLI args:", args)
 
-    local job = JobUtils.create_system_job({
-      command = sf_cli_path,
-      args = args,
-      on_start = function()
-        handle:report({ message = "Executing test method with coverage...", percentage = 50 })
-      end,
-      on_exit = function(j, return_val)
-        vim.schedule(function()
-          local stdout = j:result()
-          local json_output = table.concat(stdout, "\n")
-
-          local file = io.open(result_file, "w")
-
-          if file then
-            file:write(json_output)
-            file:close()
-          end
-
-          if (return_val == 0 or return_val == 100) and json_output and json_output ~= "" then
-            handle:report({ message = "Processing coverage results...", percentage = 90 })
-
-            local tests_passed = process_test_results(json_output, test_name)
-            local final_message = tests_passed and "Coverage completed successfully"
-              or "Coverage completed with test failures"
-
-            handle:report({ message = final_message, percentage = 100 })
-            Log.notify("Coverage execution completed: " .. test_name, vim.log.levels.INFO)
-          else
-            handle:report({ message = "Coverage execution failed", percentage = 100 })
-            Log.notify("Failed to execute coverage: " .. test_name, vim.log.levels.ERROR)
-
-            local stderr = j:stderr_result()
-            Log.deb("Coverage execution error", { stderr = stderr, return_val = return_val, stdout = stdout })
-
-            if options.debug then
-              if stderr and #stderr > 0 then
-                Log.deb("Coverage execution stderr (debug mode)", { stderr = stderr, return_val = return_val })
-              end
-            end
-          end
-
-          handle:finish()
-          State.finish("test")
-        end)
-      end,
-    })
-
     State.start("test")
-    job:start()
-  end)
+    handle:report({ message = "Executing test method with coverage...", percentage = 50 })
+
+    local stdout, code = Async.await_system(sf_cli_path, args)
+    local json_output = stdout
+
+    local file = io.open(result_file, "w")
+    if file then
+      file:write(json_output)
+      file:close()
+    end
+
+    if (code == 0 or code == 100) and json_output and json_output ~= "" then
+      handle:report({ message = "Processing coverage results...", percentage = 90 })
+
+      local tests_passed = process_test_results(json_output, test_name)
+      local final_message = tests_passed and "Coverage completed successfully"
+        or "Coverage completed with test failures"
+
+      handle:report({ message = final_message, percentage = 100 })
+      Log.notify("Coverage execution completed: " .. test_name, vim.log.levels.INFO)
+    else
+      handle:report({ message = "Coverage execution failed", percentage = 100 })
+      Log.notify("Failed to execute coverage: " .. test_name, vim.log.levels.ERROR)
+      Log.deb("Coverage execution error", { return_val = code, stdout = stdout })
+    end
+
+    handle:finish()
+    State.finish("test")
+  end)()
 end
 
 --- Run coverage tests based on cursor position (class or method)
@@ -659,7 +586,6 @@ function TestRunner.run_coverage_at_cursor(test_type, options)
   local class_name = find_class_name(node)
 
   if not class_name then
-    -- Fallback: cursor may be on a top-level comment/blank line
     local bufnr = vim.api.nvim_get_current_buf()
     class_name = find_class_name_in_file(bufnr)
   end
@@ -681,7 +607,7 @@ function TestRunner.run_coverage_at_cursor(test_type, options)
 
     TestRunner.run_method_coverage(class_name, method_name, options)
   else
-    Log.notify("Invalid coverage type: " .. test_type, vim.log.levels.ERROR)
+    Log.notify("Invalid test type: " .. test_type, vim.log.levels.ERROR)
   end
 end
 

@@ -36,7 +36,6 @@ As a Salesforce developer, I’ve mostly used VS Code and WebStorm with Illumina
 - [Neovim](https://neovim.io/) >= 0.11.0
 - [Salesforce CLI](https://developer.salesforce.com/tools/salesforcecli) (`sf` command)
 - [Snacks.nvim](https://github.com/folke/snacks.nvim) - For UI components
-- **Optional:** [sgd plugin](https://github.com/scolladon/sfdx-git-delta) - For delta deployments of changed files
 - **Optional:** [curl](https://curl.se/) - For batch REST API calls when rebuilding sObject cache (auto-detected, ~10x faster than sequential CLI)
 - **Optional:** Progress is displayed via Neovim's built-in LSP statusline indicator. Add `%{%v:lua.vim.lsp.status()%}` to your statusline if not already present.
 
@@ -97,12 +96,7 @@ require("sf").setup({
 
   -- Debug logs
   log_list_file = "log-list.json",
-  log_dir = "logs",
-
-  -- Delta deployments (requires sgd plugin)
-  delta_dir = "delta",
-
-  -- Metadata retrieval
+  -- Metadata
   retrieve_file = "retrieve.json",
   metadata_types_file = "metadata-types.json",
   metadatas_dir = "metadatas",
@@ -237,9 +231,9 @@ All commands are available under the `:Sf` command with subcommands:
 ```vim
 :Sf deploy metadata         " Deploy current file
 :Sf deploy metadata force   " Deploy current file (ignore conflicts)
-:Sf deploy changed          " Deploy changed files (requires sgd plugin)
+:Sf deploy changed          " Deploy changed files (git-diff based)
 :Sf deploy changed force    " Deploy changed files (ignore conflicts)
-:Sf deploy selected         " Deploy selected files (requires sgd plugin)
+:Sf deploy selected         " Deploy selected files from quickfix list
 :Sf deploy selected force   " Deploy selected files (ignore conflicts)
 ```
 
@@ -420,7 +414,7 @@ vim.keymap.set("n", "<leader>sL", ":Sf apex execute list<CR>", { desc = "List Ap
 ### Metadata Deployment
 
 - **Current File**: Deploy the file you're currently editing
-- **Changed Files**: Deploy all files modified since last commit (requires sgd)
+- **Changed Files**: Deploy all files modified since last commit (automatic git-diff detection)
 - **Selected Files**: Deploy specific files via selection
 - **Force Mode**: Ignore source conflicts during deployment
 - **Diagnostics**: Inline error display for deployment failures
@@ -536,7 +530,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 📚 Related Projects
 
-- [sgd (sfdx-git-delta)](https://github.com/scolladon/sfdx-git-delta) - Delta deployment support
 - [salesforce.nvim](https://github.com/jonathanmorris180/salesforce.nvim) - Alternative Salesforce plugin
 - [sf.nvim](https://github.com/xixiaofinland/sf.nvim) - Another Salesforce plugin for Neovim
 

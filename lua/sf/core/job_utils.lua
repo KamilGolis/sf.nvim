@@ -35,6 +35,7 @@ local M = {}
 --- @usage local context = JobUtils.create_progress_context("Checking CLI", "Success", "Failed")
 function M.create_progress_context(title, success_message, failure_message)
   local handle = Progress.create_handle({ title = title })
+  handle:report({ message = title, percentage = 0 })
 
   return {
     title = title,
