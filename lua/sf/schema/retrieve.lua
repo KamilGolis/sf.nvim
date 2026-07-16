@@ -1,16 +1,11 @@
---- sf-nvim schema retrieve module
--- @license MIT
-
+local Async = require("sf.core.async")
 local Config = require("sf.config")
-local Connector = require("sf.org.connect")
 local Const = require("sf.const")
-local JobUtils = require("sf.core.job_utils")
 local Log = require("sf.core.log").scoped("schema/retrieve")
 local OrgUtils = require("sf.org.utils")
 local PathUtils = require("sf.core.path_utils")
 local Picker = require("sf.schema.picker")
 local SchemaRefresh = require("sf.schema.refresh")
-
 local Retrieve = {}
 
 --- Present a picker of metadata types from the cached schema file.
@@ -83,9 +78,15 @@ end
 --- Fetch metadata of a specific type from the org and save to disk.
 --- @param xml_name string The metadata type xmlName (e.g. "ApexClass")
 function Retrieve.fetch_metadata(xml_name, on_type_selected, on_complete)
-  Connector:check_cli(function()
-    local has_default_org, target_org, org_error = OrgUtils.check_default_org()
+  Async.async(function()
+    if not Async.await_cli_check() then
+      if on_complete then
+        on_complete(false)
+      end
+      return
+    end
 
+    local has_default_org, target_org, org_error = OrgUtils.check_default_org()
     if not has_default_org then
       Log.notify(org_error or Const.SF_CLI_MESSAGES.NO_DEFAULT_ORG, vim.log.levels.ERROR)
 
@@ -96,10 +97,14 @@ function Retrieve.fetch_metadata(xml_name, on_type_selected, on_complete)
       return
     end
 
-    local cli_valid, executable_path, error_msg = JobUtils.validate_cli_installation(Config:get_options().sf_cli_path)
+    local output_dir = Config:get_options().metadatas_dir
+    vim.fn.mkdir(output_dir, "p")
 
-    if not cli_valid or not executable_path then
-      Log.notify(error_msg or Const.SF_CLI_MESSAGES.NOT_FOUND, vim.log.levels.ERROR)
+    local output_file = PathUtils.join(output_dir, xml_name .. ".json")
+    local args = Const.get_org_list_metadata_args(xml_name, target_org)
+    local parsed, err, raw_stdout = Async.await_sf(args, Const.SF_CLI_MESSAGES.SCHEMA_RETRIEVE_TITLE)
+    if err then
+      Log.notify(string.format(Const.SF_CLI_MESSAGES.SCHEMA_RETRIEVE_FAILED, err), vim.log.levels.ERROR)
 
       if on_complete then
         on_complete(false)
@@ -108,75 +113,40 @@ function Retrieve.fetch_metadata(xml_name, on_type_selected, on_complete)
       return
     end
 
-    local context = JobUtils.create_progress_context(
-      Const.SF_CLI_MESSAGES.SCHEMA_RETRIEVE_TITLE,
-      Const.SF_CLI_MESSAGES.SCHEMA_RETRIEVE_SUCCESS,
-      Const.SF_CLI_MESSAGES.SCHEMA_RETRIEVE_FAILED
-    )
+    if not raw_stdout then
+      Log.notify("Empty response from CLI", vim.log.levels.ERROR)
 
-    local output_dir = Config:get_options().metadatas_dir
+      if on_complete then
+        on_complete(false)
+      end
 
-    vim.fn.mkdir(output_dir, "p")
+      return
+    end
 
-    local output_file = PathUtils.join(output_dir, xml_name .. ".json")
-    local args = Const.get_org_list_metadata_args(xml_name, target_org)
+    local file = io.open(output_file, "w")
+    if file then
+      file:write(raw_stdout)
+      file:close()
+      Log.deb("Metadata saved to:", output_file)
+    else
+      Log.notify("Failed to write metadata file: " .. output_file, vim.log.levels.ERROR)
 
-    local job = JobUtils.create_cli_job(executable_path, args, {
-      on_success = function(job, return_val)
-        local result = table.concat(job:result(), "\n")
+      if on_complete then
+        on_complete(false)
+      end
 
-        local ok, _, json_err = JobUtils.validate_json_response(result)
+      return
+    end
 
-        if not ok then
-          JobUtils.handle_cli_error(return_val, context, "Invalid JSON response: " .. (json_err or "unknown error"))
+    Log.notify(xml_name .. " metadata info retrieved", vim.log.levels.INFO)
 
-          if on_complete then
-            on_complete(false)
-          end
-
-          return
-        end
-
-        local file = io.open(output_file, "w")
-
-        if file then
-          file:write(result)
-          file:close()
-          Log.deb("Metadata saved to:", output_file)
-        else
-          JobUtils.handle_cli_error(return_val, context, "Failed to write metadata file: " .. output_file)
-
-          if on_complete then
-            on_complete(false)
-          end
-
-          return
-        end
-
-        context.handle:report({ message = context.success_message, percentage = 100 })
-        context.handle:finish()
-        Log.notify(xml_name .. " metadata info retrieved", vim.log.levels.INFO)
-        if on_type_selected then
-          on_type_selected(xml_name)
-        end
-
-        if on_complete then
-          on_complete(true)
-        end
-      end,
-      on_error = function(job, return_val)
-        local stderr = job:stderr_result()
-
-        JobUtils.handle_cli_error(return_val, context)
-
-        if on_complete then
-          on_complete(false)
-        end
-      end,
-    })
-
-    job:start()
-  end)
+    if on_type_selected then
+      on_type_selected(xml_name)
+    end
+    if on_complete then
+      on_complete(true)
+    end
+  end)()
 end
 
 return Retrieve

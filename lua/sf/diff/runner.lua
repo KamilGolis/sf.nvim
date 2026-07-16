@@ -1,10 +1,4 @@
---- sf-nvim diff-against-server module
--- Orchestrates metadata detection, two-step retrieve (metadata format) + convert,
--- buffer tracking, and diff display for the `Sf retrieve diff` command.
--- @license MIT
-
 local Config = require("sf.config")
-local Connector = require("sf.org.connect")
 local Const = require("sf.const")
 local Detect = require("sf.diff.detect")
 local Display = require("sf.diff.display")
@@ -90,127 +84,135 @@ end
 --- Entry point for `Sf retrieve diff`.
 --- Detects metadata type, retrieves in metadata format, converts to source, and diffs.
 function M.diff_current_buffer()
-  vim.schedule(function()
-    Connector:check_cli(function()
-      local has_default_org, target_org, org_error = OrgUtils.check_default_org()
+  local Async = require("sf.core.async")
 
-      if not has_default_org then
-        Log.notify(org_error or Const.SF_CLI_MESSAGES.NO_DEFAULT_ORG, vim.log.levels.ERROR)
-        return
-      end
+  Async.async(function()
+    if not Async.await_cli_check() then
+      return
+    end
 
-      if State.is_busy("diff") then
-        Log.notify("Already diffing. Please wait...", vim.log.levels.WARN)
-        return
-      end
+    local has_default_org, target_org, org_error = OrgUtils.check_default_org()
+    if not has_default_org then
+      Log.notify(org_error or Const.SF_CLI_MESSAGES.NO_DEFAULT_ORG, vim.log.levels.ERROR)
+      return
+    end
 
-      local cli_valid, executable_path, error_msg = JobUtils.validate_cli_installation(Config:get_options().sf_cli_path)
+    if State.is_busy("diff") then
+      Log.notify("Already diffing. Please wait...", vim.log.levels.WARN)
+      return
+    end
 
-      if not cli_valid or not executable_path then
-        Log.notify(error_msg or Const.SF_CLI_MESSAGES.NOT_FOUND, vim.log.levels.ERROR)
-        return
-      end
+    local bufnr = vim.api.nvim_get_current_buf()
+    local info, detect_err = Detect.detect_metadata_from_buffer(bufnr)
 
-      local bufnr = vim.api.nvim_get_current_buf()
-      local info, detect_err = Detect.detect_metadata_from_buffer(bufnr)
+    if not info then
+      Log.notify(detect_err or "Could not determine metadata type.", vim.log.levels.ERROR)
+      return
+    end
 
-      if not info then
-        Log.notify(detect_err or "Could not determine metadata type.", vim.log.levels.ERROR)
-        return
-      end
+    diff_state.bufnr = bufnr
+    diff_state.filename = vim.fn.fnamemodify(vim.api.nvim_buf_get_name(bufnr), ":t")
+    diff_state.info = info
+    diff_state.temp_dir = vim.fn.tempname()
+    vim.fn.mkdir(diff_state.temp_dir, "p")
+    Log.deb("Diff temp directory: " .. diff_state.temp_dir)
 
-      diff_state.bufnr = bufnr
-      diff_state.filename = vim.fn.fnamemodify(vim.api.nvim_buf_get_name(bufnr), ":t")
-      diff_state.info = info
+    local title = "Diffing " .. (diff_state.filename or "metadata") .. "..."
 
-      -- Create unique temp directory for this diff operation
-      diff_state.temp_dir = vim.fn.tempname()
-      vim.fn.mkdir(diff_state.temp_dir, "p")
-      Log.deb("Diff temp directory: " .. diff_state.temp_dir)
+    local handle = require("sf.core.progress").create_handle({ title = title })
+    local executable_path = Config:get_options().sf_cli_path or "sf"
 
-      local title = "Diffing " .. (diff_state.filename or "metadata") .. "..."
+    State.start("diff")
 
-      local context = JobUtils.create_progress_context(
-        title,
-        "Diff ready for " .. (diff_state.filename or "metadata"),
-        "Diff retrieve failed"
-      )
+    -- Step 1: Retrieve in metadata API format
+    local retrieve_args = Const.get_diff_retrieve_args(info.type, info.member, diff_state.temp_dir, target_org)
+    Log.deb("Diff retrieve args: ", retrieve_args)
 
-      -- Job 1: Retrieve in metadata API format
-      local retrieve_args = Const.get_diff_retrieve_args(info.type, info.member, diff_state.temp_dir, target_org)
-      Log.deb("Diff retrieve args: ", retrieve_args)
+    local retrieve_stdout, retrieve_code = Async.await_system(executable_path, retrieve_args)
+    if retrieve_code ~= 0 then
+      handle:report({ message = "Diff retrieve failed", percentage = 100 })
+      handle:finish()
+      State.finish("diff")
 
-      local retrieve_job = JobUtils.create_cli_job(executable_path, retrieve_args, {
-        on_success = function(job, return_val)
-          local result = table.concat(job:result(), "\n")
-          Log.deb("Diff retrieve result:", result)
+      vim.fn.delete(diff_state.temp_dir, "rf")
+      Log.notify("Diff retrieve failed", vim.log.levels.ERROR)
 
-          local ok, parsed = JobUtils.validate_json_response(result)
+      return
+    end
 
-          if not ok or not parsed then
-            M.handle_job_error(return_val, context)
-            return
-          end
+    local ok, parsed = pcall(vim.json.decode, retrieve_stdout)
+    if not ok or not parsed then
+      handle:report({ message = "Diff retrieve failed", percentage = 100 })
+      handle:finish()
+      State.finish("diff")
 
-          if parsed.status ~= 0 then
-            local detail = parsed.message or "Retrieve failed"
+      vim.fn.delete(diff_state.temp_dir, "rf")
+      Log.notify("Failed to parse diff retrieve response", vim.log.levels.ERROR)
 
-            State.finish("diff")
-            JobUtils.handle_cli_error(return_val, context, detail)
-            vim.fn.delete(diff_state.temp_dir, "rf")
+      return
+    end
 
-            return
-          end
+    if parsed.status ~= 0 then
+      local detail = parsed.message or "Retrieve failed"
+      handle:finish()
+      State.finish("diff")
 
-          -- Job 2: Convert from metadata format to source format
-          local unpackaged_dir = PathUtils.join(diff_state.temp_dir, "unpackaged")
-          local converted_dir = PathUtils.join(diff_state.temp_dir, "converted")
+      vim.fn.delete(diff_state.temp_dir, "rf")
+      Log.notify("Diff retrieve: " .. detail, vim.log.levels.ERROR)
 
-          local convert_args = Const.get_diff_convert_args(unpackaged_dir, converted_dir)
-          Log.deb("Diff convert args: ", convert_args)
+      return
+    end
 
-          context.handle:report({ message = "Converting to source format...", percentage = 60 })
+    -- Step 2: Convert from metadata format to source format
+    local unpackaged_dir = PathUtils.join(diff_state.temp_dir, "unpackaged")
+    local converted_dir = PathUtils.join(diff_state.temp_dir, "converted")
+    local convert_args = Const.get_diff_convert_args(unpackaged_dir, converted_dir)
 
-          local convert_job = JobUtils.create_cli_job(executable_path, convert_args, {
-            on_success = function(conv_job, conv_return_val)
-              local conv_result = table.concat(conv_job:result(), "\n")
-              Log.deb("Diff convert result:", conv_result)
+    Log.deb("Diff convert args: ", convert_args)
 
-              local conv_ok, conv_parsed = JobUtils.validate_json_response(conv_result)
+    handle:report({ message = "Converting to source format...", percentage = 60 })
 
-              if not conv_ok or not conv_parsed then
-                M.handle_job_error(conv_return_val, context)
-                return
-              end
+    local convert_stdout, convert_code = Async.await_system(executable_path, convert_args)
+    if convert_code ~= 0 then
+      handle:report({ message = "Diff convert failed", percentage = 100 })
+      handle:finish()
+      State.finish("diff")
 
-              if conv_parsed.status ~= 0 then
-                local detail = conv_parsed.message or "Convert failed"
+      vim.fn.delete(diff_state.temp_dir, "rf")
+      Log.notify("Diff convert failed", vim.log.levels.ERROR)
 
-                State.finish("diff")
-                JobUtils.handle_cli_error(conv_return_val, context, detail)
-                vim.fn.delete(diff_state.temp_dir, "rf")
+      return
+    end
 
-                return
-              end
+    local conv_ok, conv_parsed = pcall(vim.json.decode, convert_stdout)
+    if not conv_ok or not conv_parsed then
+      handle:report({ message = "Diff convert failed", percentage = 100 })
+      handle:finish()
+      State.finish("diff")
 
-              M.handle_convert_response(conv_parsed, info.local_path, context)
-            end,
-            on_error = function(conv_job, conv_return_val)
-              M.handle_job_error(conv_return_val, context)
-            end,
-          })
+      vim.fn.delete(diff_state.temp_dir, "rf")
+      Log.notify("Failed to parse diff convert response", vim.log.levels.ERROR)
 
-          convert_job:start()
-        end,
-        on_error = function(job, return_val)
-          M.handle_job_error(return_val, context)
-        end,
-      })
+      return
+    end
 
-      State.start("diff")
-      retrieve_job:start()
-    end)
-  end)
+    if conv_parsed.status ~= 0 then
+      local detail = conv_parsed.message or "Convert failed"
+      handle:finish()
+      State.finish("diff")
+
+      vim.fn.delete(diff_state.temp_dir, "rf")
+      Log.notify("Diff convert: " .. detail, vim.log.levels.ERROR)
+
+      return
+    end
+
+    M.handle_convert_response(conv_parsed, info.local_path, {
+      handle = handle,
+      success_message = "Diff ready for " .. (diff_state.filename or "metadata"),
+      failure_message = "Diff retrieve failed",
+    })
+  end)()
 end
 
 return M

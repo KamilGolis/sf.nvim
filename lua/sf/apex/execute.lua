@@ -2,7 +2,6 @@
 -- @license MIT
 
 local Config = require("sf.config")
-local Connector = require("sf.org.connect")
 local Const = require("sf.const")
 local Diagnostics = require("sf.core.diagnostics")
 local JobUtils = require("sf.core.job_utils")
@@ -10,6 +9,7 @@ local Log = require("sf.core.log").scoped("apex/execute")
 local OrgUtils = require("sf.org.utils")
 local PathUtils = require("sf.core.path_utils")
 local Picker = require("sf.apex.picker")
+local Progress = require("sf.core.progress")
 local State = require("sf.core.state")
 local Utils = require("sf.core.utils")
 
@@ -42,21 +42,20 @@ function Execute:execute_file(file_path, opts)
     return
   end
 
-  Connector:check_cli(function()
-    if State.is_busy("apex") then
-      Log.notify("Apex execution already in progress", vim.log.levels.WARN)
-      return
-    end
-
-    local cli_valid, executable_path, cli_error = JobUtils.validate_cli_installation(Config:get_options().sf_cli_path)
-    if not cli_valid or not executable_path then
-      Log.notify(cli_error or Const.SF_CLI_MESSAGES.NOT_FOUND, vim.log.levels.ERROR)
+  local Async = require("sf.core.async")
+  Async.async(function()
+    if not Async.await_cli_check() then
       return
     end
 
     local has_default_org, target_org, org_error = OrgUtils.check_default_org()
     if not has_default_org then
       Log.notify(org_error or Const.SF_CLI_MESSAGES.NO_DEFAULT_ORG, vim.log.levels.ERROR)
+      return
+    end
+
+    if State.is_busy("apex") then
+      Log.notify("Apex execution already in progress", vim.log.levels.WARN)
       return
     end
 
@@ -69,63 +68,111 @@ function Execute:execute_file(file_path, opts)
 
     -- Check if file is under scripts_dir
     if not file_path:find(scripts_dir_full, 1, true) then
-      -- Copy content to temp file
       vim.fn.mkdir(options.apex_temp_dir, "p")
       local temp_file = PathUtils.join(options.apex_temp_dir, os.time() .. ".apex")
       local content_lines = {}
 
-      -- If file exists on disk, read from it (e.g. from execute_list flow)
       if vim.fn.filereadable(file_path) == 1 then
         local f = io.open(file_path, "r")
-
         if f then
           local content = f:read("*a")
           f:close()
           content_lines = vim.split(content, "\n")
         end
       else
-        -- Read from current buffer (for :Sf apex execute file on open buffer)
         content_lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
       end
 
       local temp_f = io.open(temp_file, "w")
-
       if temp_f then
         temp_f:write(table.concat(content_lines, "\n"))
         temp_f:close()
       end
-
       script_path = temp_file
     end
 
-    local context = JobUtils.create_progress_context(
-      Const.SF_CLI_MESSAGES.APEX_EXECUTE_TITLE,
-      Const.SF_CLI_MESSAGES.APEX_EXECUTE_SUCCESS,
-      Const.SF_CLI_MESSAGES.APEX_EXECUTE_FAILED
-    )
-
     local args = Const.get_apex_run_args(script_path, options.api_version, target_org)
-
     State.start("apex")
 
-    local job = JobUtils.create_system_job({
-      command = options.sf_cli_path or "sf",
-      args = args,
-      on_exit = function(j, return_val)
-        vim.schedule(function()
-          State.finish("apex")
+    local parsed, err, raw_stdout = Async.await_sf(args, Const.SF_CLI_MESSAGES.APEX_EXECUTE_TITLE)
+    State.finish("apex")
 
-          if return_val == 0 then
-            self:_handle_success(j, context, options, opts, original_path)
-          else
-            self:_handle_error(j, return_val, context, original_path)
-          end
-        end)
-      end,
-    })
+    -- Non-zero exit with no parseable JSON
+    if err then
+      if raw_stdout and raw_stdout ~= "" then
+        local ok, p = pcall(vim.json.decode, raw_stdout)
+        if ok and p and p.name then
+          local data = p.data or {}
 
-    job:start()
-  end)
+          Diagnostics:set_diagnostics({
+            {
+              error_type = "Error",
+              file_path = original_path,
+              error_message = data.compileProblem or data.exceptionMessage or p.message or "Unknown error",
+              error_line_number = tonumber(data.line) or 1,
+              error_column_number = tonumber(data.column) or 1,
+            },
+          })
+
+          Log.notify(data.compileProblem or data.exceptionMessage or p.message or "Unknown error", vim.log.levels.ERROR)
+          return
+        end
+      end
+
+      Log.notify(err, vim.log.levels.ERROR)
+      return
+    end
+
+    -- Compilation/apex errors (valid JSON with non-zero status)
+    if parsed.name and parsed.status ~= 0 then
+      local data = parsed.data or {}
+      local err_msg = (data.compileProblem and data.compileProblem ~= "") and data.compileProblem
+        or (data.exceptionMessage and data.exceptionMessage ~= "") and data.exceptionMessage
+        or parsed.message
+        or "Unknown error"
+
+      Diagnostics:set_diagnostics({
+        {
+          error_type = "Error",
+          file_path = original_path,
+          error_message = err_msg,
+          error_line_number = tonumber(data.line) or 1,
+          error_column_number = tonumber(data.column) or 1,
+        },
+      })
+
+      Log.notify(err_msg, vim.log.levels.ERROR)
+      return
+    end
+
+    -- Success
+    if parsed.status == 0 and parsed.result and parsed.result.success then
+      local logs = parsed.result.logs or ""
+      local log_lines = vim.split(logs, "\n")
+      vim.fn.mkdir(options.anonymous_log_dir, "p")
+
+      local log_file = PathUtils.join(options.anonymous_log_dir, os.time() .. ".log")
+      local f = io.open(log_file, "w")
+
+      if f then
+        f:write(table.concat(log_lines, "\n"))
+        f:close()
+      end
+
+      Log.notify(Const.SF_CLI_MESSAGES.APEX_EXECUTE_SUCCESS, vim.log.levels.INFO)
+
+      if opts.display_mode == "buffer" then
+        vim.cmd("edit " .. vim.fn.fnameescape(log_file))
+      else
+        vim.cmd("vsplit")
+        vim.cmd("edit " .. vim.fn.fnameescape(log_file))
+      end
+
+      return
+    end
+
+    Log.notify("Unexpected response from apex run", vim.log.levels.ERROR)
+  end)()
 end
 
 --- Parse JSON response from apex run command.
@@ -136,8 +183,10 @@ function Execute:_parse_response(json_string)
   if not ok then
     return { success = false, error = { message = "Failed to parse response" } }
   end
+
   if parsed.name and parsed.status ~= 0 then
     local data = parsed.data or {}
+
     return {
       success = false,
       error = {
@@ -150,9 +199,11 @@ function Execute:_parse_response(json_string)
       },
     }
   end
+
   if parsed.status == 0 and parsed.result and parsed.result.success then
     return { success = true, logs = parsed.result.logs or "" }
   end
+
   return { success = false, error = { message = "Unexpected response from apex run" } }
 end
 --- Handle successful apex execution response
@@ -179,6 +230,7 @@ function Execute:_handle_success(j, context, options, opts, original_path)
     context.handle:report({ message = Const.SF_CLI_MESSAGES.APEX_EXECUTE_FAILED, percentage = 100 })
     context.handle:finish()
     Log.notify(source.error_message, vim.log.levels.ERROR)
+
     return
   end
 

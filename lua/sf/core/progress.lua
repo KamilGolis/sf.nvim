@@ -5,6 +5,10 @@
 --- `vim.lsp.status()` for consumption in the statusline. No server
 --- process is spawned — the client is created entirely in-process.
 
+--- @class SfExecuteCallbacks
+--- @field on_complete fun(parsed: table|nil, err: string|nil, raw_stdout: string|nil)
+--- @field on_stdout? fun(err: string|nil, data: string|nil)
+--- @field on_stderr? fun(err: string|nil, data: string|nil)
 local M = {}
 local Config = require("sf.config")
 local Log = require("sf.core.log")
@@ -90,6 +94,10 @@ local function ensure_client()
     cmd = create_rpc_client, -- function, not string[] — no process spawned
     root_dir = vim.fn.getcwd(),
     capabilities = vim.lsp.protocol.make_client_capabilities(),
+    on_init = function(client)
+      client.server_capabilities = client.server_capabilities or {}
+      client.server_capabilities.workDoneProgressProvider = true
+    end,
     on_exit = function()
       null_client_id = nil
     end,
@@ -116,9 +124,15 @@ end
 function M.create_handle(params)
   if not ensure_client() then
     return {
-      report = function(_) end,
-      finish = function() end,
+      report = function(self, _) end,
+      finish = function(self) end,
     }
+  end
+
+  -- Ensure client is attached to the current buffer so progress notifications
+  -- are visible to UI plugins (fidget.nvim, noice.nvim, etc.)
+  if null_client_id and not vim.lsp.buf_is_attached(0, null_client_id) then
+    vim.lsp.buf_attach_client(0, null_client_id)
   end
 
   local token = "sf_" .. token_counter
@@ -156,24 +170,30 @@ function M.create_handle(params)
   end
 
   return {
-    report = function(report_params)
+    report = function(self, report_params)
       local value = {
         kind = "report",
         title = handle_title,
       }
+
       if report_params.message then
         value.message = report_params.message
       end
+
       if report_params.percentage ~= nil then
         value.percentage = report_params.percentage
       end
+
       Log.deb("[progress] report", { message = report_params.message, percentage = report_params.percentage })
+
       vim.lsp.handlers["$/progress"](nil, {
         token = token,
         value = value,
+        percentage = value.percentage,
       }, ctx)
     end,
-    finish = function()
+
+    finish = function(self)
       Log.deb("[progress] finish", handle_title)
       vim.lsp.handlers["$/progress"](nil, {
         token = token,
@@ -181,6 +201,78 @@ function M.create_handle(params)
       }, ctx)
     end,
   }
+end
+
+--- Run an sf CLI command asynchronously with an LSP progress spinner,
+--- parse its JSON output, and deliver the result to a callback.
+---
+--- The spinner begins when the command starts and finishes when it exits.
+--- The callback is always invoked on the main thread (via vim.schedule).
+---
+--- @param args string[] CLI arguments to pass after "sf" (e.g. {"--version", "--json"})
+--- @param title string Label for the LSP progress spinner
+--- @param callbacks SfExecuteCallbacks Callback table with on_complete, on_stdout?, on_stderr?
+function M.sf_execute(args, title, callbacks)
+  vim.validate({
+    args = { args, "table" },
+    title = { title, "string" },
+    callbacks = { callbacks, "table" },
+  })
+
+  local handle = M.create_handle({ title = title })
+  handle:report({ message = title, percentage = 0 })
+  local stdout_lines = {}
+
+  local opts = { text = true }
+
+  opts.stdout = function(err, data)
+    if data then
+      table.insert(stdout_lines, data)
+    end
+
+    if callbacks.on_stdout then
+      vim.schedule(function()
+        callbacks.on_stdout(err, data)
+      end)
+    end
+  end
+
+  if callbacks.on_stderr then
+    opts.stderr = function(err, data)
+      vim.schedule(function()
+        callbacks.on_stderr(err, data)
+      end)
+    end
+  end
+
+  local cmd = { Config:get_options().sf_cli_path or "sf" }
+
+  for _, arg in ipairs(args) do
+    table.insert(cmd, arg)
+  end
+
+  vim.system(cmd, opts, function(obj)
+    vim.schedule(function()
+      handle:finish()
+
+      local stdout = table.concat(stdout_lines, "")
+      -- Failure mode 1: non-zero exit AND empty stdout → pass stderr as error
+      if obj.code ~= 0 and (not stdout or stdout == "") then
+        callbacks.on_complete(nil, obj.stderr or "Command failed", stdout)
+        return
+      end
+
+      -- Failure mode 2: stdout is not valid JSON
+      local ok, parsed = pcall(vim.json.decode, stdout)
+      if not ok or type(parsed) ~= "table" then
+        callbacks.on_complete(nil, "JSON Parse Error", stdout)
+        return
+      end
+
+      -- Success (or non-zero exit with parseable JSON — let caller decide)
+      callbacks.on_complete(parsed, nil, stdout)
+    end)
+  end)
 end
 
 return M

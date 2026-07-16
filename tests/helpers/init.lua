@@ -111,4 +111,26 @@ function M.load_fixture_text(capability, filename)
   return M.fixtures.load_text(capability, filename)
 end
 
+--- Run an async function and wait for completion in tests.
+-- In headless tests, vim.schedule callbacks fire during vim.wait,
+-- so the coroutine resumes naturally.
+-- @param fn function The async function body (no async wrapper needed)
+-- @return table Results returned by the function
+function M.run_async(fn)
+  local done = false
+  local results = {}
+  require("sf.core.async").async(function(...)
+    results = { fn(...) }
+    done = true
+  end)()
+
+  -- vim.wait lets the event loop process scheduled callbacks,
+  -- which resumes the coroutine and populates results.
+  vim.wait(500, function()
+    return done
+  end)
+
+  return results
+end
+
 return M
