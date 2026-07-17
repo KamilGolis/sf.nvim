@@ -7,7 +7,8 @@ local Const = require("sf.const")
 local DebugPicker = require("sf.debug.picker")
 local DebugUtils = require("sf.debug.utils")
 local JobUtils = require("sf.core.job_utils")
-local Log = require("sf.core.log")
+local Log = require("sf.core.log").scoped("debug/level")
+local Progress = require("sf.core.progress")
 
 local Level = {}
 
@@ -133,77 +134,50 @@ local function save_buffer(buf)
   end
   state.start("debug")
 
-  local context = JobUtils.create_progress_context(
-    mode == "new" and Const.SF_CLI_MESSAGES.DEBUG_LEVEL_NEW_TITLE or Const.SF_CLI_MESSAGES.DEBUG_LEVEL_EDIT_TITLE,
-    mode == "new" and Const.SF_CLI_MESSAGES.DEBUG_LEVEL_NEW_SUCCESS or Const.SF_CLI_MESSAGES.DEBUG_LEVEL_EDIT_SUCCESS,
-    mode == "new" and Const.SF_CLI_MESSAGES.DEBUG_LEVEL_NEW_FAILED or Const.SF_CLI_MESSAGES.DEBUG_LEVEL_EDIT_FAILED
-  )
-
   local args
-
   if mode == "new" then
     args = Const.get_record_create_args(target_org, "DebugLevel", value_string, api_version)
   else
     args = Const.get_record_update_args(target_org, "DebugLevel", value_string, record_id, api_version)
   end
 
-  local job = JobUtils.create_cli_job(executable_path, args, {
-    on_success = function(job, _)
-      local result = table.concat(job:result(), "\n")
-      Log.deb("Debug level save result:", result)
-
-      local ok, parsed, _ = JobUtils.validate_json_response(result)
-
-      if ok and parsed and parsed.status == 0 then
-        context.handle:report({ message = context.success_message, percentage = 100 })
-        context.handle:finish()
+  local title = mode == "new" and Const.SF_CLI_MESSAGES.DEBUG_LEVEL_NEW_TITLE
+    or Const.SF_CLI_MESSAGES.DEBUG_LEVEL_EDIT_TITLE
+  Progress.sf_execute(args, title, {
+    on_complete = function(parsed, err, raw_stdout)
+      if err then
+        Log.deb("Debug level save error:", err)
+        local err_msg = err
+        if raw_stdout and raw_stdout ~= "" then
+          local ok, p = pcall(vim.json.decode, raw_stdout)
+          if ok and p and p.message then
+            err_msg = p.message
+          end
+        end
+        Log.notify(err_msg, vim.log.levels.ERROR)
         state.finish("debug")
+        return
+      end
 
-        Log.notify(context.success_message, vim.log.levels.INFO)
+      if parsed and parsed.status == 0 then
+        state.finish("debug")
+        local success_msg = mode == "new" and Const.SF_CLI_MESSAGES.DEBUG_LEVEL_NEW_SUCCESS
+          or Const.SF_CLI_MESSAGES.DEBUG_LEVEL_EDIT_SUCCESS
+        Log.notify(success_msg, vim.log.levels.INFO)
         pcall(vim.api.nvim_buf_delete, buf, { force = true })
       else
-        Log.deb("save_buffer on_success non-zero status", parsed)
-
         local err_msg = Const.SF_CLI_MESSAGES.DEBUG_LEVEL_SAVE_FAILED
-
         if parsed and parsed.message then
           err_msg = parsed.message
         elseif parsed and parsed.result and parsed.result.errors and #parsed.result.errors > 0 then
           err_msg = parsed.result.errors[1]
         end
-
-        JobUtils.handle_cli_error(1, context, err_msg)
+        Log.deb("Debug level save failure:", err_msg)
+        Log.notify(err_msg, vim.log.levels.ERROR)
         state.finish("debug")
       end
     end,
-    on_error = function(job, return_val)
-      local stderr_lines = job:stderr_result()
-      local stderr_str = table.concat(stderr_lines, "\n")
-      local stdout_lines = job:result()
-      local stdout_str = table.concat(stdout_lines, "\n")
-      local err_msg = Const.SF_CLI_MESSAGES.DEBUG_LEVEL_NEW_FAILED
-
-      if stdout_str ~= "" then
-        local ok, parsed, _ = JobUtils.validate_json_response(stdout_str)
-
-        if ok and parsed and parsed.message then
-          err_msg = parsed.message
-        end
-      end
-
-      if err_msg == Const.SF_CLI_MESSAGES.DEBUG_LEVEL_NEW_FAILED and stderr_str ~= "" then
-        local ok, parsed, _ = JobUtils.validate_json_response(stderr_str)
-
-        if ok and parsed and parsed.message then
-          err_msg = parsed.message
-        end
-      end
-
-      JobUtils.handle_cli_error(return_val, context, err_msg)
-      state.finish("debug")
-    end,
   })
-  job:start()
 end
 
 --- Open the interactive debug level buffer.

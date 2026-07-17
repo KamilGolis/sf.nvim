@@ -36,7 +36,7 @@ As a Salesforce developer, I’ve mostly used VS Code and WebStorm with Illumina
 - [Neovim](https://neovim.io/) >= 0.11.0
 - [Salesforce CLI](https://developer.salesforce.com/tools/salesforcecli) (`sf` command)
 - [Snacks.nvim](https://github.com/folke/snacks.nvim) - For UI components
-- **Optional:** [sgd plugin](https://github.com/scolladon/sfdx-git-delta) - For delta deployments of changed files
+- **Optional:** [curl](https://curl.se/) - For batch REST API calls when rebuilding sObject cache (auto-detected, ~10x faster than sequential CLI)
 - **Optional:** Progress is displayed via Neovim's built-in LSP statusline indicator. Add `%{%v:lua.vim.lsp.status()%}` to your statusline if not already present.
 
 ## 📦 Installation
@@ -96,12 +96,7 @@ require("sf").setup({
 
   -- Debug logs
   log_list_file = "log-list.json",
-  log_dir = "logs",
-
-  -- Delta deployments (requires sgd plugin)
-  delta_dir = "delta",
-
-  -- Metadata retrieval
+  -- Metadata
   retrieve_file = "retrieve.json",
   metadata_types_file = "metadata-types.json",
   metadatas_dir = "metadatas",
@@ -113,6 +108,13 @@ require("sf").setup({
   apex_temp_dir = "apex",
   scripts_dir = "scripts",
   anonymous_log_dir = "anonymous",
+
+  -- DAP (Apex Replay Debugger)
+  dap_log_dir = nil, -- defaults to log_dir/dap
+  dap = {
+    adapter_path = nil, -- absolute path to apexReplayDebug.js
+    port = 4712,
+  },
 
   -- Debug mode
   debug = false,
@@ -141,6 +143,8 @@ require("sf").setup({
 | `apex_temp_dir` | `string` | `"apex"` | Directory for temp .apex files under cache_path |
 | `scripts_dir` | `string` | `"scripts"` | Directory for persistent Apex scripts under project root |
 | `anonymous_log_dir` | `string` | `"anonymous"` | Subdirectory under log_dir for anonymous Apex logs |
+| `dap_log_dir` | `string` | `nil` | Directory for DAP debug logs (defaults to `log_dir/dap`) |
+| `dap.lsp_client_name` | `string` | `"apex_ls"` | Apex LSP client name for breakpoint resolution (e.g. `apex_ls` or `apex_ls_ts`) |
 | `debug` | `boolean` | `false` | Enable debug logging to file |
 | `debug_inspect` | `boolean` | `false` | Show debug output on screen |
 | `logger_scope` | `table` | `{}` | List of module source patterns to include in debug output (empty = log all modules). Example: `{"test/runner", "core/job_utils"}` |
@@ -183,6 +187,7 @@ Available module names for `logger_scope`:
 | `core/job_utils` | CLI job creation and management |
 | `core/utils` | Core utilities (project root, etc.) |
 | `debug/level` | Debug level create/edit/delete |
+| `faux/runner` | sObject cache rebuild orchestration |
 | `debug/utils` | Debug level workflow (org/user/trace queries) |
 | `deploy/utils` | Deployment utilities |
 | `diff/runner` | Diff job orchestration |
@@ -211,7 +216,7 @@ All commands are available under the `:Sf` command with subcommands:
 ```vim
 :Sf schema refresh   " Refresh org metadata type list
 :Sf schema retrieve  " Select and retrieve metadata of a type
-:Sf schema cleanup   " Delete cached schema files (like metadata-types.json and all files under metadatas directory)
+:Sf schema cleanup   " Delete cached schema files (like `metadata-types.json` and all files under `metadatas` directory)
 ```
 ### Metadata Retrieval
 
@@ -226,9 +231,9 @@ All commands are available under the `:Sf` command with subcommands:
 ```vim
 :Sf deploy metadata         " Deploy current file
 :Sf deploy metadata force   " Deploy current file (ignore conflicts)
-:Sf deploy changed          " Deploy changed files (requires sgd plugin)
+:Sf deploy changed          " Deploy changed files (git-diff based)
 :Sf deploy changed force    " Deploy changed files (ignore conflicts)
-:Sf deploy selected         " Deploy selected files (requires sgd plugin)
+:Sf deploy selected         " Deploy selected files from quickfix list
 :Sf deploy selected force   " Deploy selected files (ignore conflicts)
 ```
 
@@ -255,17 +260,18 @@ All commands are available under the `:Sf` command with subcommands:
 
 ```vim
 :Sf log list             " Fetch and list debug logs from org
-:Sf log resume           " Show cached debug logs from logList.json (falls back to list)
+:Sf log resume           " Show cached debug logs from `log-list.json` (falls back to list)
+:Sf log debug            " Resume cached logs and copy selected to DAP directory
 :Sf log analysis basic   " Analyze a selected log with basic tree view and per-token highlighting
-:Sf log cleanup          " Delete cached log files and logList.json
+:Sf log cleanup          " Delete cached log files and `log-list.json`
 ```
 
 ### Anonymous Apex
 
 ```vim
 :Sf apex execute file     " Execute Apex from current buffer
-:Sf apex execute new      " Create new blank Apex script in scripts/
-:Sf apex execute list     " Browse and execute scripts from scripts/
+:Sf apex execute new      " Create new blank Apex script in `scripts/`
+:Sf apex execute list     " Browse and execute scripts from `scripts/`
 :Sf apex execute cleanup  " Delete temp .apex files from cache
 ```
 
@@ -283,7 +289,6 @@ All commands are available under the `:Sf` command with subcommands:
 :Sf debug trace new     " Create a new trace flag with interactive editor
 :Sf debug trace delete  " Delete a trace flag
 ```
-
 
 ## 📖 Usage Examples
 
@@ -341,7 +346,7 @@ vim.keymap.set("n", "<leader>sL", ":Sf apex execute list<CR>", { desc = "List Ap
 ### Metadata Deployment
 
 - **Current File**: Deploy the file you're currently editing
-- **Changed Files**: Deploy all files modified since last commit (requires sgd)
+- **Changed Files**: Deploy all files modified since last commit (automatic git-diff detection)
 - **Selected Files**: Deploy specific files via selection
 - **Force Mode**: Ignore source conflicts during deployment
 - **Diagnostics**: Inline error display for deployment failures
@@ -354,6 +359,7 @@ vim.keymap.set("n", "<leader>sL", ":Sf apex execute list<CR>", { desc = "List Ap
 - **Code Coverage**: Visual indicators in the gutter showing covered/uncovered lines
 
 ### Debug Logs
+
 - **Interactive Picker**: Browse logs with rich metadata
 - **Preview Panel**: View log details before selection
 - **Formatted Display**: User, timestamp, duration, size, status
@@ -382,6 +388,7 @@ When enabled (`:Sf coverage on`), coverage signs appear in the gutter:
 ### Schema Management
 
 - **Refresh**: Pull the latest metadata type index from the org via `Sf schema refresh`
+
 ### Metadata Retrieval
 
 - **Select Items**: Multi-select individual metadata items via picker with preview details
@@ -389,6 +396,106 @@ When enabled (`:Sf coverage on`), coverage signs appear in the gutter:
 - **Refresh Current Buffer**: `Sf retrieve refresh` detects the metadata type from the current buffer and retrieves the server version directly — no pickers, no extra steps
 - **Diff Against Server**: `Sf retrieve diff` retrieves the server version to a temp directory, converts it to source format, then opens a dedicated tab with a scroll-synced 2-pane diff view (left: server, right: local). Uses an in-memory scratch buffer with `sf://` URI scheme to avoid LSP interference
 - **Manifest Mode**: For >10 items, generates a `retrieve-manifest.xml` automatically for efficiency
+
+### 🐛 Apex Replay Debugger (DAP)
+
+- sf.nvim integrates with nvim-dap to provide Apex Replay Debugger support. This allows you to debug Apex code by replaying debug logs through the Salesforce Apex Debugger adapter.
+
+#### Prerequisites
+
+- [nvim-dap](https://github.com/mfussenegger/nvim-dap) plugin installed
+- [Apex Language Server](https://github.com/forcedotcom/salesforcedx-vscode/tree/develop/packages/salesforcedx-vscode-apex) (`apex_ls`) — the official Java-based LSP for Apex. Install via [Mason](https://github.com/williamboman/mason.nvim) (`:MasonInstall apex-language-server`) or as a standalone JAR.
+- [Apex Replay Debugger adapter](https://github.com/forcedotcom/salesforcedx-vscode/tree/develop/packages/salesforcedx-apex-replay-debugger) — the `apexReplayDebug.js` adapter script from the official Salesforce Extension Pack for VS Code.
+
+#### Adapter Setup
+
+The debug adapter is part of the [salesforcedx-vscode](https://github.com/forcedotcom/salesforcedx-vscode) monorepo, written in TypeScript. It must be compiled to JavaScript before use:
+
+```bash
+# Clone the repo
+git clone https://github.com/forcedotcom/salesforcedx-vscode.git
+cd salesforcedx-vscode
+
+# Install dependencies and compile
+npm install
+npm run compile
+
+# The compiled adapter is at:
+# packages/salesforcedx-apex-replay-debugger/out/src/adapter/apexReplayDebug.js
+```
+
+The `adapter_path` config option must point to the compiled `.js` file. Example:
+
+```lua
+adapter_path = "/home/user/salesforcedx-vscode/packages/salesforcedx-apex-replay-debugger/out/src/adapter/apexReplayDebug.js"
+```
+
+#### Configuration
+
+```lua
+require("sf").setup({
+  dap = {
+    adapter_path = "/path/to/apexReplayDebug.js",   -- REQUIRED: absolute path to the compiled adapter
+    port = 4712,                                    -- DAP adapter port (default)
+    lsp_client_name = "apex_ls",                    -- LSP client name (apex_ls or apex_ls_ts)
+  },
+  dap_log_dir = nil,                                -- defaults to {cache_path}/logs/dap
+})
+```
+
+If `adapter_path` is left as `nil`, all DAP functionality is disabled (no-op).
+
+#### Workflow
+
+1. Set breakpoints in your Apex code using nvim-dap (`:DapToggleBreakpoint`)
+2. Enable debug logging for your user in Salesforce (`:Sf debug trace new`)
+3. Reproduce the issue in Salesforce (execute the Apex code you want to debug)
+4. Run `:Sf log debug` — this resumes cached logs, downloads the selected one, copies it to the DAP log directory, and automatically launches the Apex Replay Debugger session
+5. Step through your code with standard nvim-dap controls
+
+#### Manual DAP Launch
+
+If you already have a debug log in the DAP directory, you can launch the debugger manually:
+
+```vim
+:lua require("dap").continue()
+```
+
+The `Sf log debug` command does everything automatically: select log → copy → launch.
+
+#### How It Works
+
+1. **Breakpoint Synchronization**: Breakpoints set in your Apex files using `:DapToggleBreakpoint` are automatically resolved through the Apex LSP to ensure they map to the correct locations in the debug log.
+
+2. **Faux Class Generation**: sf.nvim automatically generates faux (stub) Apex classes to provide proper LSP support during debugging. This mechanism:
+   - Extracts class definitions from Apex code files and debug logs
+   - Creates lightweight stub classes with method signatures
+   - Stores them in a cache directory for quick LSP resolution
+   - Significantly improves IDE features like hover information, code completion, and breakpoint matching
+   - Reduces LSP initialization time by caching sObject metadata
+
+3. **Log-to-Debugger Bridge**: The `:Sf log debug` command orchestrates the entire workflow:
+   - Fetches cached debug logs or retrieves new ones from your org
+   - Presents an interactive picker to select the desired log
+   - Copies the selected log to the DAP directory (configured via `dap_log_dir`)
+   - Automatically launches the Apex Replay Debugger session with proper configuration
+   - Sets up the nvim-dap adapter to connect on the configured port (default: 4712)
+
+4. **Code Stepping**: Once the debugger session starts, use standard nvim-dap controls:
+   - `:DapContinue` — Resume execution
+   - `:DapStepOver` — Step over the current line
+   - `:DapStepInto` — Step into function calls
+   - `:DapStepOut` — Step out of current function
+   - `:DapTerminate` — End the debugging session
+   - Variable inspector, watches, and the call stack are available via nvim-dap's UI
+
+5. **Configuration Independence**: If `adapter_path` is not set, DAP functionality is completely disabled (no errors, no overhead). This allows you to use sf.nvim without nvim-dap if you don't need debugging.
+
+#### Implementation Details
+
+- **Async Coroutine-Based Architecture**: All DAP operations (log fetching, copying, adapter launching) run asynchronously using Lua coroutines to prevent blocking the editor
+- **Error Handling**: Graceful fallback if the adapter fails to start or if the log format is incompatible
+- **Extensible Design**: The DAP adapter integration is cleanly separated, making it easy to add support for other Salesforce debugging adapters in the future
 
 ## 🛠️ Development
 
@@ -457,7 +564,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 📚 Related Projects
 
-- [sgd (sfdx-git-delta)](https://github.com/scolladon/sfdx-git-delta) - Delta deployment support
 - [salesforce.nvim](https://github.com/jonathanmorris180/salesforce.nvim) - Alternative Salesforce plugin
 - [sf.nvim](https://github.com/xixiaofinland/sf.nvim) - Another Salesforce plugin for Neovim
 

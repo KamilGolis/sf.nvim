@@ -1,4 +1,4 @@
-local Log = require("sf.core.log")
+local Log = require("sf.core.log").scoped("core/utils")
 local PathUtils = require("sf.core.path_utils")
 
 local M = {}
@@ -122,6 +122,40 @@ function M.get_default_package_path()
   end
 
   return nil
+end
+
+--- Gets changed files from git diff HEAD (excluding deletions).
+--- Filters to files inside the default package directory.
+--- Must be called inside an async.async() block.
+--- @return table|nil paths List of changed file paths, or nil on error
+--- @return string|nil err Error message if git command failed
+function M.get_changed_files()
+  local Config = require("sf.config")
+  local Async = require("sf.core.async")
+  local git = Config:get_options().git_path or "git"
+  local stdout, code = Async.await_system(git, { "diff", "--name-only", "--diff-filter=d", "HEAD" })
+
+  if code ~= 0 then
+    return nil, "Git diff failed: " .. stdout
+  end
+
+  -- Resolve the default package path to use as a filter prefix
+  local package_path = M.get_default_package_path()
+  if not package_path then
+    return nil, "Could not determine default package directory from sfdx-project.json"
+  end
+
+  -- Strip leading separator and add trailing / for prefix matching
+  local prefix = package_path:gsub("^[/\\]+", "") .. "/"
+
+  local paths = {}
+  for line in stdout:gmatch("[^\r\n]+") do
+    if line:sub(1, #prefix) == prefix then
+      table.insert(paths, line)
+    end
+  end
+
+  return paths, nil
 end
 
 return M

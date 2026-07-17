@@ -18,7 +18,6 @@ function Config:new()
     coverage_results_file = "coverage.json", -- Default filename for storing coverage results
     log_list_file = "log-list.json", -- Default filename for storing log list results
     log_dir = "logs", -- Default directory for downloaded debug logs
-    delta_dir = "delta", -- Default directory for delta package
     metadata_types_file = "metadata-types.json", -- Default filename for metadata types schema
     metadatas_dir = "metadatas", -- Default directory for retrieved metadata files
     retrieve_file = "retrieve.json", -- Default filename for storing retrieve results
@@ -26,6 +25,12 @@ function Config:new()
     apex_temp_dir = "apex", -- Default directory for temp apex scripts
     scripts_dir = "scripts", -- Default scripts directory for persistent apex scripts
     anonymous_log_dir = "anonymous", -- Default subdirectory under logs/ for anonymous apex logs
+    dap_log_dir = nil, -- Default directory for DAP debug logs (default: log_dir/dap)
+    dap = {
+      adapter_path = nil, -- absolute path to apexReplayDebug.js
+      port = 4712, -- DAP server port
+      lsp_client_name = "apex_ls", -- LSP client name for breakpoint info (apex_ls or apex_ls_ts etc.)
+    },
     debug = false, -- Debug mode (enables logging to file)
     logger_scope = {}, -- Module source patterns to log (empty = log everything). Example: {"test/runner", "core/job_utils"}
     debug_inspect = false, -- Show debug output on screen (requires debug = true)
@@ -54,10 +59,10 @@ function Config:setup(options)
   self.options.metadatas_dir = PathUtils.join(self.options.cache_path, self.options.metadatas_dir)
   self.options.retrieve_file = PathUtils.join(self.options.cache_path, self.options.retrieve_file)
   self.options.debug_levels_dir = PathUtils.join(self.options.cache_path, self.options.debug_levels_dir)
-  self.options.delta_path = PathUtils.join(self.options.cache_path, self.options.delta_dir)
-  self.options.delta_manifest_path = PathUtils.join(self.options.delta_path, "package", "package.xml")
-  self.options.apex_temp_dir = PathUtils.join(self.options.cache_path, self.options.apex_temp_dir)
   self.options.anonymous_log_dir = PathUtils.join(self.options.log_dir, self.options.anonymous_log_dir)
+  self.options.dap_log_dir = self.options.dap_log_dir
+      and PathUtils.remove_trailing_separator(PathUtils.normalize(vim.fn.fnamemodify(self.options.dap_log_dir, ":p")))
+    or PathUtils.join(self.options.log_dir, "dap")
   self.options.namespace = vim.api.nvim_create_namespace("SFNVIM")
 
   Log.configure(self.options)

@@ -1,5 +1,6 @@
+local Async = require("sf.core.async")
 local Config = require("sf.config")
-local Connector = require("sf.org.connect")
+local Const = require("sf.const")
 local DeployUtils = require("sf.deploy.utils")
 local Diagnostics = require("sf.core.diagnostics")
 local Indexes = require("sf.core.indexes")
@@ -27,35 +28,26 @@ end
 --- Uses generated callback from DeployUtils to handle the job's completion.
 --- @param force boolean|nil Whether to ignore conflicts during deployment
 function Metadata:deploy_metadata(force)
-  Connector:check_cli(function()
-    -- Validate pre-deployment conditions
-
-    local valid, err = DeployUtils.validate_deployment_preconditions()
-
-    if not valid then
-      if err then
-        Log.notify(err, vim.log.levels.WARN)
-      end
+  Async.async(function()
+    if not DeployUtils.ensure_cli_ready() then
       return
     end
 
     local options = Config:get_options()
     local current_file = PathUtils.normalize(vim.fn.expand("%:p"))
-
-    -- Setup deployment environment and create context
     local context = DeployUtils.setup_deployment_environment("current_file", current_file, nil, options, Diagnostics)
 
-    -- Notify deployment start
     DeployUtils.report(context, "start")
-
-    local job = DeployUtils.create_current_file_deploy_job(current_file, context, {
-      cleanup_callback = function()
-        State.finish("deploy")
-      end,
-    }, force)
     State.start("deploy")
-    job:start()
-  end)
+
+    local args = Const.get_current_file_deploy_args(current_file, options.api_version, force)
+    local json_output, exit_code = Async.await_system(options.sf_cli_path, args)
+
+    DeployUtils.report(context, "checking_result")
+    DeployUtils.process_deployment_result(json_output, context, exit_code)
+    context.handle:finish()
+    State.finish("deploy")
+  end)()
 end
 
 --- Deploys changed metadata files using git delta to identify changes.
@@ -64,38 +56,42 @@ end
 --- Uses generated callbacks for manifest preparation and deployment with standardized job creation patterns.
 --- @param force boolean|nil Whether to ignore conflicts during deployment
 function Metadata:deploy_changed_metadatas(force)
-  Connector:check_cli(function()
-    -- Validate pre-deployment conditions
-    local valid, err = DeployUtils.validate_deployment_preconditions()
+  Async.async(function()
+    if not DeployUtils.ensure_cli_ready() then
+      return
+    end
 
-    if not valid then
-      if err then
-        Log.notify(err, vim.log.levels.WARN)
-      end
+    local git_ok, git_err = DeployUtils.require_git_repo()
+    if not git_ok then
+      Log.notify(git_err, vim.log.levels.ERROR)
+      return
+    end
+
+    local changed, diff_err = Utils.get_changed_files()
+    if not changed then
+      Log.notify(diff_err, vim.log.levels.ERROR)
+      return
+    end
+
+    local paths = DeployUtils.resolve_deploy_paths(changed)
+    if #paths == 0 then
+      Log.notify("No changed files to deploy", vim.log.levels.WARN)
       return
     end
 
     local options = Config:get_options()
-
-    -- Setup deployment environment and create context
-    local context = DeployUtils.setup_deployment_environment("changed_files", nil, nil, options, Diagnostics)
-
-    -- Notify deployment start
+    local context = DeployUtils.setup_deployment_environment("changed_files", nil, paths, options, Diagnostics)
     DeployUtils.report(context, "start")
-
-    local deploy_job = DeployUtils.create_manifest_deploy_job(options.delta_manifest_path, context, {
-      cleanup_callback = function()
-        State.finish("deploy")
-      end,
-    }, force)
-
-    -- Create manifest preparation job using utility functions
-    local prepare_manifest = DeployUtils.create_changed_files_manifest_job(context, deploy_job)
-
-    -- Start the job sequence
     State.start("deploy")
-    prepare_manifest:start()
-  end)
+
+    local args = Const.get_source_dir_deploy_args(paths, options.api_version, force)
+    local deploy_stdout, deploy_code = Async.await_system(options.sf_cli_path, args)
+
+    DeployUtils.report(context, "checking_result")
+    DeployUtils.process_deployment_result(deploy_stdout, context, deploy_code)
+    context.handle:finish()
+    State.finish("deploy")
+  end)()
 end
 
 --- Deploys metadata files listed in the Neovim quickfix list.
@@ -105,20 +101,14 @@ end
 --- Uses generated callbacks for manifest preparation and deployment with proper error handling.
 --- @param force boolean|nil Whether to ignore conflicts during deployment
 function Metadata:deploy_selected_metadata(force)
-  Connector:check_cli(function()
-    -- Validate pre-deployment conditions
-    local valid, err = DeployUtils.validate_deployment_preconditions()
-
-    if not valid then
-      if err then
-        Log.notify(err, vim.log.levels.WARN)
-      end
+  Async.async(function()
+    if not DeployUtils.ensure_cli_ready() then
       return
     end
 
-    -- Validate and process quickfix files using utility function
+    -- Validate and process quickfix files
     local quickfix_success, found_files, missing_files, quickfix_error =
-      DeployUtils.validate_quickfix_files(Config, Indexes, Utils)
+      DeployUtils.validate_quickfix_files(Indexes, Utils)
 
     if not quickfix_success then
       if quickfix_error then
@@ -130,36 +120,25 @@ function Metadata:deploy_selected_metadata(force)
       return
     end
 
-    local options = Config:get_options()
-
-    -- Setup deployment environment and create context
-    local context = DeployUtils.setup_deployment_environment("selected_files", nil, found_files, options, Diagnostics)
-
-    -- Notify deployment start
-    DeployUtils.report(context, "start")
-
-    -- Prepare quickfix files for deployment using utility function
-    local prep_success, prep_error = DeployUtils.prepare_quickfix_files_for_deployment(found_files)
-
-    if not prep_success then
-      Log.notify(prep_error, vim.log.levels.ERROR)
-      context.handle:finish()
+    local paths = DeployUtils.resolve_deploy_paths(found_files)
+    if #paths == 0 then
+      Log.notify("No valid files to deploy", vim.log.levels.WARN)
       return
     end
 
-    local deploy_job = DeployUtils.create_manifest_deploy_job(options.delta_manifest_path, context, {
-      cleanup_callback = function()
-        State.finish("deploy")
-      end,
-    }, force)
-
-    -- Create manifest preparation job using utility functions
-    local prepare_manifest = DeployUtils.create_selected_files_manifest_job(context, deploy_job)
-
-    -- Start the job sequence
+    local options = Config:get_options()
+    local context = DeployUtils.setup_deployment_environment("selected_files", nil, paths, options, Diagnostics)
+    DeployUtils.report(context, "start")
     State.start("deploy")
-    prepare_manifest:start()
-  end)
+
+    local args = Const.get_source_dir_deploy_args(paths, options.api_version, force)
+    local deploy_stdout, deploy_code = Async.await_system(options.sf_cli_path, args)
+
+    DeployUtils.report(context, "checking_result")
+    DeployUtils.process_deployment_result(deploy_stdout, context, deploy_code)
+    context.handle:finish()
+    State.finish("deploy")
+  end)()
 end
 
 --- Creates and returns a new instance of the Metadata class.

@@ -125,6 +125,8 @@ M.SF_CLI_MESSAGES = {
   VERSION_FOUND_FORMAT = "SF CLI is installed at %s. Version: %s, Platform: %s, Node: %s.",
   VERSION_UPDATE_FORMAT = "\nUpdate available: %s.",
   VERSION_UNKNOWN = "SF CLI found, but unable to determine version.",
+  CLI_NOT_INSTALLED = "SF CLI is not installed.",
+  CLI_CHECK_FAILED = "SF CLI version check failed.",
   ORG_LIST_TITLE = "Refreshing Salesforce org list.",
   ORG_LIST_FAILED = "Failed to fetch org list.",
   ORG_LIST_EMPTY = "orgs.json file is empty.",
@@ -204,7 +206,6 @@ M.SF_CLI_MESSAGES = {
   TRACE_REFRESH_SUCCESS = "Trace flag refreshed successfully.",
   TRACE_REFRESH_FAILED = "Failed to refresh trace flag.",
   TRACE_NO_DEBUG_LEVEL = "No debug level selected. Select one before saving.",
-  TRACE_INVALID_DATE_FORMAT = "Invalid date format. Use dd.mm.yyyy HH:MM.",
   TRACE_NO_TRACE_FLAGS = "No trace flags found for this user.",
   TRACE_NOT_FOUND_ERROR = "Could not find selected trace flag.",
   TRACE_OVERLAP_DELETING = "Removing conflicting trace flag before creating new one.",
@@ -233,6 +234,43 @@ M.SF_CLI_MESSAGES = {
   APEX_EXECUTE_CLEANUP_SUCCESS = "Temp files cleaned up.",
   APEX_LIST_NO_SCRIPTS = "No Apex scripts found in scripts directory.",
   APEX_LIST_DIR_MISSING = "Scripts directory does not exist.",
+  -- Faux class cache messages
+  SOBJECT_REBUILD_TITLE = "Rebuilding sObject cache",
+  SOBJECT_REBUILD_SUCCESS = "sObject cache rebuild complete.",
+  SOBJECT_REBUILD_FAILED = "sObject cache rebuild failed.",
+  SOBJECT_LISTING = "Listing sObjects...",
+  SOBJECT_LIST_FAILED = "Failed to list sObjects.",
+  SOBJECT_LIST_PARSE_FAILED = "Failed to parse sObject list.",
+  SOBJECT_LIST_EMPTY = "No sObjects found in org.",
+  SOBJECT_REBUILD_COMPLETE_FORMAT = "Cache rebuild complete. %d standard, %d custom sObjects.",
+  SOBJECT_DESCRIBE_PROGRESS_FORMAT = "Describing (%d/%d): %s",
+  SOBJECT_WRITE_FAILED_FORMAT = "Failed to write %s: %s",
+  SOBJECT_DESCRIBE_FAILED_FORMAT = "Failed to describe %s: empty or invalid response",
+  SOBJECT_DESCRIBE_ERROR_FORMAT = "Failed to describe %s (exit %d): %s",
+  SOBJECT_CLEARED_FORMAT = "Cleared %d faux class files from %s",
+  SOBJECT_CACHE_STATUS_FORMAT = "sObject cache (%s): %d standard, %d custom, %d total files",
+  -- REST credential messages
+  REST_ORG_DISPLAY_FAILED = "org display failed",
+  REST_PARSE_ORG_INFO_FAILED = "parse org info failed",
+  REST_TOKEN_FETCH_FAILED = "token fetch failed",
+  REST_PARSE_TOKEN_FAILED = "parse token failed",
+  REST_LIST_SOBJECTS_FAILED = "list sobjects REST failed",
+  REST_PARSE_LIST_FAILED = "parse sobjects list failed",
+  REST_BATCH_DESCRIBE_FAILED = "Batch describe failed: ",
+  REST_CREDENTIALS_FAILED_PREFIX = "Failed: ",
+  -- Batch progress format
+  SOBJECT_BATCH_PROGRESS_FORMAT = "Batch %d/%d (%d objects)",
+}
+
+--- DAP notification message constants
+M.DAP_MESSAGES = {
+  LSP_BREAKPOINT_ERROR = "Apex LSP breakpoint info error: ",
+  LSP_NOT_AVAILABLE = "Apex Language Server is not available.",
+  NOT_CONFIGURED = "DAP: not configured (set dap.adapter_path)",
+  LOG_EMPTY = "DAP: log file is empty or unreadable",
+  LOG_COPIED = "DAP: log copied to ",
+  CANNOT_LAUNCH = "DAP: cannot launch — nvim-dap or adapter_path not configured",
+  NO_CONFIGURATION = "DAP: no Apex Replay configuration found",
 }
 
 --- SOQL queries used for CLI data operations
@@ -267,6 +305,71 @@ M.SF_ACTIONS = {
   PICKER_TITLE = "Test Actions",
 }
 
+--- sObject directory constants (matching VS Code .sfdx/tools/sobjects/ layout)
+M.SOBJECTS_DIR = ".sfdx/tools/sobjects"
+M.STANDARD_DIR = "standardObjects"
+M.CUSTOM_DIR = "customObjects"
+M.SOBJECT_BATCH_SIZE = 25
+
+--- Salesforce REST API constants
+M.REST = {
+  SERVICES_DATA = "/services/data",
+  COMPOSITE_BATCH = "composite/batch",
+  SOBJECTS = "sobjects",
+  DESCRIBE = "describe",
+  VERSION_PREFIX = "v",
+  BATCH_REQUESTS = "batchRequests",
+  METHOD_GET = "GET",
+  METHOD_POST = "POST",
+  HEADER_AUTH = "Authorization: Bearer ",
+  HEADER_CONTENT = "Content-Type: application/json",
+  DATA_BINARY = "--data-binary",
+  STDIN = "@-",
+}
+
+--- REST API CLI wrappers
+M.REST_CLI = {
+  CURL = "curl",
+  FLAGS = { "-s", "-S", "-f" },
+}
+
+--- REST API SF CLI commands for credential retrieval
+M.REST_SF = {
+  ORG_DISPLAY = { CMD = "org display", ARGS = { ORG = "-o", JSON = "--json" } },
+  ACCESS_TOKEN = { CMD = "org auth show-access-token", ARGS = { ORG = "-o", JSON = "--json" } },
+}
+
+--- Field type to Apex type mapping table
+--- Ported from salesforcedx-vscode-metadata/src/sobjects/declarationGenerator.ts
+M.TYPE_MAPPING = {
+  string = "String",
+  double = "Double",
+  reference = "",
+  boolean = "Boolean",
+  currency = "Decimal",
+  date = "Date",
+  datetime = "Datetime",
+  email = "String",
+  location = "Location",
+  percent = "Double",
+  phone = "String",
+  picklist = "String",
+  multipicklist = "String",
+  textarea = "String",
+  encryptedstring = "String",
+  url = "String",
+  id = "Id",
+  base64 = "Blob",
+  address = "Address",
+  int = "Integer",
+  anyType = "Object",
+  combobox = "String",
+  time = "Time",
+  complexvalue = "Object",
+}
+
+M.MANIFEST_THRESHOLD = 10
+
 --- Salesforce CLI commands and their arguments
 --- Supported commands:
 --- - sf --version
@@ -275,7 +378,6 @@ M.SF_ACTIONS = {
 --- - sf project deploy start -x [manifest] --json -a [version] [--verbose] [-c]
 --- - sf project retrieve start -m [type:name [type:name ...]] --json -a [version] -c [-o target-org]
 --- - sf project retrieve start -x [manifest] --json -a [version] -c [-o target-org]
---- - sf sgd source delta -c --from HEAD --output-dir [path]
 --- - sf org list --json
 --- - sf config set target-org [target-org]
 --- - sf org list metadata-types --json [-o target-org]
@@ -306,7 +408,6 @@ M.SF_CLI = {
         JSON = "--json",
         API_VERSION = "-a",
         VERBOSE = "--verbose",
-        MANIFEST = "-x",
         IGNORE_CONFLICTS = "-c",
       },
     },
@@ -329,19 +430,6 @@ M.SF_CLI = {
         ROOT_DIR = "--root-dir",
         OUTPUT_DIR = "--output-dir",
         JSON = "--json",
-      },
-    },
-  },
-  SGD = {
-    SOURCE = {
-      DELTA = {
-        CMD = "sgd source delta",
-        ARGS = {
-          COMPARE = "-c",
-          FROM = "--from",
-          OUTPUT_DIR = "--output-dir",
-          HEAD_REF = "HEAD",
-        },
       },
     },
   },
@@ -373,6 +461,26 @@ M.SF_CLI = {
         METADATA_TYPE = "-m",
         JSON = "--json",
         TARGET_ORG = "-o",
+      },
+    },
+  },
+  SOBJECT = {
+    LIST = {
+      CMD = "sobject list",
+      ARGS = {
+        SOBJECT = "-s",
+        TARGET_ORG = "-o",
+        JSON = "--json",
+        API_VERSION = "--api-version",
+      },
+    },
+    DESCRIBE = {
+      CMD = "sobject describe",
+      ARGS = {
+        SOBJECT = "-s",
+        TARGET_ORG = "-o",
+        JSON = "--json",
+        API_VERSION = "--api-version",
       },
     },
   },
@@ -487,26 +595,16 @@ M.SF_CLI = {
 
 --- Git commands and their arguments
 M.GIT = {
-  CHECK_REPO = {
-    CMD = "rev-parse",
-    ARGS = "--is-inside-work-tree",
-  },
-  STATUS = {
-    CMD = "status",
-    ARGS = "--porcelain",
-  },
-}
-
---- Shell commands and their arguments
-M.SHELL = {
-  BASH = {
-    CMD = "bash",
+  DIFF = {
+    CMD = "diff",
     ARGS = {
-      COMMAND = "-c",
+      NAME_ONLY = "--name-only",
+      DIFF_FILTER = "--diff-filter=d",
     },
   },
 }
 
+--- TODO: Not used, implement in future.
 --- Generates formatted lines for org details preview
 --- Generates formatted preview lines for org details display
 --- @param org table The org object containing details (alias, instanceUrl, username, etc.)
@@ -560,26 +658,6 @@ function M.get_project_generate_args(options)
   return args
 end
 
---- Constructs arguments for git repository check command
---- @return table Complete argument list for git rev-parse command
---- @usage local args = Const.get_git_check_repo_args()
-function M.get_git_check_repo_args()
-  return {
-    M.GIT.CHECK_REPO.CMD,
-    M.GIT.CHECK_REPO.ARGS,
-  }
-end
-
---- Constructs arguments for git status check command
---- @return table Complete argument list for git status command
---- @usage local args = Const.get_git_status_args()
-function M.get_git_status_args()
-  return {
-    M.GIT.STATUS.CMD,
-    M.GIT.STATUS.ARGS,
-  }
-end
-
 --- Constructs arguments for SF CLI current file deployment command
 --- @param current_file string The path to the current file to deploy
 --- @param api_version string The Salesforce API version to use
@@ -603,66 +681,38 @@ function M.get_current_file_deploy_args(current_file, api_version, force)
 
   -- Add ignore conflicts flag if force is enabled
   if force then
-    table.insert(args, M.SF_CLI.PROJECT.DEPLOY.ARGS.IGNORE_CONFLICTS)
+    vim.list_extend(args, { M.SF_CLI.PROJECT.DEPLOY.ARGS.IGNORE_CONFLICTS })
   end
 
   return args
 end
 
---- Constructs arguments for SF CLI manifest-based deployment command
---- @param manifest_path string The path to the manifest file
---- @param api_version string The Salesforce API version to use
---- @param force boolean|nil Whether to ignore conflicts (optional)
---- @return table Complete argument list for sf project deploy start command with manifest
---- @usage local args = Const.get_manifest_deploy_args("manifest/package.xml", "58.0", true)
-function M.get_manifest_deploy_args(manifest_path, api_version, force)
+--- Constructs arguments for multi-path source-dir deployment.
+--- Uses multiple -d flags, one per path.
+--- @param paths string[] List of file/directory paths to deploy
+--- @param api_version string The Salesforce API version
+--- @param force boolean|nil Whether to ignore conflicts
+--- @return table Complete argument list
+--- @usage local args = Const.get_source_dir_deploy_args({"path1", "path2"}, "65.0", true)
+function M.get_source_dir_deploy_args(paths, api_version, force)
   local args = {}
-
-  -- Add the base command
   vim.list_extend(args, split_cmd(M.SF_CLI.PROJECT.DEPLOY.CMD))
 
-  -- Add the required arguments
+  for _, path in ipairs(paths) do
+    vim.list_extend(args, { M.SF_CLI.PROJECT.DEPLOY.ARGS.SOURCE_DIR, path })
+  end
+
   vim.list_extend(args, {
-    M.SF_CLI.PROJECT.DEPLOY.ARGS.MANIFEST,
-    manifest_path,
     M.SF_CLI.PROJECT.DEPLOY.ARGS.JSON,
     M.SF_CLI.PROJECT.DEPLOY.ARGS.API_VERSION,
     api_version,
   })
 
-  -- Add ignore conflicts flag if force is enabled
   if force then
-    table.insert(args, M.SF_CLI.PROJECT.DEPLOY.ARGS.IGNORE_CONFLICTS)
+    vim.list_extend(args, { M.SF_CLI.PROJECT.DEPLOY.ARGS.IGNORE_CONFLICTS })
   end
 
   return args
-end
-
---- Constructs complete SGD source delta command string for git diff operations
---- @param output_dir string The output directory for the delta files
---- @return string Complete command string for sf sgd source delta
---- @usage local cmd = Const.get_sgd_delta_command("/tmp/delta")
-function M.get_sgd_delta_command(output_dir)
-  return string.format(
-    "%s %s %s %s %s %s",
-    "sf",
-    M.SF_CLI.SGD.SOURCE.DELTA.CMD,
-    M.SF_CLI.SGD.SOURCE.DELTA.ARGS.COMPARE,
-    M.SF_CLI.SGD.SOURCE.DELTA.ARGS.FROM .. ' "' .. M.SF_CLI.SGD.SOURCE.DELTA.ARGS.HEAD_REF .. '"',
-    M.SF_CLI.SGD.SOURCE.DELTA.ARGS.OUTPUT_DIR,
-    output_dir
-  )
-end
-
---- Constructs arguments for bash command execution
---- @param command string The command to execute with bash
---- @return table Complete argument list for bash -c command
---- @usage local args = Const.get_bash_command_args("echo 'hello world'")
-function M.get_bash_command_args(command)
-  return {
-    M.SHELL.BASH.ARGS.COMMAND,
-    command,
-  }
 end
 
 --- Constructs arguments for SF CLI Apex test execution by class name
@@ -686,7 +736,7 @@ function M.get_apex_test_class_args(class_name, with_coverage)
 
   -- Add coverage flag if requested
   if with_coverage then
-    table.insert(args, M.SF_CLI.APEX.RUN.TEST.ARGS.COVERAGE)
+    vim.list_extend(args, { M.SF_CLI.APEX.RUN.TEST.ARGS.COVERAGE })
   end
 
   return args
@@ -713,7 +763,7 @@ function M.get_apex_test_method_args(test_name, with_coverage)
 
   -- Add coverage flag if requested
   if with_coverage then
-    table.insert(args, M.SF_CLI.APEX.RUN.TEST.ARGS.COVERAGE)
+    vim.list_extend(args, { M.SF_CLI.APEX.RUN.TEST.ARGS.COVERAGE })
   end
 
   return args
@@ -727,18 +777,14 @@ function M.get_apex_log_list_args(target_org)
   local args = {}
 
   -- Add the base command
-  local cmd_parts = split_cmd(M.SF_CLI.APEX.LOG.LIST.CMD)
-  for _, part in ipairs(cmd_parts) do
-    table.insert(args, part)
-  end
+  vim.list_extend(args, split_cmd(M.SF_CLI.APEX.LOG.LIST.CMD))
 
   -- Add JSON flag
-  table.insert(args, M.SF_CLI.APEX.LOG.LIST.ARGS.JSON)
+  vim.list_extend(args, { M.SF_CLI.APEX.LOG.LIST.ARGS.JSON })
 
   -- Add target org if provided
   if target_org then
-    table.insert(args, M.SF_CLI.APEX.LOG.LIST.ARGS.TARGET_ORG)
-    table.insert(args, target_org)
+    vim.list_extend(args, { M.SF_CLI.APEX.LOG.LIST.ARGS.TARGET_ORG, target_org })
   end
 
   return args
@@ -753,14 +799,14 @@ function M.get_apex_log_get_args(log_dir, log_id)
   local args = {}
   local cmd_parts = split_cmd(M.SF_CLI.APEX.LOG.GET.CMD)
 
-  for _, part in ipairs(cmd_parts) do
-    table.insert(args, part)
-  end
+  vim.list_extend(args, cmd_parts)
 
-  table.insert(args, M.SF_CLI.APEX.LOG.GET.ARGS.LOG_DIR)
-  table.insert(args, log_dir)
-  table.insert(args, M.SF_CLI.APEX.LOG.GET.ARGS.LOG_ID)
-  table.insert(args, log_id)
+  vim.list_extend(args, {
+    M.SF_CLI.APEX.LOG.GET.ARGS.LOG_DIR,
+    log_dir,
+    M.SF_CLI.APEX.LOG.GET.ARGS.LOG_ID,
+    log_id,
+  })
   return args
 end
 
@@ -813,19 +859,41 @@ function M.get_org_list_metadata_args(xml_name, target_org)
   return args
 end
 
---- Constructs arguments for SF sgd source delta command
---- @param output_dir string The output directory for delta files
---- @return table Complete argument list for sf sgd source delta
-function M.get_sgd_delta_args(output_dir)
+--- Constructs arguments for sf sobject list command
+--- @param sobject_filter string Category of objects to list (default "ALL")
+--- @param api_version string|nil Optional API version
+--- @param target_org string|nil Optional target org username
+--- @return table Complete argument list for sf sobject list command
+function M.get_sobject_list_args(sobject_filter, api_version, target_org)
   local args = {}
-  vim.list_extend(args, split_cmd(M.SF_CLI.SGD.SOURCE.DELTA.CMD))
-  vim.list_extend(args, {
-    M.SF_CLI.SGD.SOURCE.DELTA.ARGS.COMPARE,
-    M.SF_CLI.SGD.SOURCE.DELTA.ARGS.FROM,
-    M.SF_CLI.SGD.SOURCE.DELTA.ARGS.HEAD_REF,
-    M.SF_CLI.SGD.SOURCE.DELTA.ARGS.OUTPUT_DIR,
-    output_dir,
-  })
+  vim.list_extend(args, split_cmd(M.SF_CLI.SOBJECT.LIST.CMD))
+  vim.list_extend(args, { M.SF_CLI.SOBJECT.LIST.ARGS.SOBJECT, sobject_filter or "all" })
+  if target_org then
+    vim.list_extend(args, { M.SF_CLI.SOBJECT.LIST.ARGS.TARGET_ORG, target_org })
+  end
+  if api_version then
+    vim.list_extend(args, { M.SF_CLI.SOBJECT.LIST.ARGS.API_VERSION, api_version })
+  end
+  vim.list_extend(args, { M.SF_CLI.SOBJECT.LIST.ARGS.JSON })
+  return args
+end
+
+--- Constructs arguments for sf sobject describe command
+--- @param sobject_name string The API name of the sObject to describe
+--- @param api_version string|nil Optional API version
+--- @param target_org string|nil Optional target org username
+--- @return table Complete argument list for sf sobject describe command
+function M.get_sobject_describe_args(sobject_name, api_version, target_org)
+  local args = {}
+  vim.list_extend(args, split_cmd(M.SF_CLI.SOBJECT.DESCRIBE.CMD))
+  vim.list_extend(args, { M.SF_CLI.SOBJECT.DESCRIBE.ARGS.SOBJECT, sobject_name })
+  if target_org then
+    vim.list_extend(args, { M.SF_CLI.SOBJECT.DESCRIBE.ARGS.TARGET_ORG, target_org })
+  end
+  if api_version then
+    vim.list_extend(args, { M.SF_CLI.SOBJECT.DESCRIBE.ARGS.API_VERSION, api_version })
+  end
+  vim.list_extend(args, { M.SF_CLI.SOBJECT.DESCRIBE.ARGS.JSON })
   return args
 end
 
@@ -1119,5 +1187,4 @@ function M.get_apex_run_args(file_path, api_version, target_org)
   return args
 end
 
-M.MANIFEST_THRESHOLD = 10
 return M

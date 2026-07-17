@@ -1,11 +1,10 @@
 --- sf-nvim schema refresh module
 -- @license MIT
 
+local Async = require("sf.core.async")
 local Config = require("sf.config")
-local Connector = require("sf.org.connect")
 local Const = require("sf.const")
-local JobUtils = require("sf.core.job_utils")
-local Log = require("sf.core.log")
+local Log = require("sf.core.log").scoped("schema/refresh")
 local OrgUtils = require("sf.org.utils")
 
 local Schema = {}
@@ -14,9 +13,16 @@ local Schema = {}
 --- Saves the result to `.sf/.sf.nvim/metadata-types.json` (configurable via metadata_types_file).
 --- Always overwrites the file on each invocation.
 function Schema.refresh(on_complete)
-  Connector:check_cli(function()
-    local has_default_org, target_org, org_error = OrgUtils.check_default_org()
+  Async.async(function()
+    if not Async.await_cli_check() then
+      if on_complete then
+        on_complete(false)
+      end
 
+      return
+    end
+
+    local has_default_org, target_org, org_error = OrgUtils.check_default_org()
     if not has_default_org then
       Log.notify(org_error or Const.SF_CLI_MESSAGES.NO_DEFAULT_ORG, vim.log.levels.ERROR)
 
@@ -27,10 +33,15 @@ function Schema.refresh(on_complete)
       return
     end
 
-    local cli_valid, executable_path, error_msg = JobUtils.validate_cli_installation(Config:get_options().sf_cli_path)
+    local result_file = Config:get_options().metadata_types_file
+    local result_dir = vim.fn.fnamemodify(result_file, ":h")
+    vim.fn.mkdir(result_dir, "p")
 
-    if not cli_valid or not executable_path then
-      Log.notify(error_msg or Const.SF_CLI_MESSAGES.NOT_FOUND, vim.log.levels.ERROR)
+    local args = Const.get_org_list_metadata_types_args(target_org)
+    local parsed, err, raw_stdout = Async.await_sf(args, Const.SF_CLI_MESSAGES.SCHEMA_REFRESH_TITLE)
+
+    if err then
+      Log.notify(string.format(Const.SF_CLI_MESSAGES.SCHEMA_REFRESH_FAILED, err), vim.log.levels.ERROR)
 
       if on_complete then
         on_complete(false)
@@ -39,71 +50,35 @@ function Schema.refresh(on_complete)
       return
     end
 
-    local context = JobUtils.create_progress_context(
-      Const.SF_CLI_MESSAGES.SCHEMA_REFRESH_TITLE,
-      Const.SF_CLI_MESSAGES.SCHEMA_REFRESH_SUCCESS,
-      Const.SF_CLI_MESSAGES.SCHEMA_REFRESH_FAILED
-    )
+    if not parsed then
+      Log.notify("Failed to parse schema response", vim.log.levels.ERROR)
 
-    local result_file = Config:get_options().metadata_types_file
-    local result_dir = vim.fn.fnamemodify(result_file, ":h")
+      if on_complete then
+        on_complete(false)
+      end
 
-    vim.fn.mkdir(result_dir, "p")
+      return
+    end
 
-    local args = Const.get_org_list_metadata_types_args(target_org)
+    local file = io.open(result_file, "w")
+    if file then
+      file:write(raw_stdout)
+      file:close()
+      Log.deb("Schema saved to:", result_file)
+    else
+      Log.notify("Failed to write schema file: " .. result_file, vim.log.levels.ERROR)
 
-    local job = JobUtils.create_cli_job(executable_path, args, {
-      on_success = function(job, return_val)
-        local result = table.concat(job:result(), "\n")
+      if on_complete then
+        on_complete(false)
+      end
 
-        Log.deb("Schema refresh raw result:", result)
+      return
+    end
 
-        local ok, _, json_err = JobUtils.validate_json_response(result)
-
-        if not ok then
-          JobUtils.handle_cli_error(return_val, context, "Invalid JSON response: " .. (json_err or "unknown error"))
-
-          if on_complete then
-            on_complete(false)
-          end
-
-          return
-        end
-
-        local file = io.open(result_file, "w")
-
-        if file then
-          file:write(result)
-          file:close()
-          Log.deb("Schema saved to:", result_file)
-        else
-          JobUtils.handle_cli_error(return_val, context, "Failed to write schema file: " .. result_file)
-
-          if on_complete then
-            on_complete(false)
-          end
-
-          return
-        end
-
-        context.handle:report({ message = context.success_message, percentage = 100 })
-        context.handle:finish()
-        if on_complete then
-          on_complete(true)
-        end
-      end,
-      on_error = function(job, return_val)
-        local stderr = job:stderr_result()
-
-        JobUtils.handle_cli_error(return_val, context)
-        if on_complete then
-          on_complete(false)
-        end
-      end,
-    })
-
-    job:start()
-  end)
+    if on_complete then
+      on_complete(true)
+    end
+  end)()
 end
 
 return Schema

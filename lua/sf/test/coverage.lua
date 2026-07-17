@@ -1,7 +1,7 @@
 --- sf-nvim coverage display module
 -- @license MIT
 
-local Log = require("sf.core.log")
+local Log = require("sf.core.log").scoped("test/coverage")
 
 local Coverage = {}
 

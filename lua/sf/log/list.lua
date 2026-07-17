@@ -2,13 +2,13 @@
 -- @license MIT
 
 local Config = require("sf.config")
-local Connector = require("sf.org.connect")
 local Const = require("sf.const")
 local JobUtils = require("sf.core.job_utils")
-local Log = require("sf.core.log")
+local Log = require("sf.core.log").scoped("log/list")
 local OrgUtils = require("sf.org.utils")
 local PathUtils = require("sf.core.path_utils")
 local Picker = require("sf.log.picker")
+local Progress = require("sf.core.progress")
 local Utils = require("sf.log.utils")
 
 local LogList = {}
@@ -102,21 +102,20 @@ function LogList.ensure_log_file(item, on_ready)
     return
   end
 
-  Connector:check_cli(function()
-    local has_org, _, org_error = OrgUtils.check_default_org()
+  local Async = require("sf.core.async")
 
+  Async.async(function()
+    if not Async.await_cli_check() then
+      return
+    end
+
+    local has_org, _, org_error = OrgUtils.check_default_org()
     if not has_org then
       Log.notify(org_error or Const.SF_CLI_MESSAGES.NO_DEFAULT_ORG, vim.log.levels.ERROR)
       return
     end
 
-    local cli_valid, executable_path, cli_error = JobUtils.validate_cli_installation(Config:get_options().sf_cli_path)
-
-    if not cli_valid or not executable_path then
-      Log.notify(cli_error or Const.SF_CLI_MESSAGES.NOT_FOUND, vim.log.levels.ERROR)
-      return
-    end
-
+    local executable_path = Config:get_options().sf_cli_path or "sf"
     local context = JobUtils.create_progress_context(
       Const.SF_CLI_MESSAGES.LOG_RETRIEVE_TITLE,
       Const.SF_CLI_MESSAGES.LOG_RETRIEVE_SUCCESS,
@@ -124,27 +123,21 @@ function LogList.ensure_log_file(item, on_ready)
     )
 
     local args = Const.get_apex_log_get_args(log_dir, log_id)
+    local stdout, code = Async.await_system(executable_path, args)
 
-    local job = JobUtils.create_cli_job(executable_path, args, {
-      on_success = function(job, return_val)
-        context.handle:report({ message = context.success_message, percentage = 100 })
-        context.handle:finish()
+    if code ~= 0 then
+      JobUtils.handle_cli_error(code, context)
+      return
+    end
 
-        -- Call on_ready with the downloaded log file (must run on main event loop)
-        local log_file = PathUtils.join(log_dir, log_id .. ".log")
+    context.handle:report({ message = context.success_message, percentage = 100 })
+    context.handle:finish()
 
-        vim.schedule(function()
-          on_ready(log_file)
-        end)
-      end,
-      on_error = function(job, return_val)
-        local stderr = job:stderr_result()
-        JobUtils.handle_cli_error(return_val, context)
-      end,
-    })
-
-    job:start()
-  end)
+    local log_file = PathUtils.join(log_dir, log_id .. ".log")
+    vim.schedule(function()
+      on_ready(log_file)
+    end)
+  end)()
 end
 
 --- Retrieve a selected debug log and open it in a buffer.
@@ -159,96 +152,57 @@ function LogList.list_logs(options)
   options = options or {}
   local on_select = options.on_select or retrieve_selected_log
 
-  -- First check if SF CLI is installed
-  Connector:check_cli(function()
-    -- Check if default org is set
-    local has_default_org, target_org, org_error = OrgUtils.check_default_org()
+  local Async = require("sf.core.async")
 
+  Async.async(function()
+    if not Async.await_cli_check() then
+      return
+    end
+
+    local has_default_org, target_org, org_error = OrgUtils.check_default_org()
     if not has_default_org then
       Log.notify(org_error or Const.SF_CLI_MESSAGES.NO_DEFAULT_ORG, vim.log.levels.ERROR)
       return
     end
 
-    -- Validate CLI installation
-    local cli_valid, executable_path, error_msg = JobUtils.validate_cli_installation(Config:get_options().sf_cli_path)
+    local result_file = Utils.get_log_list_path()
+    local result_dir = vim.fn.fnamemodify(result_file, ":h")
+    vim.fn.mkdir(result_dir, "p")
 
-    if not cli_valid or not executable_path then
-      Log.notify(error_msg or Const.SF_CLI_MESSAGES.NOT_FOUND, vim.log.levels.ERROR)
+    local args = Const.get_apex_log_list_args(target_org)
+    local parsed, err, raw_stdout = Async.await_sf(args, Const.SF_CLI_MESSAGES.LOG_LIST_TITLE)
+
+    if err then
+      Log.notify(err, vim.log.levels.ERROR)
       return
     end
 
-    -- Create progress context
-    local context = JobUtils.create_progress_context(
-      Const.SF_CLI_MESSAGES.LOG_LIST_TITLE,
-      Const.SF_CLI_MESSAGES.LOG_LIST_SUCCESS,
-      Const.SF_CLI_MESSAGES.LOG_LIST_FAILED
-    )
+    local file = io.open(result_file, "w")
+    if file then
+      file:write(raw_stdout)
+      file:close()
+    end
 
-    -- Get log list file path and ensure directory exists
-    local result_file = Utils.get_log_list_path()
-    local result_dir = vim.fn.fnamemodify(result_file, ":h")
+    local success, logs, error_message = Utils.process_log_list(raw_stdout)
+    if not success or not logs then
+      Log.notify(error_message or "Failed to process log list", vim.log.levels.ERROR)
+      return
+    end
 
-    vim.fn.mkdir(result_dir, "p")
+    if #logs == 0 then
+      Log.notify("No logs found in response", vim.log.levels.WARN)
+      return
+    end
 
-    -- Build command arguments
-    local args = Const.get_apex_log_list_args(target_org)
-
-    -- Create and start the job
-    local job = JobUtils.create_cli_job(executable_path, args, {
-      on_success = function(job, return_val)
-        local result = table.concat(job:result(), "\n")
-
-        Log.deb("Log list raw result:", result)
-
-        -- Save results to file
-        local file = io.open(result_file, "w")
-
-        if file then
-          file:write(result)
-          file:close()
-        end
-
-        if result == "" then
-          JobUtils.handle_cli_error(return_val, context, Const.SF_CLI_MESSAGES.LOG_LIST_EMPTY)
-          return
-        end
-
-        -- Process log list and create picker
-        local success, logs, error_message = Utils.process_log_list(result)
-
-        if not success or not logs then
-          JobUtils.handle_cli_error(return_val, context, error_message or "Failed to process log list")
-          return
-        end
-
-        if #logs == 0 then
-          JobUtils.handle_cli_error(return_val, context, "No logs found in response")
-          return
-        end
-
-        display_log_picker(logs, on_select)
-
-        -- Report success
-        context.handle:report({ message = context.success_message, percentage = 100 })
-        context.handle:finish()
-      end,
-      on_error = function(job, return_val)
-        local stderr = job:stderr_result()
-        JobUtils.handle_cli_error(return_val, context)
-      end,
-    })
-
-    job:start()
-  end)
+    display_log_picker(logs, on_select)
+  end)()
 end
+
 --- Pick a log from the cached log list and call on_select with the selected item.
 --- Falls back to fetching from org if no cached list exists.
 --- @param on_select function(item) Called when a log is selected from the picker
 function LogList.pick_cached_logs(on_select)
   local result_file = Utils.get_log_list_path()
-
-  -- If no cached file exists, fall back to fetching from org
-  local file_info = vim.uv.fs_stat(result_file)
 
   if not file_info then
     LogList.list_logs({ on_select = on_select })
@@ -291,6 +245,24 @@ end
 --- If no cached file exists, falls back to fetching from org.
 function LogList.resume_logs()
   LogList.pick_cached_logs(retrieve_selected_log)
+end
+
+--- Retrieve a debug log and copy it to the DAP directory.
+--- @param item table The selected picker item
+local retrieve_selected_log_for_debug = function(item)
+  LogList.ensure_log_file(item, function(log_file)
+    vim.cmd("edit " .. vim.fn.fnameescape(log_file))
+    Log.notify("Log file opened: " .. log_file, vim.log.levels.INFO)
+    local Dap = require("sf.dap")
+    if Dap.copy_log_for_debug(log_file) then
+      Dap.launch()
+    end
+  end)
+end
+
+--- Display cached debug logs and copy the selected one to the DAP directory.
+function LogList.debug_logs()
+  LogList.pick_cached_logs(retrieve_selected_log_for_debug)
 end
 
 return LogList

@@ -42,6 +42,8 @@ luac.out
 
 # Sample data directory
 data/
+.codegraph/
+.omp/
 
 # Test dependencies
 deps/

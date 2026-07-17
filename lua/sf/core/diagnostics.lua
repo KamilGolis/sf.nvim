@@ -1,7 +1,7 @@
 --- Module for handling diagnostics in the SF plugin
 --- @class Diagnostics
 local Config = require("sf.config")
-local Log = require("sf.core.log")
+local Log = require("sf.core.log").scoped("core/diagnostics")
 local Utils = require("sf.core.utils")
 
 local indexes = require("sf.core.indexes")
