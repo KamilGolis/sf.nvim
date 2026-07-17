@@ -7,24 +7,11 @@ if not Utils.has_sfdx_project() then
   return
 end
 
-local Analyze = require("sf.log.analyze")
-local ApexExecute = require("sf.apex.execute")
-local Cleanup = require("sf.log.cleanup")
 local Config = require("sf.config")
-local Connector = require("sf.org.connect")
-local Deployment = require("sf.deploy.metadata")
 local Diagnostics = require("sf.core.diagnostics")
-local Diff = require("sf.diff.runner")
+local Indexes = require("sf.core.indexes")
 local Log = require("sf.core.log").scoped("plugin")
-local LogList = require("sf.log.list")
-local RetrieveMetadata = require("sf.retrieve.metadata")
-local SchemaCleanup = require("sf.schema.cleanup")
-local SchemaRefresh = require("sf.schema.refresh")
-local SchemaRetrieve = require("sf.schema.retrieve")
 local TestCodeActions = require("sf.core.code_actions")
-local TestRunner = require("sf.test.runner")
-
-local indexes = require("sf.core.indexes")
 
 if vim.g.loaded_sf_nvim then
   return
@@ -58,10 +45,10 @@ vim.api.nvim_create_autocmd("BufEnter", {
 -- Get the default package directory from sfdx-project.json
 local default_path = Utils.get_default_package_path()
 if default_path then
-  indexes.index_files(default_path)
+  Indexes.index_files(default_path)
 else
   -- Fallback to hardcoded path if sfdx-project.json parsing fails
-  indexes.index_files(PathUtils.join(PathUtils.get_separator(), "force-app", "main", "default"))
+  Indexes.index_files(PathUtils.join(PathUtils.get_separator(), "force-app", "main", "default"))
 end
 
 local function make_test_options()
@@ -74,40 +61,40 @@ end
 local COMMANDS = {
   org = {
     set = function()
-      Connector:select_default_org()
+      require("sf.org.connect"):select_default_org()
     end,
   },
   schema = {
     refresh = function()
-      SchemaRefresh.refresh()
+      require("sf.schema.refresh").refresh()
     end,
     retrieve = function()
-      SchemaRetrieve.retrieve()
+      require("sf.schema.retrieve").retrieve()
     end,
     cleanup = function()
-      SchemaCleanup.cleanup_schema()
+      require("sf.schema.cleanup").cleanup_schema()
     end,
   },
   deploy = {
     metadata = function(force)
-      Deployment:deploy_metadata(force)
+      require("sf.deploy.metadata"):deploy_metadata(force)
     end,
     changed = function(force)
-      Deployment:deploy_changed_metadatas(force)
+      require("sf.deploy.metadata"):deploy_changed_metadatas(force)
     end,
     selected = function(force)
-      Deployment:deploy_selected_metadata(force)
+      require("sf.deploy.metadata"):deploy_selected_metadata(force)
     end,
   },
   test = {
     class = function()
-      TestRunner.run_current_tests("class", make_test_options())
+      require("sf.test.runner").run_current_tests("class", make_test_options())
     end,
     method = function()
-      TestRunner.run_current_tests("method", make_test_options())
+      require("sf.test.runner").run_current_tests("method", make_test_options())
     end,
     result = function()
-      TestRunner.show_last_results(make_test_options())
+      require("sf.test.runner").show_last_results(make_test_options())
     end,
     action = function()
       TestCodeActions.show_actions()
@@ -115,13 +102,13 @@ local COMMANDS = {
   },
   coverage = {
     class = function()
-      TestRunner.run_coverage_at_cursor("class", make_test_options())
+      require("sf.test.runner").run_coverage_at_cursor("class", make_test_options())
     end,
     method = function()
-      TestRunner.run_coverage_at_cursor("method", make_test_options())
+      require("sf.test.runner").run_coverage_at_cursor("method", make_test_options())
     end,
     result = function()
-      TestRunner.show_last_coverage_results(make_test_options())
+      require("sf.test.runner").show_last_coverage_results(make_test_options())
     end,
     on = function()
       require("sf.test.coverage").enable()
@@ -132,36 +119,36 @@ local COMMANDS = {
   },
   log = {
     list = function()
-      LogList.list_logs(make_test_options())
+      require("sf.log.list").list_logs(make_test_options())
     end,
     resume = function()
-      LogList.resume_logs()
+      require("sf.log.list").resume_logs()
     end,
     debug = function()
-      LogList.debug_logs()
+      require("sf.log.list").debug_logs()
     end,
     cleanup = function()
-      Cleanup.cleanup_logs()
+      require("sf.log.cleanup").cleanup_logs()
     end,
     analysis = {
       basic = function()
-        Analyze.basic()
+        require("sf.log.analyze").basic()
       end,
     },
   },
   apex = {
     execute = {
       file = function()
-        ApexExecute:execute_file()
+        require("sf.apex.execute"):execute_file()
       end,
       new = function()
-        ApexExecute:execute_new()
+        require("sf.apex.execute"):execute_new()
       end,
       cleanup = function()
-        ApexExecute:execute_cleanup()
+        require("sf.apex.execute"):execute_cleanup()
       end,
       list = function()
-        ApexExecute:execute_list()
+        require("sf.apex.execute"):execute_list()
       end,
     },
     cache = {
@@ -199,19 +186,20 @@ local COMMANDS = {
   },
   retrieve = {
     metadata = function()
-      RetrieveMetadata.retrieve_selected()
+      require("sf.retrieve.metadata").retrieve_selected()
     end,
     type = function()
-      RetrieveMetadata.retrieve_all_of_type()
+      require("sf.retrieve.metadata").retrieve_all_of_type()
     end,
     refresh = function()
-      RetrieveMetadata.retrieve_current_buffer()
+      require("sf.retrieve.metadata").retrieve_current_buffer()
     end,
     diff = function()
-      Diff.diff_current_buffer()
+      require("sf.diff.runner").diff_current_buffer()
     end,
   },
 }
+
 vim.api.nvim_create_user_command("Sf", function(opts)
   Log.log("Sf command:", opts.fargs)
   local module = opts.fargs[1]
@@ -268,4 +256,5 @@ end, {
   end,
   desc = "Salesforce CLI integration commands",
 })
+
 TestCodeActions.setup()
