@@ -1,5 +1,45 @@
 # CHANGELOG
 
+## Release v0.3
+
+### 🎉 New Features
+
+#### DAP Integration & Debug Improvements
+
+- Debug Adapter Protocol Integration: Integrated DAP configuration into the plugin for seamless debugging
+- Debug Log Generation: New command to generate and prepare debug logs for inspection
+- Enhanced Debug Experience: Improved debugging workflow with built-in DAP support
+
+#### Apex Class Stubs Generation
+
+- Faux Class Generation: Implement stub generation mechanism for Apex classes
+- LSP Support: Create stubs for improved Apex LSP functionality and code completion
+
+#### Git Integration Enhancements
+
+- Removed `sgd` Plugin Dependency: Simplified git diff operations by using native git log
+- Better Performance: Direct git integration without external plugin dependencies
+
+#### LSP Progress Redesign
+
+- Improved Progress Display: LSP progress notifications now display correctly and consistently
+- Better User Feedback: Enhanced visibility of long-running LSP operations
+
+### ♻️ Code Quality
+
+- Async Operations Refactor: Converted callback-based async operations to coroutines across the entire codebase
+- Reduced Callback Hell: Cleaner, more maintainable async code using Lua coroutines
+- Improved Code Reliability: Better error handling and state management in async operations
+
+### 🔧 Related Issues Resolved
+
+- Resolve #39 - DAP configuration integration and debug log generation
+- Resolve #38 - Apex faux class generation for LSP
+- Resolve #46 - Removed sgd plugin dependency
+- Resolve #47 - LSP progress display improvements
+
+---
+
 ## Release v0.2
 
 ### 🎉 New Features
