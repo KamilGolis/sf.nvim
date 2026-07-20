@@ -8,7 +8,6 @@ local Log = require("sf.core.log").scoped("log/list")
 local OrgUtils = require("sf.org.utils")
 local PathUtils = require("sf.core.path_utils")
 local Picker = require("sf.log.picker")
-local Progress = require("sf.core.progress")
 local Utils = require("sf.log.utils")
 
 local LogList = {}

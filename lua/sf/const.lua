@@ -234,6 +234,15 @@ M.SF_CLI_MESSAGES = {
   APEX_EXECUTE_CLEANUP_SUCCESS = "Temp files cleaned up.",
   APEX_LIST_NO_SCRIPTS = "No Apex scripts found in scripts directory.",
   APEX_LIST_DIR_MISSING = "Scripts directory does not exist.",
+  -- Code analyzer scan messages
+  SCAN_ALREADY_RUNNING = "Scan is already running",
+  SCAN_NO_FILE = "No file in current buffer to scan",
+  SCAN_FAILED_EXIT = "Code analyzer scan failed with exit code %d",
+  SCAN_FILE_NOT_FOUND = "Scan completed but results file not found: %s",
+  SCAN_JSON_PARSE_FAILED = "Failed to parse scan results JSON",
+  SCAN_COMPLETE_FORMAT = "Code analyzer scan complete: %d violations found",
+  SCAN_CLEARED = "Scan diagnostics cleared",
+  SCAN_NO_CACHED_RESULTS = "No cached scan results found. Run :Sf scan metadata or :Sf scan all first.",
   -- Faux class cache messages
   SOBJECT_REBUILD_TITLE = "Rebuilding sObject cache",
   SOBJECT_REBUILD_SUCCESS = "sObject cache rebuild complete.",
@@ -379,6 +388,7 @@ M.MANIFEST_THRESHOLD = 10
 --- - sf project retrieve start -m [type:name [type:name ...]] --json -a [version] -c [-o target-org]
 --- - sf project retrieve start -x [manifest] --json -a [version] -c [-o target-org]
 --- - sf org list --json
+--- - sf code-analyzer run -v detail -f [file] -t [target]
 --- - sf config set target-org [target-org]
 --- - sf org list metadata-types --json [-o target-org]
 --- - sf org list metadata -m [type] --json [-o target-org]
@@ -1184,6 +1194,28 @@ function M.get_apex_run_args(file_path, api_version, target_org)
   if target_org then
     vim.list_extend(args, { M.SF_CLI.APEX.ANONYMOUS.ARGS.TARGET_ORG, target_org })
   end
+  return args
+end
+
+--- Constructs arguments for sf code-analyzer run command.
+--- @param metadata_path string The path to the metadata file to scan
+--- @param output_file string The path to write the JSON results
+--- @return table Complete argument list
+--- @usage local args = Const.get_code_analyzer_args("force-app/main/default/classes/Test.cls", "/tmp/scan.json")
+function M.get_code_analyzer_args(metadata_path, output_file)
+  local args = {}
+  vim.list_extend(args, split_cmd("code-analyzer run"))
+  vim.list_extend(args, { "-v", "detail", "-f", output_file, "-t", metadata_path })
+  return args
+end
+
+--- Constructs arguments for sf code-analyzer run without a target (scans entire project).
+--- @param output_file string The path to write the JSON results
+--- @return table Complete argument list
+function M.get_code_analyzer_all_args(output_file)
+  local args = {}
+  vim.list_extend(args, split_cmd("code-analyzer run"))
+  vim.list_extend(args, { "-v", "detail", "-f", output_file })
   return args
 end
 

@@ -20,10 +20,13 @@ function Diagnostics:new()
   return o
 end
 
---- Clears all diagnostics from the editor and resets the diagnostic store
---- @usage diagnostics:clear_diagnostics()
-function Diagnostics:clear_diagnostics()
-  vim.diagnostic.reset(Config:get_options().namespace)
+--- Clears diagnostics from the editor and resets the diagnostic store.
+--- @param ns number|nil Optional namespace to clear (defaults to deploy namespace)
+--- @usage diagnostics:clear_diagnostics() -- clears deploy namespace
+--- @usage diagnostics:clear_diagnostics(scan_ns) -- clears scan namespace
+function Diagnostics:clear_diagnostics(ns)
+  ns = ns or Config:get_options().namespace
+  vim.diagnostic.reset(ns)
   self.diagnostic_store = {}
 end
 
@@ -97,6 +100,17 @@ function Diagnostics:set_diagnostics(source)
     end
   end
 
+  pcall(vim.cmd, "Trouble diagnostics")
+end
+
+--- Apply pre-built diagnostics to a buffer under a given namespace.
+--- Centralizes vim.diagnostic.set + Trouble integration.
+--- @param ns number Diagnostic namespace
+--- @param buf number Buffer handle
+--- @param diagnostics table[] Array of diagnostic entries
+--- @usage diagnostics:apply(scan_ns, buf, scan_diagnostics)
+function Diagnostics:apply(ns, buf, diagnostics)
+  vim.diagnostic.set(ns, buf, diagnostics)
   pcall(vim.cmd, "Trouble diagnostics")
 end
 

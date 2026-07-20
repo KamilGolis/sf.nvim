@@ -25,6 +25,8 @@ function Config:new()
     apex_temp_dir = "apex", -- Default directory for temp apex scripts
     scripts_dir = "scripts", -- Default scripts directory for persistent apex scripts
     anonymous_log_dir = "anonymous", -- Default subdirectory under logs/ for anonymous apex logs
+    scan_dir = "scan", -- Default directory for scan results under cache_path
+    scan_results_file = "metadata.json", -- Default filename for scan output
     dap_log_dir = nil, -- Default directory for DAP debug logs (default: log_dir/dap)
     dap = {
       adapter_path = nil, -- absolute path to apexReplayDebug.js
@@ -63,7 +65,16 @@ function Config:setup(options)
   self.options.dap_log_dir = self.options.dap_log_dir
       and PathUtils.remove_trailing_separator(PathUtils.normalize(vim.fn.fnamemodify(self.options.dap_log_dir, ":p")))
     or PathUtils.join(self.options.log_dir, "dap")
-  self.options.namespace = vim.api.nvim_create_namespace("SFNVIM")
+  self.options.scan_dir = PathUtils.join(self.options.cache_path, self.options.scan_dir)
+  self.options.scan_results_file = PathUtils.join(self.options.scan_dir, self.options.scan_results_file)
+
+  self.options.namespaces = {
+    deploy = vim.api.nvim_create_namespace("sf.nvim.deploy"),
+    scan = vim.api.nvim_create_namespace("sf.nvim.scan"),
+    log_analysis = vim.api.nvim_create_namespace("sf.nvim.log.analysis"),
+  }
+  self.options.namespace = self.options.namespaces.deploy
+  self.options.scan_namespace = self.options.namespaces.scan
 
   Log.configure(self.options)
   if self.options.debug then
