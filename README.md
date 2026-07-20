@@ -27,6 +27,7 @@ As a Salesforce developer, I’ve mostly used VS Code and WebStorm with Illumina
 - ⬇️  **Metadata Retrieval** - Retrieve metadata individually, by type, or refresh the current buffer from org
 - ↔️  **Server Diff** - Diff local metadata against the server version in a dedicated tab with scroll-synced views
 - 🔍 **Diagnostics** - Inline error display for deployment failures
+- 🔍 **Code Analyzer** - Scan metadata files with sf code-analyzer and display violations as inline diagnostics
 - 💾 **Cross-platform** - Works on Windows, macOS, and Linux
 - ⚡ **Fast** - Asynchronous operations with progress indicators
 - 🎨 **Rich UI** - Beautiful pickers and result buffers powered by Snacks.nvim
@@ -108,6 +109,8 @@ require("sf").setup({
   apex_temp_dir = "apex",
   scripts_dir = "scripts",
   anonymous_log_dir = "anonymous",
+  scan_dir = "scan",
+  scan_results_file = "metadata.json",
 
   -- DAP (Apex Replay Debugger)
   dap_log_dir = nil, -- defaults to log_dir/dap
@@ -143,6 +146,8 @@ require("sf").setup({
 | `apex_temp_dir` | `string` | `"apex"` | Directory for temp .apex files under cache_path |
 | `scripts_dir` | `string` | `"scripts"` | Directory for persistent Apex scripts under project root |
 | `anonymous_log_dir` | `string` | `"anonymous"` | Subdirectory under log_dir for anonymous Apex logs |
+| `scan_dir` | `string` | `"scan"` | Subdirectory under cache_path for scan results |
+| `scan_results_file` | `string` | `"metadata.json"` | Filename for code-analyzer output |
 | `dap_log_dir` | `string` | `nil` | Directory for DAP debug logs (defaults to `log_dir/dap`) |
 | `dap.lsp_client_name` | `string` | `"apex_ls"` | Apex LSP client name for breakpoint resolution (e.g. `apex_ls` or `apex_ls_ts`) |
 | `debug` | `boolean` | `false` | Enable debug logging to file |
@@ -182,6 +187,7 @@ Available module names for `logger_scope`:
 | Module path | Description |
 |-------------|-------------|
 | `apex/execute` | Anonymous Apex execution |
+| `code_analyzer/scan` | Code Analyzer scan execution |
 | `config` | Plugin configuration |
 | `core/diagnostics` | Deploy diagnostics system |
 | `core/job_utils` | CLI job creation and management |
@@ -288,6 +294,15 @@ All commands are available under the `:Sf` command with subcommands:
 ```vim
 :Sf debug trace new     " Create a new trace flag with interactive editor
 :Sf debug trace delete  " Delete a trace flag
+```
+
+### Code Analyzer
+
+```vim
+:Sf scan all        " Scan entire project with code-analyzer and show violations as diagnostics
+:Sf scan metadata   " Scan current buffer with code-analyzer and show violations as diagnostics
+:Sf scan resume     " Recreate diagnostics from last cached scan results
+:Sf scan clear      " Clear all scan diagnostics
 ```
 
 ## 📖 Usage Examples

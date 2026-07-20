@@ -198,6 +198,20 @@ local COMMANDS = {
       require("sf.diff.runner").diff_current_buffer()
     end,
   },
+  scan = {
+    all = function()
+      require("sf.code_analyzer.scan").scan_all()
+    end,
+    clear = function()
+      require("sf.code_analyzer.scan").clear()
+    end,
+    metadata = function()
+      require("sf.code_analyzer.scan").scan_current_file()
+    end,
+    resume = function()
+      require("sf.code_analyzer.scan").scan_resume()
+    end,
+  },
 }
 
 vim.api.nvim_create_user_command("Sf", function(opts)

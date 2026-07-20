@@ -1,0 +1,43 @@
+{
+  "runDir": "/home/test/project",
+  "violationCounts": { "total": 3, "sev1": 0, "sev2": 2, "sev3": 1, "sev4": 0, "sev5": 0 },
+  "versions": { "code-analyzer": "0.49.0", "eslint": "0.44.0" },
+  "violations": [
+    {
+      "rule": "no-unused-vars",
+      "engine": "eslint",
+      "severity": 2,
+      "tags": ["Recommended", "ErrorProne"],
+      "primaryLocationIndex": 0,
+      "locations": [
+        { "file": "force-app/main/default/lwc/test/test.js", "startLine": 11, "startColumn": 10, "endLine": 11, "endColumn": 24 }
+      ],
+      "message": "'ShowToastEvent' is defined but never used.",
+      "resources": ["https://eslint.org/docs/latest/rules/no-unused-vars"]
+    },
+    {
+      "rule": "no-unused-vars",
+      "engine": "eslint",
+      "severity": 2,
+      "tags": ["Recommended", "ErrorProne"],
+      "primaryLocationIndex": 0,
+      "locations": [
+        { "file": "force-app/main/default/lwc/test/test.js", "startLine": 13, "startColumn": 21, "endLine": 13, "endColumn": 34 }
+      ],
+      "message": "'getFieldValue' is defined but never used.",
+      "resources": ["https://eslint.org/docs/latest/rules/no-unused-vars"]
+    },
+    {
+      "rule": "prefer-const",
+      "engine": "eslint",
+      "severity": 3,
+      "tags": ["Recommended", "BestPractices", "Fixable"],
+      "primaryLocationIndex": 0,
+      "locations": [
+        { "file": "force-app/main/default/lwc/test/test.js", "startLine": 83, "startColumn": 7, "endLine": 83, "endColumn": 10 }
+      ],
+      "message": "'arr' is never reassigned. Use 'const' instead.",
+      "resources": ["https://eslint.org/docs/latest/rules/prefer-const"]
+    }
+  ]
+}

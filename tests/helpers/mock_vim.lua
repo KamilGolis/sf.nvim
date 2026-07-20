@@ -13,6 +13,8 @@ M.calls = {
   sign_unplace = {},
   sign_define = {},
   api = {},
+  diagnostic_set = {},
+  diagnostic_reset = {},
 }
 
 function M.reset_calls()
@@ -243,6 +245,30 @@ function M.setup_notify_mock()
   end
 end
 
+--- Mock vim.diagnostic.set and vim.diagnostic.reset.
+function M.setup_diagnostic_mock()
+  _orig.vim_diagnostic = {
+    set = vim.diagnostic.set,
+    reset = vim.diagnostic.reset,
+    severity = vim.diagnostic.severity,
+  }
+
+  vim.diagnostic.set = function(ns, buf, diagnostics)
+    table.insert(M.calls.diagnostic_set, { ns = ns, buf = buf, diagnostics = diagnostics })
+  end
+
+  vim.diagnostic.reset = function(ns)
+    table.insert(M.calls.diagnostic_reset, { ns = ns })
+  end
+
+  vim.diagnostic.severity = {
+    ERROR = 1,
+    WARN = 2,
+    INFO = 3,
+    HINT = 4,
+  }
+end
+
 --- Setup all standard mocks at once.
 function M.setup(opts)
   opts = opts or {}
@@ -255,6 +281,9 @@ function M.setup(opts)
   end
   if opts.fn_overrides then
     M.setup_fn_mocks(opts.fn_overrides)
+  end
+  if opts.diagnostic ~= false then
+    M.setup_diagnostic_mock()
   end
 end
 
@@ -302,10 +331,14 @@ function M.restore()
   if _orig.vim_api_nvim_buf_get_name then
     vim.api.nvim_buf_get_name = _orig.vim_api_nvim_buf_get_name
   end
+  if _orig.vim_diagnostic then
+    vim.diagnostic.set = _orig.vim_diagnostic.set
+    vim.diagnostic.reset = _orig.vim_diagnostic.reset
+    vim.diagnostic.severity = _orig.vim_diagnostic.severity
+  end
   M.reset_calls()
 end
 
---- Assert vim.system was called.
 function M.assert_system_called(count)
   if count ~= nil and #M.calls.system ~= count then
     error("Expected " .. tostring(count) .. " vim.system call(s), got " .. #M.calls.system)
@@ -324,6 +357,13 @@ function M.get_system_calls()
 end
 function M.get_notify_calls()
   return M.calls.notify
+end
+function M.get_diagnostic_set_calls()
+  return M.calls.diagnostic_set
+end
+
+function M.get_diagnostic_reset_calls()
+  return M.calls.diagnostic_reset
 end
 
 function M.clear()
