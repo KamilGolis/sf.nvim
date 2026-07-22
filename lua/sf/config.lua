@@ -33,6 +33,13 @@ function Config:new()
       port = 4712, -- DAP server port
       lsp_client_name = "apex_ls", -- LSP client name for breakpoint info (apex_ls or apex_ls_ts etc.)
     },
+    soql = {
+      cache_ttl = 3600, -- seconds
+      result_split = "horizontal", -- "horizontal" | "vertical" | "float"
+      result_split_size = 40, -- lines for horizontal, cols for vertical
+      result_format = "human",
+    },
+
     debug = false, -- Debug mode (enables logging to file)
     logger_scope = {}, -- Module source patterns to log (empty = log everything). Example: {"test/runner", "core/job_utils"}
     debug_inspect = false, -- Show debug output on screen (requires debug = true)
@@ -75,6 +82,9 @@ function Config:setup(options)
   }
   self.options.namespace = self.options.namespaces.deploy
   self.options.scan_namespace = self.options.namespaces.scan
+
+  -- Merge soql config (simple scalars, no path normalization needed)
+  self.options.soql = vim.tbl_deep_extend("keep", options.soql or {}, self.options.soql)
 
   Log.configure(self.options)
   if self.options.debug then

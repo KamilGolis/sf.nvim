@@ -40,9 +40,10 @@ end
 ---
 --- @param command string The executable path (e.g. Config:get_options().sf_cli_path)
 --- @param args string[] Command arguments
+--- @param env table|nil Extra environment variables merged into the child process
 --- @return string stdout The full stdout output
 --- @return integer exit_code The process exit code
-function M.await_system(command, args)
+function M.await_system(command, args, env)
   local co = coroutine.running()
   assert(co, "await_system must be called inside an M.async block!")
 
@@ -51,7 +52,12 @@ function M.await_system(command, args)
     table.insert(cmd, a)
   end
 
-  vim.system(cmd, { text = true }, function(obj)
+  local opts = { text = true }
+  if env then
+    opts.env = vim.tbl_extend("keep", env, vim.fn.environ())
+  end
+
+  vim.system(cmd, opts, function(obj)
     vim.schedule(function()
       local stdout
       if type(obj.stdout) == "string" then
