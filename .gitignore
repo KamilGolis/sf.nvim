@@ -48,3 +48,4 @@ data/
 # Test dependencies
 deps/
 .sf/
+/nvim.log

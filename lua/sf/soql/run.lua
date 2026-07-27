@@ -55,7 +55,7 @@ end
 --- @param result_format string "human" | "csv" | "json"
 local function open_result_file(result_file, result_format)
   local escaped = vim.fn.fnameescape(result_file)
-  vim.cmd("edit " .. escaped)
+  vim.cmd("noswapfile edit " .. escaped)
 
   vim.bo.filetype = result_format
 

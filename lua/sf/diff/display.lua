@@ -40,7 +40,7 @@ function Display.open_file_diff(local_file, server_content, server_label)
   vim.api.nvim_buf_set_lines(server_buf, 0, -1, false, lines)
 
   -- Open a new tab with the local file — clean 2-pane diff, no extra windows
-  vim.cmd("tabedit " .. vim.fn.fnameescape(local_file))
+  vim.cmd("noswapfile tabedit " .. vim.fn.fnameescape(local_file))
   local local_buf = vim.api.nvim_get_current_buf()
   vim.cmd("diffthis")
 

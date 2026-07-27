@@ -222,6 +222,9 @@ local COMMANDS = {
     rerun = function()
       require("sf.soql.run").run_last()
     end,
+    resume = function()
+      require("sf.soql.builder").resume()
+    end,
   },
 }
 

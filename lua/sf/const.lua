@@ -419,6 +419,10 @@ M.SOQL = {
     FETCH_SOBJECT_FAILED = "Failed to fetch SObject list: %s",
     DESCRIBE_FAILED = "Failed to describe %s: %s",
     SNACKS_REQUIRED_BUILDER = "Snacks.nvim is required for SOQL builder",
+    SAVE_SUCCESS = "Query saved to %s",
+    SAVE_NO_SOBJECT = "No sObject selected — cannot save query",
+    NO_SAVED_QUERIES = "No saved queries found. Build a query and press s to save it.",
+    RESUME_PARSE_FAILED = "Failed to parse saved query file",
   },
 }
 

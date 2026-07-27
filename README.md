@@ -28,6 +28,7 @@ As a Salesforce developer, I’ve mostly used VS Code and WebStorm with Illumina
 - ↔️  **Server Diff** - Diff local metadata against the server version in a dedicated tab with scroll-synced views
 - 🔍 **Diagnostics** - Inline error display for deployment failures
 - 🔍 **Code Analyzer** - Scan metadata files with sf code-analyzer and display violations as inline diagnostics
+- 🌐 **SOQL Query Builder** - Interactive schema-aware query builder with field picker, WHERE/ORDER BY, subqueries, save/resume, and live execution
 - 💾 **Cross-platform** - Works on Windows, macOS, and Linux
 - ⚡ **Fast** - Asynchronous operations with progress indicators
 - 🎨 **Rich UI** - Beautiful pickers and result buffers powered by Snacks.nvim
@@ -305,6 +306,15 @@ All commands are available under the `:Sf` command with subcommands:
 :Sf scan clear      " Clear all scan diagnostics
 ```
 
+### SOQL Query Builder
+
+```vim
+:Sf soql open     " Open the SOQL query builder (pick sObject then build)
+:Sf soql run      " Open a scratch buffer to write and execute raw SOQL
+:Sf soql rerun    " Re-execute the last SOQL query
+:Sf soql resume   " Browse saved .soql files and resume editing
+```
+
 ## 📖 Usage Examples
 
 ### Basic Workflow
@@ -354,6 +364,10 @@ vim.keymap.set("n", "<leader>srf", ":Sf retrieve refresh<CR>", { desc = "Refresh
 vim.keymap.set("n", "<leader>sa", ":Sf apex execute file<CR>", { desc = "Execute current Apex" })
 vim.keymap.set("n", "<leader>sn", ":Sf apex execute new<CR>", { desc = "New Apex script" })
 vim.keymap.set("n", "<leader>sL", ":Sf apex execute list<CR>", { desc = "List Apex scripts" })
+vim.keymap.set("n", "<leader>sq", ":Sf soql open<CR>", { desc = "Open SOQL query builder" })
+vim.keymap.set("n", "<leader>sqq", ":Sf soql run<CR>", { desc = "Run raw SOQL query" })
+vim.keymap.set("n", "<leader>sqr", ":Sf soql rerun<CR>", { desc = "Re-run last SOQL query" })
+vim.keymap.set("n", "<leader>sqs", ":Sf soql resume<CR>", { desc = "Resume saved SOQL query" })
 ```
 
 ## 🎨 Features in Detail
@@ -411,6 +425,41 @@ When enabled (`:Sf coverage on`), coverage signs appear in the gutter:
 - **Refresh Current Buffer**: `Sf retrieve refresh` detects the metadata type from the current buffer and retrieves the server version directly — no pickers, no extra steps
 - **Diff Against Server**: `Sf retrieve diff` retrieves the server version to a temp directory, converts it to source format, then opens a dedicated tab with a scroll-synced 2-pane diff view (left: server, right: local). Uses an in-memory scratch buffer with `sf://` URI scheme to avoid LSP interference
 - **Manifest Mode**: For >10 items, generates a `retrieve-manifest.xml` automatically for efficiency
+
+### SOQL Query Builder
+
+The SOQL Query Builder provides an interactive, schema-aware interface for constructing SOQL queries without memorizing field names or syntax.
+
+**Schema-Aware Field Selection:** Browse all fields of your selected sObject with type annotations and labels. Pick multiple fields at once via the multi-select picker. Build parent-relationship dotted fields (e.g. `Owner.Name`, `MyLookup__r.Custom__c`) through a guided 2-step picker.
+
+**Visual Query Builder Buffer:** A dedicated floating window with the `sfsoqlbuilder` filetype and custom syntax highlighting. Each query clause has its own section with live updates:
+
+| Key | Action |
+|-----|--------|
+| `F` | Select fields (multi-select picker with schema data) |
+| `R` | Add parent-relationship dotted field |
+| `W` | Add WHERE condition (field → operator → value) |
+| `B` | Add ORDER BY clause (field → direction) |
+| `S` | Add child-relationship subquery (nested builder) |
+| `A` | Compile and execute the query (results in new buffer) |
+| `C` | Copy compiled SOQL to system clipboard |
+| `L` / `O` | Set LIMIT / OFFSET |
+| `X` / `x` | Clear all fields / Remove selected fields |
+| `E` | Bulk-edit fields in a floating text buffer |
+| `s` | Save query to disk for later resumption |
+| `d` | Delete the item at cursor (field/WHERE/ORDER BY/subquery) |
+| `e` | Re-open a subquery builder for editing |
+| `o` | Switch to a different sObject |
+| `rf` | Refresh schema describe data |
+| `q` | Close the builder |
+
+**Child Subqueries:** Add nested subqueries on child relationships. Each subquery opens its own builder window with independent field selection, WHERE conditions, ORDER BY, and LIMIT. Save with `<BS>` to return to the parent builder.
+
+**Save and Resume:** Save any query with `s` — it writes a `.soql` file with auto-dedup naming to the cache directory. Later, `:Sf soql resume` opens a picker of saved files, parses the SOQL back into a full QueryState (fields, WHERE, ORDER BY, LIMIT, subqueries), and opens the builder ready to edit.
+
+**Live SOQL Preview:** The bottom of the builder buffer shows the compiled SOQL, updating automatically as you modify fields, conditions, or clauses. Copy it to clipboard with `C` for use in other tools.
+
+**Execution:** `A` compiles the query and runs it via `sf data query` with an optional result format (human-readable table, CSV, or JSON). Results open in a new buffer for inspection.
 
 ### 🐛 Apex Replay Debugger (DAP)
 

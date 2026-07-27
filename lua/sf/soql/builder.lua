@@ -3,9 +3,11 @@
 -- @license MIT
 
 local Compiler = require("sf.soql.compiler")
+local Config = require("sf.config")
 local Const = require("sf.const")
 local Executor = require("sf.soql.executor")
 local Log = require("sf.core.log").scoped("soql/builder")
+local PathUtils = require("sf.core.path_utils")
 local Render = require("sf.soql.render")
 local Schema = require("sf.soql.schema")
 local State = require("sf.soql.state")
@@ -741,12 +743,13 @@ end
 
 function M.create_builder_buffer(sobject_name, is_subquery, parent_state, relationship_name, existing_state)
   -- Create or reuse QueryState (bufnr nil—mutated after Snacks.win creates the buffer)
-  local state = existing_state or State.QueryState:new({
-    sobject = sobject_name,
-    is_subquery = is_subquery or false,
-    parent_state = parent_state or nil,
-    relationship_name = relationship_name or nil,
-  })
+  local state = existing_state
+    or State.QueryState:new({
+      sobject = sobject_name,
+      is_subquery = is_subquery or false,
+      parent_state = parent_state or nil,
+      relationship_name = relationship_name or nil,
+    })
 
   if is_subquery and parent_state then
     local exists = false
@@ -799,8 +802,9 @@ function M.create_builder_buffer(sobject_name, is_subquery, parent_state, relati
     col = col,
     border = "single",
     ft = Const.SOQL.BUF_FILETYPE,
+    bo = { filetype = Const.SOQL.BUF_FILETYPE },
     enter = true,
-    footer_keys = { "q", "?", "A" },
+    footer_keys = { "q", "?", "s", "A" },
     text = function()
       return Render.render_lines(state)
     end,
@@ -881,6 +885,14 @@ function M.create_builder_buffer(sobject_name, is_subquery, parent_state, relati
           edit_fields(state)
         end,
       },
+      s = {
+        desc = "Save Query",
+        function(self)
+          if not is_subquery then
+            M.save_query(state, self)
+          end
+        end,
+      },
       d = {
         desc = "Delete Item",
         function()
@@ -905,7 +917,7 @@ function M.create_builder_buffer(sobject_name, is_subquery, parent_state, relati
           end)
         end,
       },
-      {"?", "toggle_help", desc = "help" },
+      { "?", "toggle_help", desc = "help" },
       e = {
         desc = "Edit Subquery",
         function()
@@ -961,7 +973,6 @@ function M.create_builder_buffer(sobject_name, is_subquery, parent_state, relati
   if not is_subquery then
     if not describe_cache[sobject_name] then
       Schema.fetch_describe(sobject_name, function(describe_data)
-
         if describe_data then
           describe_cache[sobject_name] = describe_data
           win:update()
@@ -974,7 +985,6 @@ function M.create_builder_buffer(sobject_name, is_subquery, parent_state, relati
   else
     if not describe_cache[sobject_name] and parent_state then
       Schema.fetch_describe(sobject_name, function(describe_data)
-
         if describe_data then
           describe_cache[sobject_name] = describe_data
         end
@@ -1015,6 +1025,136 @@ function M.open()
       end,
     })
   end)
+end
+
+--- Save the current query to disk and close the builder.
+--- Only works from the root query (not a subquery).
+--- @param state table QueryState
+--- @param win snacks.win
+function M.save_query(state, win)
+  if state.is_subquery then
+    return
+  end
+
+  if not state.sobject or state.sobject == "" then
+    Log.notify(Const.SOQL.MESSAGES.SAVE_NO_SOBJECT, vim.log.levels.ERROR)
+    return
+  end
+
+  local config = Config:get_options()
+  local saved_dir = PathUtils.join(config.cache_path, "soql", "saved")
+
+  vim.fn.mkdir(saved_dir, "p")
+
+  local soql = Compiler.compile(state)
+
+  -- Generate filename with dedup suffix
+  local base = PathUtils.join(saved_dir, state.sobject)
+  local filepath = base .. ".soql"
+  local counter = 1
+
+  while vim.fn.filereadable(filepath) == 1 do
+    counter = counter + 1
+    local suffix = string.format("_%02d", counter)
+    filepath = base .. suffix .. ".soql"
+  end
+
+  -- Write file (raw SOQL text for human readability)
+  local f = io.open(filepath, "w")
+  if not f then
+    Log.notify(string.format("Failed to save query to %s", filepath), vim.log.levels.ERROR)
+    return
+  end
+
+  f:write(soql)
+  f:close()
+
+  Log.notify(string.format(Const.SOQL.MESSAGES.SAVE_SUCCESS, vim.fn.fnamemodify(filepath, ":~:.")), vim.log.levels.INFO)
+  win:close()
+end
+
+--- List saved .soql files and open a picker to resume one.
+--- Reads the selected file and invokes the SOQL parser to reconstruct
+--- a QueryState before opening the builder.
+function M.resume()
+  if not Snacks then
+    Log.notify(Const.SOQL.MESSAGES.SNACKS_REQUIRED_BUILDER, vim.log.levels.ERROR)
+    return
+  end
+
+  local config = Config:get_options()
+  local saved_dir = PathUtils.join(config.cache_path, "soql", "saved")
+
+  if vim.fn.isdirectory(saved_dir) == 0 then
+    Log.notify(Const.SOQL.MESSAGES.NO_SAVED_QUERIES, vim.log.levels.INFO)
+    return
+  end
+
+  -- Scan for *.soql files
+  local files = vim.fn.glob(PathUtils.join(saved_dir, "*.soql"), false, true)
+  if #files == 0 then
+    Log.notify(Const.SOQL.MESSAGES.NO_SAVED_QUERIES, vim.log.levels.INFO)
+    return
+  end
+
+  table.sort(files)
+
+  local items = {}
+  for _, fp in ipairs(files) do
+    local basename = vim.fn.fnamemodify(fp, ":t")
+    table.insert(items, { text = basename, path = fp })
+  end
+
+  Snacks.picker({
+    items = items,
+    layout = { preset = "vscode" },
+    format = function(item)
+      return { { item.text } }
+    end,
+    confirm = function(picker, item)
+      picker:close()
+
+      -- Read the saved query file
+      local f = io.open(item.path, "r")
+      if not f then
+        Log.notify(Const.SOQL.MESSAGES.RESUME_PARSE_FAILED, vim.log.levels.ERROR)
+        return
+      end
+
+      local raw = f:read("*a")
+      f:close()
+
+      local Parser = require("sf.soql.parser")
+      local parsed = Parser.parse(raw)
+
+      if not parsed or not parsed.sobject or parsed.sobject == "" then
+        Log.notify(Const.SOQL.MESSAGES.RESUME_PARSE_FAILED, vim.log.levels.ERROR)
+        return
+      end
+
+      -- Build a QueryState from parsed data
+      local state = State.QueryState:new({ sobject = parsed.sobject })
+
+      -- Merge parsed fields (keep SYSTEM_FIELDS from :new)
+      for field, _ in pairs(parsed.selected_fields) do
+        state.selected_fields[field] = true
+      end
+
+      state.where_clauses = parsed.where_clauses
+      state.order_by = parsed.order_by
+      state.limit = parsed.limit
+      state.offset = parsed.offset
+
+      -- Link subqueries to parent
+      for _, sq in ipairs(parsed.subqueries) do
+        sq.parent_state = state
+        table.insert(state.subqueries, sq)
+      end
+
+      -- Open builder with the restored state
+      M.create_builder_buffer(parsed.sobject, false, nil, nil, state)
+    end,
+  })
 end
 
 return M

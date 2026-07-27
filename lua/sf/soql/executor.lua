@@ -83,7 +83,7 @@ local function display_raw_output(output, soql, result_format)
     f:close()
   end
 
-  vim.cmd("edit " .. vim.fn.fnameescape(result_file))
+  vim.cmd("noswapfile edit " .. vim.fn.fnameescape(result_file))
   vim.bo.buftype = "acwrite"
   vim.bo.modifiable = true
 

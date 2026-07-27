@@ -143,7 +143,7 @@ end
 --- @param item table The selected picker item containing id and metadata
 retrieve_selected_log = function(item)
   LogList.ensure_log_file(item, function(log_file)
-    vim.cmd("edit " .. vim.fn.fnameescape(log_file))
+    vim.cmd("noswapfile edit " .. vim.fn.fnameescape(log_file))
     Log.notify("Log file opened: " .. log_file, vim.log.levels.INFO)
   end)
 end
@@ -250,7 +250,7 @@ end
 --- @param item table The selected picker item
 local retrieve_selected_log_for_debug = function(item)
   LogList.ensure_log_file(item, function(log_file)
-    vim.cmd("edit " .. vim.fn.fnameescape(log_file))
+    vim.cmd("noswapfile edit " .. vim.fn.fnameescape(log_file))
     Log.notify("Log file opened: " .. log_file, vim.log.levels.INFO)
     local Dap = require("sf.dap")
     if Dap.copy_log_for_debug(log_file) then

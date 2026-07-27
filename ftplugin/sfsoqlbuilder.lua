@@ -1,0 +1,8 @@
+--- sfsoqlbuilder filetype buffer settings
+-- @license MIT
+--
+-- NOTE: Syntax highlighting rules are defined in syntax/sfsoqlbuilder.vim,
+-- not here. Keeping this ftplugin free of :syntax commands ensures that
+-- Snacks.win's internal `vim.bo.syntax = ft` (win.lua:881) sources the
+-- syntax file once during :show() and that subsequent :update() calls
+-- (which re-fire FileType) do not re-clear the syntax rules.
