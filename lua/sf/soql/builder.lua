@@ -1,0 +1,1662 @@
+--- sf-nvim SOQL Query Builder — entry point, keymaps, and interaction workflow
+-- @license MIT
+
+local Compiler = require("sf.soql.compiler")
+local Config = require("sf.config")
+local Const = require("sf.const")
+local Executor = require("sf.soql.executor")
+local Log = require("sf.core.log").scoped("soql/builder")
+local PathUtils = require("sf.core.path_utils")
+local Render = require("sf.soql.render")
+local Schema = require("sf.soql.schema")
+local State = require("sf.soql.state")
+local Util = require("sf.soql.util")
+
+local M = {}
+
+--- Module-level cache mapping sobject name to describe data { fields, childRelationships }.
+local describe_cache = {}
+
+--- Guard: ensure Snacks.nvim is available.
+local snacks_ok, Snacks = pcall(require, "snacks")
+if not snacks_ok then
+  Snacks = nil
+end
+
+--- Find the window displaying a given buffer.
+--- @param bufnr integer
+--- @return integer|nil window id
+local function find_window_for_buf(bufnr)
+  local wins = vim.api.nvim_list_wins()
+
+  for _, w in ipairs(wins) do
+    if vim.api.nvim_win_get_buf(w) == bufnr then
+      return w
+    end
+  end
+
+  return nil
+end
+
+--- Open the field multi-select picker for a QueryState.
+--- Merges selected items into the current field set (does not replace).
+--- @param state table QueryState
+local function open_field_picker(state)
+  if not Snacks then
+    Log.notify(Const.SOQL.MESSAGES.SNACKS_REQUIRED_PICKER, vim.log.levels.ERROR)
+    return
+  end
+
+  local describe_data = describe_cache[state.sobject]
+
+  if not describe_data or not describe_data.fields then
+    Log.notify(string.format(Const.SOQL.MESSAGES.NO_SCHEMA_DATA_FOR, state.sobject or "?"), vim.log.levels.ERROR)
+    return
+  end
+
+  -- Capture window to restore focus after picker closes
+  local win = find_window_for_buf(state.bufnr)
+
+  local items = {}
+
+  -- Add common standard fields first
+  for _, f in ipairs(Const.SOQL.COMMON_STANDARD_FIELDS) do
+    table.insert(items, {
+      text = f,
+      label = "(common -- may not be present)",
+      api_name = f,
+    })
+  end
+
+  -- Add described fields
+  for _, f in ipairs(describe_data.fields) do
+    table.insert(items, {
+      text = f.name .. "  (" .. f.field_type .. ")  - " .. f.label,
+      api_name = f.name,
+    })
+  end
+
+  Snacks.picker({
+    items = items,
+    layout = { preset = "vscode" },
+    multiselect = true,
+    format = function(item)
+      if item.label then
+        return {
+          { item.text, "Comment" },
+          { " (" .. item.label .. ")", "Comment" },
+        }
+      end
+      return { { item.text } }
+    end,
+    confirm = function(picker, _)
+      local selected = picker:selected()
+      picker:close()
+
+      -- Restore focus to builder window
+      if win and vim.api.nvim_win_is_valid(win) then
+        vim.api.nvim_set_current_win(win)
+      end
+
+      -- Merge: add selected items to the current set
+      for _, item in ipairs(selected) do
+        state.selected_fields[item.api_name] = true
+      end
+
+      Render.render(state)
+    end,
+  })
+end
+
+--- Open a multi-select picker listing all currently selected fields; confirming
+--- removes the chosen ones (SYSTEM_FIELDS are kept by State.remove_fields).
+--- @param state table QueryState
+local function open_remove_picker(state)
+  if not Snacks then
+    Log.notify(Const.SOQL.MESSAGES.SNACKS_REQUIRED_REMOVER, vim.log.levels.ERROR)
+    return
+  end
+
+  local win = find_window_for_buf(state.bufnr)
+  local items = {}
+  local fields = vim.tbl_keys(state.selected_fields)
+
+  table.sort(fields)
+  for _, f in ipairs(fields) do
+    table.insert(items, { text = f, api_name = f })
+  end
+
+  Snacks.picker({
+    items = items,
+    layout = { preset = "vscode" },
+    multiselect = true,
+    format = function(item)
+      return { { item.text } }
+    end,
+    confirm = function(picker, _)
+      local selected = picker:selected()
+      picker:close()
+
+      if win and vim.api.nvim_win_is_valid(win) then
+        vim.api.nvim_set_current_win(win)
+      end
+
+      local to_remove = {}
+      for _, item in ipairs(selected) do
+        table.insert(to_remove, item.api_name)
+      end
+
+      local n = State.remove_fields(state, to_remove)
+      if n == 0 then
+        Log.notify(Const.SOQL.MESSAGES.REMOVED_NONE, vim.log.levels.INFO)
+      else
+        Log.notify(string.format(Const.SOQL.MESSAGES.REMOVED_COUNT, n), vim.log.levels.INFO)
+      end
+
+      Render.render(state)
+    end,
+  })
+end
+
+--- Add a parent relationship dotted field (e.g. Owner.Name, MyLookup__r.Custom__c).
+--- Step 1: pick a reference field from the current SObject.
+--- Step 2: determine the relationship name (relationshipName, or strip "Id" from field name).
+--- Step 3: pick ONE field from the target SObject's describe.
+--- Step 4: construct "RelationshipName.TargetField" and add to selected_fields.
+--- @param state table QueryState
+local function add_related_field(state)
+  local describe_data = describe_cache[state.sobject]
+  if not describe_data or not describe_data.fields then
+    Log.notify(Const.SOQL.MESSAGES.NO_SCHEMA_DATA, vim.log.levels.ERROR)
+    return
+  end
+
+  -- Filter to only reference-type fields that have referenceTo info
+  local ref_fields = {}
+  for _, f in ipairs(describe_data.fields) do
+    if type(f.referenceTo) == "table" and #f.referenceTo > 0 then
+      table.insert(ref_fields, f)
+    end
+  end
+
+  if #ref_fields == 0 then
+    Log.notify(string.format(Const.SOQL.MESSAGES.NO_RELATIONSHIP_FIELDS, state.sobject or "?"), vim.log.levels.INFO)
+    return
+  end
+
+  local win = find_window_for_buf(state.bufnr)
+
+  -- Step 1: Pick the relationship field
+  local items = {}
+  for _, f in ipairs(ref_fields) do
+    local targets = table.concat(f.referenceTo, ", ")
+    table.insert(items, {
+      text = f.name .. "  (" .. f.field_type .. ")  \u{2192}  " .. targets,
+      field = f,
+    })
+  end
+
+  if Snacks then
+    Snacks.picker({
+      items = items,
+      layout = { preset = "vscode" },
+      prompt = "Related Field",
+      format = function(item)
+        return { { item.text } }
+      end,
+      confirm = function(picker, item)
+        picker:close()
+        if win and vim.api.nvim_win_is_valid(win) then
+          vim.api.nvim_set_current_win(win)
+        end
+
+        local ref_field = item.field
+        -- Determine the relationship name to use as path prefix
+        -- relationshipName is the __r suffix name; if nil, strip "Id" from the field name
+        local rel_name = ref_field.relationshipName
+        if not rel_name or rel_name == vim.NIL then
+          local fname = ref_field.name
+
+          if fname:sub(-3) == "__c" then
+            -- MyLookup__c -> MyLookup__r
+            rel_name = fname:sub(1, -4) .. "__r"
+          elseif fname:sub(-2) == "Id" then
+            -- AccountId -> Account
+            rel_name = fname:sub(1, -3)
+          else
+            rel_name = fname
+          end
+        end
+
+        -- Step 2: Fetch target SObject fields
+        -- referenceTo is an array; use the first target
+        local target_sobject = ref_field.referenceTo[1]
+        if not target_sobject then
+          return
+        end
+
+        -- Ensure target SObject schema is cached
+        local function pick_target_fields()
+          local target_describe = describe_cache[target_sobject]
+
+          if not target_describe or not target_describe.fields then
+            Schema.fetch_describe(target_sobject, function(data)
+              if data then
+                describe_cache[target_sobject] = data
+                pick_target_fields() -- retry after cache
+              end
+            end)
+
+            return
+          end
+
+          local target_items = {}
+          for _, f in ipairs(target_describe.fields) do
+            table.insert(target_items, {
+              text = f.name .. "  (" .. f.field_type .. ")  - " .. f.label,
+              api_name = f.name,
+            })
+          end
+
+          Snacks.picker({
+            items = target_items,
+            layout = { preset = "vscode" },
+            multiselect = true,
+            prompt = "Field on " .. target_sobject,
+            format = function(item2)
+              return { { item2.text } }
+            end,
+            confirm = function(picker2, _)
+              local selected = picker2:selected()
+              picker2:close()
+
+              if win and vim.api.nvim_win_is_valid(win) then
+                vim.api.nvim_set_current_win(win)
+              end
+
+              for _, item in ipairs(selected) do
+                local dotted = rel_name .. "." .. item.api_name
+                state.selected_fields[dotted] = true
+              end
+
+              Render.render(state)
+            end,
+          })
+        end
+
+        pick_target_fields()
+      end,
+    })
+  end
+end
+
+--- Start the WHERE condition 3-step workflow (field -> operator -> value).
+--- @param state table QueryState
+local function add_where_condition(state)
+  local describe_data = describe_cache[state.sobject]
+
+  if not describe_data or not describe_data.fields or #describe_data.fields == 0 then
+    Log.notify(Const.SOQL.MESSAGES.NO_FIELDS_WHERE, vim.log.levels.ERROR)
+    return
+  end
+
+  local connector = nil
+  local win = find_window_for_buf(state.bufnr)
+
+  local items = {}
+  for _, f in ipairs(describe_data.fields) do
+    table.insert(items, {
+      text = f.name .. "  (" .. f.field_type .. ")  - " .. f.label,
+      api_name = f.name,
+    })
+  end
+
+  local function proceed_with_field_picker()
+    -- Step 1: Pick field
+    if Snacks then
+      Snacks.picker({
+        items = items,
+        layout = { preset = "vscode" },
+        prompt = "Field",
+        format = function(item)
+          return { { item.text } }
+        end,
+        confirm = function(picker, item)
+          picker:close()
+
+          -- Restore focus to builder window
+          if win and vim.api.nvim_win_is_valid(win) then
+            vim.api.nvim_set_current_win(win)
+          end
+
+          local selected_field = item.api_name
+
+          -- Step 2: Pick operator
+          vim.ui.select(Const.SOQL.WHERE_OPERATORS, {
+            prompt = "Operator for " .. selected_field,
+          }, function(op)
+            if not op then
+              return
+            end
+
+            -- Step 3: Enter value
+            vim.ui.input({
+              prompt = "Value for " .. selected_field .. " " .. op,
+            }, function(value)
+              if not value or value == "" then
+                return
+              end
+
+              table.insert(state.where_clauses, State.new_where_condition(selected_field, op, value, connector))
+              Render.render(state)
+            end)
+          end)
+        end,
+      })
+    else
+      Log.notify(Const.SOQL.MESSAGES.SNACKS_REQUIRED_FIELD_SEL, vim.log.levels.ERROR)
+    end
+  end
+
+  -- If there are existing conditions, ask for the logical connector first.
+  if #state.where_clauses > 0 then
+    vim.ui.select(Const.SOQL.LOGICAL_CONNECTORS, {
+      prompt = "Connect with",
+    }, function(selected)
+      if not selected then
+        return
+      end
+      connector = selected
+      proceed_with_field_picker()
+    end)
+  else
+    proceed_with_field_picker()
+  end
+end
+
+---
+--- @param state table QueryState
+local function add_order_by(state)
+  local describe_data = describe_cache[state.sobject]
+
+  if not describe_data or not describe_data.fields or #describe_data.fields == 0 then
+    Log.notify(Const.SOQL.MESSAGES.NO_FIELDS_ORDERBY, vim.log.levels.ERROR)
+    return
+  end
+
+  -- Capture window to restore focus after picker closes
+  local win = find_window_for_buf(state.bufnr)
+
+  local items = {}
+  for _, f in ipairs(describe_data.fields) do
+    table.insert(items, {
+      text = f.name .. "  (" .. f.field_type .. ")  - " .. f.label,
+      api_name = f.name,
+    })
+  end
+
+  if Snacks then
+    Snacks.picker({
+      items = items,
+      layout = { preset = "vscode" },
+      prompt = "Order By Field",
+      format = function(item)
+        return { { item.text } }
+      end,
+      confirm = function(picker, item)
+        picker:close()
+
+        -- Restore focus to builder window
+        if win and vim.api.nvim_win_is_valid(win) then
+          vim.api.nvim_set_current_win(win)
+        end
+
+        vim.ui.select(Const.SOQL.ORDER_DIRECTIONS, {
+          prompt = "Direction for " .. item.api_name,
+        }, function(dir)
+          if not dir then
+            return
+          end
+
+          vim.ui.select(Const.SOQL.NULLS_OPTIONS, {
+            prompt = "NULLS handling for " .. item.api_name,
+          }, function(nulls)
+            if not nulls then
+              return
+            end
+
+            local nulls_val = nulls ~= "None" and nulls or nil
+            table.insert(state.order_by, State.new_order_by_clause(item.api_name, dir, nulls_val))
+            Render.render(state)
+          end)
+        end)
+      end,
+    })
+  else
+    Log.notify(Const.SOQL.MESSAGES.SNACKS_REQUIRED_FIELD_SEL, vim.log.levels.ERROR)
+  end
+end
+
+--- Set LIMIT via vim.ui.input.
+--- @param state table QueryState
+local function set_limit(state)
+  vim.ui.input({
+    prompt = "Enter LIMIT (positive integer or empty to clear)",
+    default = state.limit and tostring(state.limit) or "",
+  }, function(val)
+    if val == nil then
+      return
+    end
+
+    if val == "" then
+      state.limit = nil
+    else
+      local n = tonumber(val)
+      if not n or n < 0 or n ~= math.floor(n) then
+        Log.notify(Const.SOQL.MESSAGES.LIMIT_BAD, vim.log.levels.ERROR)
+        return
+      end
+
+      state.limit = n
+    end
+
+    Render.render(state)
+  end)
+end
+
+--- Set OFFSET via vim.ui.input.
+--- @param state table QueryState
+local function set_offset(state)
+  vim.ui.input({
+    prompt = "Enter OFFSET (positive integer or empty to clear)",
+    default = state.offset and tostring(state.offset) or "",
+  }, function(val)
+    if val == nil then
+      return
+    end
+
+    if val == "" then
+      state.offset = nil
+    else
+      local n = tonumber(val)
+      if not n or n < 0 or n ~= math.floor(n) then
+        Log.notify(Const.SOQL.MESSAGES.OFFSET_BAD, vim.log.levels.ERROR)
+        return
+      end
+
+      state.offset = n
+    end
+
+    Render.render(state)
+  end)
+end
+
+--- Open the SObject picker to switch the current root state's target SObject.
+--- @param state table QueryState
+local function switch_sobject(state)
+  Schema.fetch_sobjects(function(sobjects)
+    if not sobjects or #sobjects == 0 then
+      return
+    end
+
+    -- Capture window to restore focus after picker closes
+    local win = find_window_for_buf(state.bufnr)
+
+    local items = {}
+    for _, name in ipairs(sobjects) do
+      table.insert(items, { text = name, api_name = name })
+    end
+
+    if Snacks then
+      Snacks.picker({
+        items = items,
+        layout = { preset = "vscode" },
+        format = function(item)
+          return { { item.text } }
+        end,
+        confirm = function(picker, item)
+          picker:close()
+
+          -- Restore focus to builder window
+          if win and vim.api.nvim_win_is_valid(win) then
+            vim.api.nvim_set_current_win(win)
+          end
+
+          -- Reset state
+          state.sobject = item.api_name
+          state.selected_fields = {}
+          for _, f in ipairs(Const.SOQL.SYSTEM_FIELDS) do
+            state.selected_fields[f] = true
+          end
+          state.where_clauses = {}
+          state.subqueries = {}
+          state.order_by = {}
+          state.limit = nil
+          state.offset = nil
+          state.group_by = {}
+          state.having_clauses = {}
+          state.all_rows = false
+          state.use_tooling = false
+          state.result_format_override = nil
+
+          -- Fetch describe for new sobject
+          Schema.fetch_describe(state.sobject, function(describe_data)
+            if describe_data then
+              describe_cache[state.sobject] = describe_data
+            end
+            Render.render(state)
+          end)
+        end,
+      })
+    else
+      Log.notify(Const.SOQL.MESSAGES.SNACKS_REQUIRED_SOBJECT, vim.log.levels.ERROR)
+    end
+  end)
+end
+
+--- Open the subquery picker (child relationships) for a root state.
+--- @param state table QueryState
+local function add_subquery(state)
+  local describe_data = describe_cache[state.sobject]
+
+  if not describe_data or not describe_data.childRelationships or #describe_data.childRelationships == 0 then
+    Log.notify(string.format(Const.SOQL.MESSAGES.NO_CHILD_RELATIONSHIPS, state.sobject or "?"), vim.log.levels.INFO)
+    return
+  end
+
+  -- Capture window to restore focus after picker closes
+  local win = find_window_for_buf(state.bufnr)
+
+  local items = {}
+  for _, r in ipairs(describe_data.childRelationships) do
+    table.insert(items, {
+      text = r.relationshipName .. " (" .. r.childSObject .. ")",
+      api_name = r.relationshipName,
+      child_sobject = r.childSObject,
+    })
+  end
+
+  if Snacks then
+    Snacks.picker({
+      items = items,
+      layout = { preset = "vscode" },
+      format = function(item)
+        return { { item.text } }
+      end,
+      confirm = function(picker, item)
+        picker:close()
+
+        -- Restore focus to builder window
+        if win and vim.api.nvim_win_is_valid(win) then
+          vim.api.nvim_set_current_win(win)
+        end
+
+        M.create_builder_buffer(item.child_sobject, true, state, item.api_name)
+      end,
+    })
+  else
+    Log.notify(Const.SOQL.MESSAGES.SNACKS_REQUIRED_RELATIONSHIP, vim.log.levels.ERROR)
+  end
+end
+
+--- Delete an item (subquery, WHERE condition, or ORDER BY clause) at the cursor line.
+--- @param state table QueryState
+local function delete_item_at_cursor(state)
+  local line = vim.api.nvim_get_current_line()
+
+  -- Field: cursor on a "   • fieldname" line
+  local field = line:match("^%s+•%s+(.+)$")
+
+  if field then
+    -- SELECT field?
+    if state.selected_fields[field] then
+      if vim.tbl_contains(Const.SOQL.SYSTEM_FIELDS, field) then
+        Log.notify(Const.SOQL.MESSAGES.SYSTEM_FIELD_PROTECTED, vim.log.levels.WARN)
+        return
+      end
+
+      State.remove_fields(state, { field })
+      Render.render(state)
+
+      return
+    end
+
+    -- GROUP BY field?
+    if state.group_by[field] then
+      state.group_by[field] = nil
+      Render.render(state)
+
+      return
+    end
+
+    return
+  end
+
+  -- WHERE: re-render each clause and compare exactly.
+  for i, wc in ipairs(state.where_clauses) do
+    local value = Util.quote_value(wc.value)
+    local cond = wc.field .. " " .. wc.op .. " " .. value
+
+    if i > 1 then
+      cond = (wc.connector or "AND") .. " " .. cond
+    end
+
+    local rendered = "   " .. i .. ". " .. cond
+
+    if line == rendered then
+      table.remove(state.where_clauses, i)
+
+      -- After removal, clear connector on the new first condition
+      if #state.where_clauses > 0 then
+        state.where_clauses[1].connector = nil
+      end
+      Render.render(state)
+
+      return
+    end
+  end
+
+  -- ORDER BY: re-render each clause (with the now-indexed N. prefix).
+  for i, ob in ipairs(state.order_by) do
+    local clause = ob.field .. " " .. ob.direction
+
+    if ob.nulls then
+      clause = clause .. " NULLS " .. ob.nulls
+    end
+
+    if line == "   " .. i .. ". " .. clause then
+      table.remove(state.order_by, i)
+      Render.render(state)
+
+      return
+    end
+  end
+
+  -- HAVING: re-render each clause and compare exactly.
+  for i, hc in ipairs(state.having_clauses) do
+    local value = Util.quote_value(hc.value)
+    local cond = hc.field .. " " .. hc.op .. " " .. value
+
+    if i > 1 then
+      cond = (hc.connector or "AND") .. " " .. cond
+    end
+
+    if line == "   " .. i .. ". " .. cond then
+      table.remove(state.having_clauses, i)
+
+      if #state.having_clauses > 0 then
+        state.having_clauses[1].connector = nil
+      end
+      Render.render(state)
+
+      return
+    end
+  end
+
+  -- Subquery: re-render the compiled string and compare exactly.
+  for i, sq in ipairs(state.subqueries) do
+    local rendered = "   " .. i .. ". " .. Compiler.compile(sq, true)
+
+    if line == rendered then
+      if sq.bufnr and vim.api.nvim_buf_is_valid(sq.bufnr) then
+        vim.api.nvim_buf_delete(sq.bufnr, { force = true })
+      end
+
+      table.remove(state.subqueries, i)
+      Render.render(state)
+
+      return
+    end
+  end
+
+  -- LIMIT: cursor on a " LIMIT: <value>" line where value is not [NA]
+  local limit_val = line:match("LIMIT:%s+(.+)$")
+
+  if limit_val and limit_val ~= "[NA]" then
+    state.limit = nil
+    Render.render(state)
+
+    return
+  end
+
+  -- OFFSET: cursor on a " OFFSET: <value>" line where value is not [NA]
+  local offset_val = line:match("OFFSET:%s+(.+)$")
+
+  if offset_val and offset_val ~= "[NA]" then
+    state.offset = nil
+    Render.render(state)
+
+    return
+  end
+end
+--- Edit a subquery — picker when multiple, direct when one.
+--- @param state table QueryState
+local function edit_subquery(state)
+  if #state.subqueries == 0 then
+    return
+  end
+
+  if #state.subqueries == 1 then
+    local sq = state.subqueries[1]
+    if sq.bufnr and vim.api.nvim_buf_is_valid(sq.bufnr) then
+      vim.api.nvim_set_current_buf(sq.bufnr)
+    else
+      M.create_builder_buffer(sq.sobject, true, state, sq.relationship_name, sq)
+    end
+
+    return
+  end
+
+  if not Snacks then
+    return
+  end
+
+  local items = {}
+  for i, sq in ipairs(state.subqueries) do
+    table.insert(items, {
+      text = Compiler.compile(sq, true),
+      index = i,
+      state = sq,
+    })
+  end
+
+  local win = find_window_for_buf(state.bufnr)
+
+  Snacks.picker({
+    items = items,
+    layout = { preset = "vscode" },
+    format = function(item)
+      return { { item.text } }
+    end,
+    confirm = function(picker, item)
+      picker:close()
+
+      if win and vim.api.nvim_win_is_valid(win) then
+        vim.api.nvim_set_current_win(win)
+      end
+
+      local sq = item.state
+
+      if sq.bufnr and vim.api.nvim_buf_is_valid(sq.bufnr) then
+        vim.api.nvim_set_current_buf(sq.bufnr)
+      else
+        M.create_builder_buffer(sq.sobject, true, state, sq.relationship_name, sq)
+      end
+    end,
+  })
+end
+
+--- Open a floating editor showing the selected fields as a comma-separated string.
+--- On save, parse by "," and add any field not already in state.selected_fields
+--- (one-way, additive). The builder query is always recompiled from selected_fields,
+--- so nothing here overrides it.
+--- @param state table QueryState
+local function edit_fields(state)
+  local fields = vim.tbl_keys(state.selected_fields)
+  table.sort(fields)
+  local width = math.min(80, vim.o.columns - 4)
+  local text_width = math.max(20, width - 4)
+  local initial_lines = Render.wrap_comma_list(table.concat(fields, ", "), text_width, "")
+
+  local buf = vim.api.nvim_create_buf(false, true)
+  vim.bo[buf].buftype = "nofile"
+  vim.bo[buf].bufhidden = "wipe"
+  vim.bo[buf].modifiable = true
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, initial_lines)
+
+  local height = math.min(20, #initial_lines + 2)
+  local win = vim.api.nvim_open_win(buf, true, {
+    relative = "cursor",
+    width = width,
+    height = height,
+    row = 1,
+    col = 0,
+    border = "single",
+    style = "minimal",
+  })
+
+  local function save_and_close()
+    local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+    State.merge_fields_from_string(state, table.concat(lines, "\n"))
+
+    if win and vim.api.nvim_win_is_valid(win) then
+      vim.api.nvim_win_close(win, true)
+    end
+
+    Render.render(state)
+  end
+
+  vim.keymap.set("n", "<C-s>", save_and_close, { buffer = buf, nowait = true, desc = "Save Fields" })
+  vim.keymap.set("i", "<C-s>", save_and_close, { buffer = buf, nowait = true, desc = "Save Fields" })
+  vim.keymap.set("n", "q", function()
+    if win and vim.api.nvim_win_is_valid(win) then
+      vim.api.nvim_win_close(win, true)
+    end
+  end, { buffer = buf, nowait = true, desc = "Cancel edit" })
+  vim.api.nvim_create_autocmd("WinClosed", {
+    buffer = buf,
+    once = true,
+    callback = function()
+      win = nil
+    end,
+  })
+end
+
+local function clear_fields(state)
+  state.selected_fields = {}
+
+  for _, f in ipairs(Const.SOQL.SYSTEM_FIELDS) do
+    state.selected_fields[f] = true
+  end
+end
+
+--- Edit the WHERE condition at a given index.
+--- @param state table QueryState
+--- @param index integer
+local function edit_where_condition(state, index)
+  local existing = state.where_clauses[index]
+  if not existing then
+    return
+  end
+
+  vim.ui.input({ prompt = "Field", default = existing.field }, function(field)
+    if not field or field == "" then
+      return
+    end
+
+    vim.ui.select(Const.SOQL.WHERE_OPERATORS, { prompt = "Operator for " .. field }, function(op)
+      if not op then
+        return
+      end
+
+      vim.ui.input({ prompt = "Value for " .. field .. " " .. op, default = existing.value }, function(value)
+        if not value or value == "" then
+          return
+        end
+
+        state.where_clauses[index] = State.new_where_condition(field, op, value, existing.connector)
+        Render.render(state)
+      end)
+    end)
+  end)
+end
+
+--- Edit the HAVING condition at a given index.
+--- @param state table QueryState
+--- @param index integer
+local function edit_having_condition(state, index)
+  local existing = state.having_clauses[index]
+  if not existing then
+    return
+  end
+
+  vim.ui.input({ prompt = "HAVING field", default = existing.field }, function(field)
+    if not field or field == "" then
+      return
+    end
+
+    vim.ui.select(Const.SOQL.WHERE_OPERATORS, { prompt = "Operator for " .. field }, function(op)
+      if not op then
+        return
+      end
+
+      vim.ui.input({ prompt = "Value for " .. field .. " " .. op, default = existing.value }, function(value)
+        if not value or value == "" then
+          return
+        end
+
+        state.having_clauses[index] = State.new_where_condition(field, op, value, existing.connector)
+        Render.render(state)
+      end)
+    end)
+  end)
+end
+
+--- Clear all WHERE conditions.
+local function clear_where(state)
+  if #state.where_clauses == 0 then
+    return
+  end
+  state.where_clauses = {}
+  Render.render(state)
+end
+
+--- Clear all ORDER BY clauses.
+local function clear_order_by(state)
+  if #state.order_by == 0 then
+    return
+  end
+  state.order_by = {}
+  Render.render(state)
+end
+
+--- Clear all GROUP BY fields.
+local function clear_group_by(state)
+  if vim.tbl_isempty(state.group_by) then
+    return
+  end
+  state.group_by = {}
+  Render.render(state)
+end
+
+--- Clear all HAVING conditions.
+local function clear_having(state)
+  if #state.having_clauses == 0 then
+    return
+  end
+  state.having_clauses = {}
+  Render.render(state)
+end
+
+--- Toggle ALL ROWS flag.
+local function toggle_all_rows(state)
+  state.all_rows = not state.all_rows
+  Log.notify(string.format(Const.SOQL.MESSAGES.ALL_ROWS_TOGGLED, state.all_rows and "On" or "Off"), vim.log.levels.INFO)
+  Render.render(state)
+end
+
+--- Toggle Tooling API flag.
+local function toggle_tooling(state)
+  state.use_tooling = not state.use_tooling
+  Log.notify(
+    string.format(Const.SOQL.MESSAGES.TOOLING_TOGGLED, state.use_tooling and "On" or "Off"),
+    vim.log.levels.INFO
+  )
+  Render.render(state)
+end
+
+--- Cycle through result formats (human -> csv -> json -> human).
+local function cycle_result_format(state)
+  local current = state.result_format_override or "human"
+  local formats = Const.SOQL.RESULT_FORMATS
+  local idx = 1
+
+  for i, f in ipairs(formats) do
+    if f == current then
+      idx = i
+      break
+    end
+  end
+
+  idx = idx % #formats + 1
+  local next_format = formats[idx]
+  state.result_format_override = next_format ~= "human" and next_format or nil
+
+  Log.notify(string.format(Const.SOQL.MESSAGES.RESULT_FORMAT_SET, next_format), vim.log.levels.INFO)
+  Render.render(state)
+end
+
+--- Edit an ORDER BY clause at a given index.
+--- @param state table QueryState
+--- @param index integer
+local function edit_order_by_clause(state, index)
+  local existing = state.order_by[index]
+  if not existing then
+    return
+  end
+
+  vim.ui.select(Const.SOQL.ORDER_DIRECTIONS, { prompt = "Direction for " .. existing.field }, function(dir)
+    if not dir then
+      return
+    end
+
+    local default_nulls = existing.nulls or "None"
+    vim.ui.select(Const.SOQL.NULLS_OPTIONS, { prompt = "NULLS handling for " .. existing.field }, function(nulls)
+      if not nulls then
+        return
+      end
+
+      local nulls_val = nulls ~= "None" and nulls or nil
+      state.order_by[index] = State.new_order_by_clause(existing.field, dir, nulls_val)
+      Render.render(state)
+    end)
+  end)
+end
+
+--- Edit the item under the cursor — dispatches to edit_where_condition,
+--- edit_order_by_clause, or edit_having_condition depending on the cursor line.
+--- @param state table QueryState
+local function edit_item_at_cursor(state)
+  local line = vim.api.nvim_get_current_line()
+
+  -- WHERE: re-render each clause and compare exactly.
+  for i, wc in ipairs(state.where_clauses) do
+    local value = Util.quote_value(wc.value)
+    local cond = wc.field .. " " .. wc.op .. " " .. value
+    if i > 1 then
+      cond = (wc.connector or "AND") .. " " .. cond
+    end
+    if line == "   " .. i .. ". " .. cond then
+      edit_where_condition(state, i)
+      return
+    end
+  end
+
+  -- ORDER BY: re-render each clause and compare exactly.
+  for i, ob in ipairs(state.order_by) do
+    local clause = ob.field .. " " .. ob.direction
+    if ob.nulls then
+      clause = clause .. " NULLS " .. ob.nulls
+    end
+    if line == "   " .. i .. ". " .. clause then
+      edit_order_by_clause(state, i)
+      return
+    end
+  end
+
+  -- HAVING: re-render each clause and compare exactly.
+  for i, hc in ipairs(state.having_clauses) do
+    local value = Util.quote_value(hc.value)
+    local cond = hc.field .. " " .. hc.op .. " " .. value
+    if i > 1 then
+      cond = (hc.connector or "AND") .. " " .. cond
+    end
+    if line == "   " .. i .. ". " .. cond then
+      edit_having_condition(state, i)
+      return
+    end
+  end
+end
+
+--- Add GROUP BY field.
+--- @param state table QueryState
+local function add_group_by_field(state)
+  local describe_data = describe_cache[state.sobject]
+  if not describe_data or not describe_data.fields then
+    Log.notify(Const.SOQL.MESSAGES.NO_FIELDS_GROUP_BY, vim.log.levels.ERROR)
+    return
+  end
+
+  local win = find_window_for_buf(state.bufnr)
+  local items = {}
+  for _, f in ipairs(describe_data.fields) do
+    table.insert(items, { text = f.name .. "  (" .. f.field_type .. ")  - " .. f.label, api_name = f.name })
+  end
+
+  Snacks.picker({
+    items = items,
+    layout = { preset = "vscode" },
+    multiselect = true,
+    prompt = "GROUP BY Field",
+    format = function(item)
+      return { { item.text } }
+    end,
+    confirm = function(picker, _)
+      local selected = picker:selected()
+      picker:close()
+      if win and vim.api.nvim_win_is_valid(win) then
+        vim.api.nvim_set_current_win(win)
+      end
+      for _, item in ipairs(selected) do
+        state.group_by[item.api_name] = true
+      end
+      Render.render(state)
+    end,
+  })
+end
+
+--- Add a HAVING condition.
+local function add_having_condition(state)
+  local connector = nil
+
+  local function proceed()
+    vim.ui.input({ prompt = "HAVING field (e.g. COUNT(Id), Amount)" }, function(field)
+      if not field or field == "" then
+        return
+      end
+      vim.ui.select(Const.SOQL.WHERE_OPERATORS, { prompt = "Operator for " .. field }, function(op)
+        if not op then
+          return
+        end
+        vim.ui.input({ prompt = "Value for " .. field .. " " .. op }, function(value)
+          if not value or value == "" then
+            return
+          end
+          table.insert(state.having_clauses, State.new_where_condition(field, op, value, connector))
+          Render.render(state)
+        end)
+      end)
+    end)
+  end
+
+  if #state.having_clauses > 0 then
+    vim.ui.select(Const.SOQL.LOGICAL_CONNECTORS, { prompt = "Connect with" }, function(selected)
+      if not selected then
+        return
+      end
+      connector = selected
+      proceed()
+    end)
+  else
+    proceed()
+  end
+end
+
+--- Add an aggregate field (e.g. COUNT(Id) total).
+local function add_aggregate_field(state)
+  vim.ui.select(Const.SOQL.AGGREGATE_FUNCTIONS, { prompt = "Aggregate function" }, function(func)
+    if not func then
+      return
+    end
+    vim.ui.input({ prompt = func .. "(field) — field name (empty for COUNT())" }, function(field)
+      if field == nil then
+        return
+      end
+      vim.ui.input({ prompt = "Alias (optional)" }, function(alias)
+        if alias == nil then
+          return
+        end
+        local expr = func .. "(" .. field .. ")"
+        if alias ~= "" then
+          expr = expr .. " " .. alias
+        end
+        state.selected_fields[expr] = true
+        Log.notify(string.format(Const.SOQL.MESSAGES.AGGREGATE_ADDED, expr), vim.log.levels.INFO)
+        Render.render(state)
+      end)
+    end)
+  end)
+end
+
+function M.create_builder_buffer(sobject_name, is_subquery, parent_state, relationship_name, existing_state)
+  -- Create or reuse QueryState (bufnr nil—mutated after Snacks.win creates the buffer)
+  local state = existing_state
+    or State.QueryState:new({
+      sobject = sobject_name,
+      is_subquery = is_subquery or false,
+      parent_state = parent_state or nil,
+      relationship_name = relationship_name or nil,
+    })
+
+  if is_subquery and parent_state then
+    local exists = false
+
+    for _, sq in ipairs(parent_state.subqueries) do
+      if sq == state then
+        exists = true
+        break
+      end
+    end
+
+    if not exists then
+      table.insert(parent_state.subqueries, state)
+    end
+  end
+
+  local title
+  if is_subquery then
+    title = " Subquery — " .. (parent_state and parent_state.sobject or "?") .. " → " .. (relationship_name or "?")
+  else
+    title = " SOQL Builder — " .. sobject_name
+  end
+
+  local row, col
+
+  if is_subquery and parent_state then
+    local parent_win = find_window_for_buf(parent_state.bufnr)
+
+    if parent_win and vim.api.nvim_win_is_valid(parent_win) then
+      local parent_config = vim.api.nvim_win_get_config(parent_win)
+      row = (parent_config.row or 0) + 3
+      col = (parent_config.col or 0) + 4
+    end
+  end
+
+  if not row then
+    row = math.floor((vim.o.lines - math.max(math.floor(vim.o.lines * 0.75), 30)) / 2)
+  end
+
+  if not col then
+    col = 4
+  end
+
+  local win = Snacks.win({
+    title = " " .. title .. " ",
+    title_pos = "center",
+    position = "float",
+    width = math.min(120, vim.o.columns - 4),
+    height = math.max(math.floor(vim.o.lines * 0.75), 30),
+    row = row,
+    col = col,
+    border = "single",
+    ft = Const.SOQL.BUF_FILETYPE,
+    bo = { filetype = Const.SOQL.BUF_FILETYPE },
+    enter = true,
+    footer_keys = { "q", "?", "s", "A" },
+    text = function()
+      return Render.render_lines(state)
+    end,
+    keys = {
+      F = {
+        desc = "Select Fields",
+        function()
+          open_field_picker(state)
+        end,
+      },
+      R = {
+        desc = "Add Related Field",
+        function()
+          if not is_subquery then
+            add_related_field(state)
+          end
+        end,
+      },
+      W = {
+        desc = "Add WHERE",
+        function()
+          add_where_condition(state)
+        end,
+      },
+      B = {
+        desc = "Add Order By",
+        function()
+          add_order_by(state)
+        end,
+      },
+      S = {
+        desc = "Add Subquery",
+        function()
+          if not is_subquery then
+            add_subquery(state)
+          end
+        end,
+      },
+      X = {
+        desc = "Clear Fields",
+        function()
+          clear_fields(state)
+        end,
+      },
+      x = {
+        desc = "Remove All Fields",
+        function()
+          open_remove_picker(state)
+        end,
+      },
+      L = {
+        desc = "Set LIMIT",
+        function()
+          set_limit(state)
+        end,
+      },
+      o = {
+        desc = "Change Object",
+        function()
+          if not is_subquery then
+            switch_sobject(state)
+          end
+        end,
+      },
+      O = {
+        desc = "Set OFFSET",
+        function()
+          set_offset(state)
+        end,
+      },
+      A = {
+        desc = "Run Query",
+        function()
+          Executor.run_query(state)
+        end,
+      },
+      C = {
+        desc = "Copy SOQL",
+        function()
+          local soql = Compiler.compile(state)
+          vim.fn.setreg("+", soql)
+          vim.notify(Const.SOQL.MESSAGES.SOQL_COPIED, vim.log.levels.INFO)
+        end,
+      },
+      E = {
+        desc = "Edit Fields",
+        function()
+          edit_fields(state)
+        end,
+      },
+      s = {
+        desc = "Save Query",
+        function(self)
+          if not is_subquery then
+            M.save_query(state, self)
+          end
+        end,
+      },
+      d = {
+        desc = "Delete Item",
+        function()
+          delete_item_at_cursor(state)
+        end,
+      },
+      -- d deletes fields, WHERE, ORDER BY, subqueries, LIMIT, OFFSET
+      q = { "q", "close", desc = "Close" },
+      rf = {
+        desc = "Refresh Schema",
+        function()
+          Schema.refresh_describe(state.sobject, function(describe_data)
+            if describe_data then
+              describe_cache[state.sobject] = describe_data
+            end
+            win:update()
+          end)
+        end,
+      },
+      { "?", "toggle_help", desc = "Help" },
+      e = {
+        desc = "Edit Subquery",
+        function()
+          if not is_subquery then
+            edit_subquery(state)
+          end
+        end,
+      },
+      ["<BS>"] = {
+        desc = "Save & Return",
+        function(self)
+          if is_subquery then
+            state.subquery_saved = true
+            self:close()
+            if parent_state and parent_state.bufnr and vim.api.nvim_buf_is_valid(parent_state.bufnr) then
+              local parent_win = find_window_for_buf(parent_state.bufnr)
+              if parent_win and vim.api.nvim_win_is_valid(parent_win) then
+                vim.api.nvim_set_current_win(parent_win)
+              end
+              Render.render(parent_state)
+            end
+          end
+        end,
+      },
+      ["<Esc>"] = {
+        desc = "Cancel",
+        function()
+          if is_subquery then
+            win:close()
+          end
+        end,
+      },
+      G = {
+        desc = "Add Group By Field",
+        function()
+          add_group_by_field(state)
+        end,
+      },
+      H = {
+        desc = "Add HAVING Condition",
+        function()
+          add_having_condition(state)
+        end,
+      },
+      g = {
+        desc = "Add Aggregate Field",
+        function()
+          add_aggregate_field(state)
+        end,
+      },
+      T = {
+        desc = "Toggle ALL ROWS",
+        function()
+          if not is_subquery then
+            toggle_all_rows(state)
+          end
+        end,
+      },
+      t = {
+        desc = "Toggle Tooling",
+        function()
+          if not is_subquery then
+            toggle_tooling(state)
+          end
+        end,
+      },
+      f = {
+        desc = "Cycle Result Format",
+        function()
+          if not is_subquery then
+            cycle_result_format(state)
+          end
+        end,
+      },
+      ["<CR>"] = {
+        desc = "Edit Item",
+        function()
+          edit_item_at_cursor(state)
+        end,
+      },
+      cw = {
+        desc = "Clear WHERE",
+        function()
+          clear_where(state)
+        end,
+      },
+      cb = {
+        desc = "Clear ORDER BY",
+        function()
+          clear_order_by(state)
+        end,
+      },
+      cg = {
+        desc = "Clear GROUP BY",
+        function()
+          clear_group_by(state)
+        end,
+      },
+      ch = {
+        desc = "Clear HAVING",
+        function()
+          clear_having(state)
+        end,
+      },
+    },
+    on_win = function(self)
+      state.bufnr = self.buf
+    end,
+    on_close = function()
+      if is_subquery and parent_state and not state.subquery_saved then
+        for i, sq in ipairs(parent_state.subqueries) do
+          if sq == state then
+            table.remove(parent_state.subqueries, i)
+            break
+          end
+        end
+        if parent_state.bufnr and vim.api.nvim_buf_is_valid(parent_state.bufnr) then
+          Render.render(parent_state)
+        end
+      end
+    end,
+  })
+
+  -- For root, ensure describe data is available
+  if not is_subquery then
+    if not describe_cache[sobject_name] then
+      Schema.fetch_describe(sobject_name, function(describe_data)
+        if describe_data then
+          describe_cache[sobject_name] = describe_data
+          win:update()
+        else
+          Log.notify(string.format(Const.SOQL.MESSAGES.SCHEMA_LOAD_FAILED, sobject_name), vim.log.levels.ERROR)
+          win:close()
+        end
+      end)
+    end
+  else
+    if not describe_cache[sobject_name] and parent_state then
+      Schema.fetch_describe(sobject_name, function(describe_data)
+        if describe_data then
+          describe_cache[sobject_name] = describe_data
+        end
+      end)
+    end
+  end
+end
+
+--- Main entry point: open the SOQL query builder.
+--- Called from :Sf soql open.
+function M.open()
+  -- Guard: Snacks required
+  if not Snacks then
+    Log.notify(Const.SOQL.MESSAGES.SNACKS_REQUIRED_BUILDER, vim.log.levels.ERROR)
+    return
+  end
+
+  -- Fetch SObject list
+  Schema.fetch_sobjects(function(sobjects)
+    if not sobjects or #sobjects == 0 then
+      return
+    end
+
+    local items = {}
+    for _, name in ipairs(sobjects) do
+      table.insert(items, { text = name, api_name = name })
+    end
+
+    Snacks.picker({
+      items = items,
+      layout = { preset = "vscode" },
+      format = function(item)
+        return { { item.text } }
+      end,
+      confirm = function(picker, item)
+        picker:close()
+        M.create_builder_buffer(item.api_name, false, nil, nil)
+      end,
+    })
+  end)
+end
+
+--- Save the current query to disk and close the builder.
+--- Only works from the root query (not a subquery).
+--- @param state table QueryState
+--- @param win snacks.win
+function M.save_query(state, win)
+  if state.is_subquery then
+    return
+  end
+
+  if not state.sobject or state.sobject == "" then
+    Log.notify(Const.SOQL.MESSAGES.SAVE_NO_SOBJECT, vim.log.levels.ERROR)
+    return
+  end
+
+  local config = Config:get_options()
+  local saved_dir = PathUtils.join(config.cache_path, "soql", "saved")
+
+  vim.fn.mkdir(saved_dir, "p")
+
+  local soql = Compiler.compile(state)
+
+  -- Generate filename with dedup suffix
+  local base = PathUtils.join(saved_dir, state.sobject)
+  local filepath = base .. ".soql"
+  local counter = 1
+
+  while vim.fn.filereadable(filepath) == 1 do
+    counter = counter + 1
+    local suffix = string.format("_%02d", counter)
+    filepath = base .. suffix .. ".soql"
+  end
+
+  -- Write file (raw SOQL text for human readability)
+  local f = io.open(filepath, "w")
+  if not f then
+    Log.notify(string.format("Failed to save query to %s", filepath), vim.log.levels.ERROR)
+    return
+  end
+
+  f:write(soql)
+  f:close()
+
+  Log.notify(string.format(Const.SOQL.MESSAGES.SAVE_SUCCESS, vim.fn.fnamemodify(filepath, ":~:.")), vim.log.levels.INFO)
+  win:close()
+end
+
+--- List saved .soql files and open a picker to resume one.
+--- Reads the selected file and invokes the SOQL parser to reconstruct
+--- a QueryState before opening the builder.
+function M.resume()
+  if not Snacks then
+    Log.notify(Const.SOQL.MESSAGES.SNACKS_REQUIRED_BUILDER, vim.log.levels.ERROR)
+    return
+  end
+
+  local config = Config:get_options()
+  local saved_dir = PathUtils.join(config.cache_path, "soql", "saved")
+
+  if vim.fn.isdirectory(saved_dir) == 0 then
+    Log.notify(Const.SOQL.MESSAGES.NO_SAVED_QUERIES, vim.log.levels.INFO)
+    return
+  end
+
+  -- Scan for *.soql files
+  local files = vim.fn.glob(PathUtils.join(saved_dir, "*.soql"), false, true)
+  if #files == 0 then
+    Log.notify(Const.SOQL.MESSAGES.NO_SAVED_QUERIES, vim.log.levels.INFO)
+    return
+  end
+
+  table.sort(files)
+
+  local items = {}
+  for _, fp in ipairs(files) do
+    local basename = vim.fn.fnamemodify(fp, ":t")
+    table.insert(items, { text = basename, path = fp })
+  end
+
+  Snacks.picker({
+    items = items,
+    layout = { preset = "vscode" },
+    format = function(item)
+      return { { item.text } }
+    end,
+    confirm = function(picker, item)
+      picker:close()
+
+      -- Read the saved query file
+      local f = io.open(item.path, "r")
+      if not f then
+        Log.notify(Const.SOQL.MESSAGES.RESUME_PARSE_FAILED, vim.log.levels.ERROR)
+        return
+      end
+
+      local raw = f:read("*a")
+      f:close()
+
+      local Parser = require("sf.soql.parser")
+      local parsed = Parser.parse(raw)
+
+      if not parsed or not parsed.sobject or parsed.sobject == "" then
+        Log.notify(Const.SOQL.MESSAGES.RESUME_PARSE_FAILED, vim.log.levels.ERROR)
+        return
+      end
+
+      -- Build a QueryState from parsed data
+      local state = State.QueryState:new({ sobject = parsed.sobject })
+
+      -- Merge parsed fields (keep SYSTEM_FIELDS from :new)
+      for field, _ in pairs(parsed.selected_fields) do
+        state.selected_fields[field] = true
+      end
+
+      state.where_clauses = parsed.where_clauses
+      state.order_by = parsed.order_by
+      state.limit = parsed.limit
+      state.offset = parsed.offset
+      state.group_by = parsed.group_by or {}
+      state.having_clauses = parsed.having_clauses or {}
+      state.all_rows = parsed.all_rows or false
+
+      -- Link subqueries to parent
+      for _, sq in ipairs(parsed.subqueries) do
+        sq.parent_state = state
+        table.insert(state.subqueries, sq)
+      end
+
+      -- Open builder with the restored state
+      M.create_builder_buffer(parsed.sobject, false, nil, nil, state)
+    end,
+  })
+end
+
+--- Edit the WHERE condition at a given index.
+--- @param state table QueryState
+--- @param index integer
+
+return M

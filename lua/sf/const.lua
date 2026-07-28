@@ -62,6 +62,15 @@ M.ICONS = {
   STATE = "\u{f013}",
   FILE = "\u{f07b}",
   LINK = "\u{f0c1}",
+  TABLE = "\u{f0ce}",
+  FILTER = "\u{f0b0}",
+  SORT = "\u{f0dc}",
+  STOP = "\u{f04d}",
+  EDIT = "\u{f044}",
+  COPY = "\u{f0c5}",
+  REMOVE = "\u{f00d}",
+  SEARCH = "\u{f002}",
+  DATABASE = "\u{f1c0}",
 }
 
 --- Debug level field definitions with valid values and defaults.
@@ -379,6 +388,60 @@ M.TYPE_MAPPING = {
 
 M.MANIFEST_THRESHOLD = 10
 
+M.SOQL = {
+  SYSTEM_FIELDS = { "Id", "CreatedById", "CreatedDate", "LastModifiedById", "LastModifiedDate" },
+  COMMON_STANDARD_FIELDS = { "Name", "OwnerId" },
+  WHERE_OPERATORS = { "=", "!=", "<>", "<", ">", "<=", ">=", "LIKE", "IN", "NOT IN", "INCLUDES", "EXCLUDES" },
+  ORDER_DIRECTIONS = { "ASC", "DESC" },
+  AGGREGATE_FUNCTIONS = { "COUNT", "SUM", "MAX", "MIN", "AVG" },
+  NULLS_OPTIONS = { "FIRST", "LAST", "None" },
+  RESULT_FORMATS = { "human", "csv", "json" },
+  LOGICAL_CONNECTORS = { "AND", "OR" },
+  BUF_FILETYPE = "sfsoqlbuilder",
+  MESSAGES = {
+    SNACKS_REQUIRED_PICKER = "Snacks.nvim is required for the field picker",
+    SNACKS_REQUIRED_REMOVER = "Snacks.nvim is required for the field remover",
+    SNACKS_REQUIRED_FIELD_SEL = "Snacks.nvim is required for field selection",
+    SNACKS_REQUIRED_SOBJECT = "Snacks.nvim is required for SObject selection",
+    SNACKS_REQUIRED_RELATIONSHIP = "Snacks.nvim is required for relationship selection",
+    NO_SCHEMA_DATA = "No schema data available",
+    NO_SCHEMA_DATA_FOR = "No schema data for %s",
+    NO_FIELDS_WHERE = "No fields available for WHERE condition",
+    NO_FIELDS_ORDERBY = "No fields available for ORDER BY",
+    NO_RELATIONSHIP_FIELDS = "No relationship fields available on %s",
+    NO_CHILD_RELATIONSHIPS = "No child relationships available for %s",
+    LIMIT_BAD = "LIMIT must be a positive integer",
+    OFFSET_BAD = "OFFSET must be a positive integer",
+    FIELD_CURSOR_HINT = "Move the cursor onto a field to delete it",
+    SYSTEM_FIELD_PROTECTED = "System fields cannot be removed",
+    REMOVED_NONE = "No fields removed (system fields are kept)",
+    REMOVED_COUNT = "Removed %d field(s)",
+    SOQL_COPIED = "SOQL copied to clipboard",
+    NO_PREV_QUERY = "No previous query to re-run. Run a query first with :Sf soql run or use the SOQL builder.",
+    SCHEMA_LOAD_FAILED = "Failed to load schema for %s",
+    FETCH_SOBJECT_FAILED = "Failed to fetch SObject list: %s",
+    DESCRIBE_FAILED = "Failed to describe %s: %s",
+    SNACKS_REQUIRED_BUILDER = "Snacks.nvim is required for SOQL builder",
+    SAVE_SUCCESS = "Query saved to %s",
+    SAVE_NO_SOBJECT = "No sObject selected — cannot save query",
+    NO_SAVED_QUERIES = "No saved queries found. Build a query and press s to save it.",
+    RESUME_PARSE_FAILED = "Failed to parse saved query file",
+    ALL_ROWS_TOGGLED = "ALL ROWS: %s",
+    TOOLING_TOGGLED = "Tooling API: %s",
+    RESULT_FORMAT_SET = "Result format: %s",
+    WHERE_CLEARED = "WHERE conditions cleared",
+    ORDER_BY_CLEARED = "ORDER BY clauses cleared",
+    GROUP_BY_CLEARED = "GROUP BY fields cleared",
+    HAVING_CLEARED = "HAVING conditions cleared",
+    NO_FIELDS_GROUP_BY = "No fields available for GROUP BY",
+    NO_FIELDS_HAVING = "No fields available for HAVING condition",
+    NO_FIELDS_AGGREGATE = "No fields available for aggregate function",
+    AGGREGATE_ADDED = "Aggregate added: %s",
+    WHERE_EDITED = "WHERE condition updated",
+    ORDER_BY_EDITED = "ORDER BY clause updated",
+  },
+}
+
 --- Salesforce CLI commands and their arguments
 --- Supported commands:
 --- - sf --version
@@ -563,6 +626,7 @@ M.SF_CLI = {
         TARGET_ORG = "-o",
         TOOLING = "-t",
         JSON = "--json",
+        RESULT_FORMAT = "-r",
         API_VERSION = "--api-version",
       },
     },
@@ -1060,6 +1124,53 @@ function M.get_query_args(query, target_org, api_version)
     vim.list_extend(args, { M.SF_CLI.DATA.QUERY.ARGS.API_VERSION, api_version })
   end
   vim.list_extend(args, { M.SF_CLI.DATA.QUERY.ARGS.JSON })
+  return args
+end
+
+--- Constructs arguments for sf data query command WITHOUT tooling API flag.
+--- Unlike get_query_args, this does NOT include -t, suitable for standard SOQL queries.
+--- @param query string The SOQL query
+--- @param target_org string|nil The target org username
+--- @param api_version string|nil The Salesforce API version (optional)
+--- @return table Complete argument list for sf data query command
+function M.get_data_query_args(query, target_org, api_version)
+  local args = {}
+  vim.list_extend(args, split_cmd(M.SF_CLI.DATA.QUERY.CMD))
+  vim.list_extend(args, { M.SF_CLI.DATA.QUERY.ARGS.QUERY, query })
+  if target_org then
+    vim.list_extend(args, { M.SF_CLI.DATA.QUERY.ARGS.TARGET_ORG, target_org })
+  end
+  if api_version then
+    vim.list_extend(args, { M.SF_CLI.DATA.QUERY.ARGS.API_VERSION, api_version })
+  end
+  vim.list_extend(args, { M.SF_CLI.DATA.QUERY.ARGS.JSON })
+  return args
+end
+
+--- Constructs arguments for sf data query command WITHOUT --json flag.
+--- Defaults to human-readable table output; pass a non-nil format
+--- (e.g. "csv", "json") to produce structured output.
+--- @param query string The SOQL query
+--- @param target_org string|nil The target org username
+--- @param api_version string|nil The Salesforce API version (optional)
+--- @param format string|nil Output format flag value ("csv", "json", or nil/"human" for text table)
+--- @return table Complete argument list for sf data query command
+function M.get_data_query_raw_args(query, target_org, api_version, format, tooling)
+  local args = {}
+  vim.list_extend(args, split_cmd(M.SF_CLI.DATA.QUERY.CMD))
+  vim.list_extend(args, { M.SF_CLI.DATA.QUERY.ARGS.QUERY, query })
+  if target_org then
+    vim.list_extend(args, { M.SF_CLI.DATA.QUERY.ARGS.TARGET_ORG, target_org })
+  end
+  if tooling then
+    vim.list_extend(args, { M.SF_CLI.DATA.QUERY.ARGS.TOOLING })
+  end
+  if api_version then
+    vim.list_extend(args, { M.SF_CLI.DATA.QUERY.ARGS.API_VERSION, api_version })
+  end
+  if format and format ~= "human" then
+    vim.list_extend(args, { M.SF_CLI.DATA.QUERY.ARGS.RESULT_FORMAT, format })
+  end
   return args
 end
 

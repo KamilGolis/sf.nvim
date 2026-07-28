@@ -212,6 +212,20 @@ local COMMANDS = {
       require("sf.code_analyzer.scan").scan_resume()
     end,
   },
+  soql = {
+    open = function()
+      require("sf.soql.builder").open()
+    end,
+    run = function()
+      require("sf.soql.run").run()
+    end,
+    rerun = function()
+      require("sf.soql.run").run_last()
+    end,
+    resume = function()
+      require("sf.soql.builder").resume()
+    end,
+  },
 }
 
 vim.api.nvim_create_user_command("Sf", function(opts)

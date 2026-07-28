@@ -162,10 +162,10 @@ function Execute:execute_file(file_path, opts)
       Log.notify(Const.SF_CLI_MESSAGES.APEX_EXECUTE_SUCCESS, vim.log.levels.INFO)
 
       if opts.display_mode == "buffer" then
-        vim.cmd("edit " .. vim.fn.fnameescape(log_file))
+        vim.cmd("noswapfile edit " .. vim.fn.fnameescape(log_file))
       else
         vim.cmd("vsplit")
-        vim.cmd("edit " .. vim.fn.fnameescape(log_file))
+        vim.cmd("noswapfile edit " .. vim.fn.fnameescape(log_file))
       end
 
       return
@@ -252,10 +252,10 @@ function Execute:_handle_success(j, context, options, opts, original_path)
   Log.notify(Const.SF_CLI_MESSAGES.APEX_EXECUTE_SUCCESS, vim.log.levels.INFO)
 
   if opts.display_mode == "buffer" then
-    vim.cmd("edit " .. vim.fn.fnameescape(log_file))
+    vim.cmd("noswapfile edit " .. vim.fn.fnameescape(log_file))
   else
     vim.cmd("vsplit")
-    vim.cmd("edit " .. vim.fn.fnameescape(log_file))
+    vim.cmd("noswapfile edit " .. vim.fn.fnameescape(log_file))
   end
 end
 
@@ -316,7 +316,7 @@ function Execute:execute_new()
     f:close()
   end
 
-  vim.cmd("edit " .. vim.fn.fnameescape(path))
+  vim.cmd("noswapfile edit " .. vim.fn.fnameescape(path))
   Log.notify("Created: " .. path, vim.log.levels.INFO)
 end
 
