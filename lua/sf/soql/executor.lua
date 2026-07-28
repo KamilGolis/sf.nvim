@@ -7,7 +7,7 @@ local Config = require("sf.config")
 local Const = require("sf.const")
 local Log = require("sf.core.log").scoped("soql/executor")
 local OrgUtils = require("sf.org.utils")
-local PathUtils = require("sf.core.path_utils")
+local Util = require("sf.soql.util")
 
 local M = {}
 
@@ -37,18 +37,6 @@ local function collect_buffers(state)
   return bufs
 end
 
---- Strip ANSI SGR escape sequences (color, bold, etc.) from a string.
---- Pattern matches ESC (byte 27) followed by [digits;semicolons m.
---- @param text string
---- @return string
-local function strip_ansi_sgr(text)
-  if not text then
-    return ""
-  end
-
-  return (text:gsub("\27%[[%d;]*m", ""))
-end
-
 --- Display raw CLI output: save .soql / .result files to disk, then
 --- open the result file in current window (no split). File is editable
 --- (not scratch buffer). Sets filetype based on result_format when applicable.
@@ -56,42 +44,12 @@ end
 --- @param soql string|nil The compiled SOQL to save as .soql
 --- @param result_format string "human" | "csv" | "json"
 local function display_raw_output(output, soql, result_format)
-  local config = Config:get_options()
-  local cache_path = config.cache_path
-  local results_dir = PathUtils.join(cache_path, "soql", "results")
-
-  vim.fn.mkdir(results_dir, "p")
-
-  local ts = tostring(os.time())
-  local soql_file = PathUtils.join(results_dir, ts .. ".soql")
-  local result_file = PathUtils.join(results_dir, ts .. ".result")
-
-  if soql then
-    local f = io.open(soql_file, "w")
-
-    if f then
-      f:write(soql)
-      f:close()
-    end
-  end
-
-  local stripped = strip_ansi_sgr(output or "(no output)")
-  local f = io.open(result_file, "w")
-
-  if f then
-    f:write(stripped)
-    f:close()
-  end
-
-  vim.cmd("noswapfile edit " .. vim.fn.fnameescape(result_file))
-  vim.bo.buftype = "acwrite"
-  vim.bo.modifiable = true
-
-  if result_format == "csv" then
-    vim.bo.filetype = "csv"
-  elseif result_format == "json" then
-    vim.bo.filetype = "json"
-  end
+  Util.save_and_open_result({
+    soql = soql,
+    result = output or "(no output)",
+    result_format = result_format,
+    editable = true,
+  })
 end
 
 --- Execute a compiled SOQL query and display results.
@@ -138,8 +96,8 @@ function M.run_query(state)
     handle:report({ message = "Running query...", percentage = 0 })
 
     local soql_config = Config:get_options().soql or {}
-    local result_format = soql_config.result_format or "human"
-    local args = Const.get_data_query_raw_args(soql, target_org, nil, result_format)
+    local result_format = root.result_format_override or soql_config.result_format or "human"
+    local args = Const.get_data_query_raw_args(soql, target_org, nil, result_format, root.use_tooling)
     local env = result_format == "human" and { COLUMNS = "100000" } or nil
     local stdout, code = Async.await_system(Config:get_options().sf_cli_path, args, env)
 

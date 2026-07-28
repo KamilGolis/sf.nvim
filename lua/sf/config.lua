@@ -28,6 +28,7 @@ function Config:new()
     scan_dir = "scan", -- Default directory for scan results under cache_path
     scan_results_file = "metadata.json", -- Default filename for scan output
     dap_log_dir = nil, -- Default directory for DAP debug logs (default: log_dir/dap)
+    -- TODO: Add soql features directory and files here (like above)
     dap = {
       adapter_path = nil, -- absolute path to apexReplayDebug.js
       port = 4712, -- DAP server port
@@ -35,11 +36,8 @@ function Config:new()
     },
     soql = {
       cache_ttl = 3600, -- seconds
-      result_split = "horizontal", -- "horizontal" | "vertical" | "float"
-      result_split_size = 40, -- lines for horizontal, cols for vertical
       result_format = "human",
     },
-
     debug = false, -- Debug mode (enables logging to file)
     logger_scope = {}, -- Module source patterns to log (empty = log everything). Example: {"test/runner", "core/job_utils"}
     debug_inspect = false, -- Show debug output on screen (requires debug = true)

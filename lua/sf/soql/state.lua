@@ -9,8 +9,8 @@ local M = {}
 --- @field field string
 --- @field op string
 --- @field value string
-function M.new_where_condition(field, op, value)
-  return { field = field, op = op, value = value }
+function M.new_where_condition(field, op, value, connector)
+  return { field = field, op = op, value = value, connector = connector }
 end
 
 --- @class OrderByClause
@@ -51,6 +51,11 @@ function QueryState:new(opts)
     limit = opts.limit or nil,
     subquery_saved = false,
     offset = opts.offset or nil,
+    group_by = {},
+    having_clauses = {},
+    all_rows = false,
+    use_tooling = false,
+    result_format_override = nil,
   }
 
   setmetatable(o, self)

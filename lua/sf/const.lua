@@ -391,9 +391,12 @@ M.MANIFEST_THRESHOLD = 10
 M.SOQL = {
   SYSTEM_FIELDS = { "Id", "CreatedById", "CreatedDate", "LastModifiedById", "LastModifiedDate" },
   COMMON_STANDARD_FIELDS = { "Name", "OwnerId" },
-  WHERE_OPERATORS = { "=", "!=", "LIKE", "IN", ">", "<", ">=", "<=" },
+  WHERE_OPERATORS = { "=", "!=", "<>", "<", ">", "<=", ">=", "LIKE", "IN", "NOT IN", "INCLUDES", "EXCLUDES" },
   ORDER_DIRECTIONS = { "ASC", "DESC" },
-  CACHE_TTL = 3600,
+  AGGREGATE_FUNCTIONS = { "COUNT", "SUM", "MAX", "MIN", "AVG" },
+  NULLS_OPTIONS = { "FIRST", "LAST", "None" },
+  RESULT_FORMATS = { "human", "csv", "json" },
+  LOGICAL_CONNECTORS = { "AND", "OR" },
   BUF_FILETYPE = "sfsoqlbuilder",
   MESSAGES = {
     SNACKS_REQUIRED_PICKER = "Snacks.nvim is required for the field picker",
@@ -423,6 +426,19 @@ M.SOQL = {
     SAVE_NO_SOBJECT = "No sObject selected — cannot save query",
     NO_SAVED_QUERIES = "No saved queries found. Build a query and press s to save it.",
     RESUME_PARSE_FAILED = "Failed to parse saved query file",
+    ALL_ROWS_TOGGLED = "ALL ROWS: %s",
+    TOOLING_TOGGLED = "Tooling API: %s",
+    RESULT_FORMAT_SET = "Result format: %s",
+    WHERE_CLEARED = "WHERE conditions cleared",
+    ORDER_BY_CLEARED = "ORDER BY clauses cleared",
+    GROUP_BY_CLEARED = "GROUP BY fields cleared",
+    HAVING_CLEARED = "HAVING conditions cleared",
+    NO_FIELDS_GROUP_BY = "No fields available for GROUP BY",
+    NO_FIELDS_HAVING = "No fields available for HAVING condition",
+    NO_FIELDS_AGGREGATE = "No fields available for aggregate function",
+    AGGREGATE_ADDED = "Aggregate added: %s",
+    WHERE_EDITED = "WHERE condition updated",
+    ORDER_BY_EDITED = "ORDER BY clause updated",
   },
 }
 
@@ -1139,12 +1155,15 @@ end
 --- @param api_version string|nil The Salesforce API version (optional)
 --- @param format string|nil Output format flag value ("csv", "json", or nil/"human" for text table)
 --- @return table Complete argument list for sf data query command
-function M.get_data_query_raw_args(query, target_org, api_version, format)
+function M.get_data_query_raw_args(query, target_org, api_version, format, tooling)
   local args = {}
   vim.list_extend(args, split_cmd(M.SF_CLI.DATA.QUERY.CMD))
   vim.list_extend(args, { M.SF_CLI.DATA.QUERY.ARGS.QUERY, query })
   if target_org then
     vim.list_extend(args, { M.SF_CLI.DATA.QUERY.ARGS.TARGET_ORG, target_org })
+  end
+  if tooling then
+    vim.list_extend(args, { M.SF_CLI.DATA.QUERY.ARGS.TOOLING })
   end
   if api_version then
     vim.list_extend(args, { M.SF_CLI.DATA.QUERY.ARGS.API_VERSION, api_version })

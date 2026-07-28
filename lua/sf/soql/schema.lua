@@ -30,8 +30,9 @@ local function is_cache_fresh(filepath)
   end
 
   local age = vim.loop.now() - mtime
+  local ttl = (Config:get_options().soql or {}).cache_ttl or 3600
 
-  return age < Const.SOQL.CACHE_TTL
+  return age < ttl
 end
 
 --- Read and parse a JSON cache file.

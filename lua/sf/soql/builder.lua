@@ -1,4 +1,3 @@
---- TODO: Lot of issues. Inconsistency with keybinds, no way to edit/remove WHERE, UI Inconsistency.
 --- sf-nvim SOQL Query Builder — entry point, keymaps, and interaction workflow
 -- @license MIT
 
@@ -11,6 +10,7 @@ local PathUtils = require("sf.core.path_utils")
 local Render = require("sf.soql.render")
 local Schema = require("sf.soql.schema")
 local State = require("sf.soql.state")
+local Util = require("sf.soql.util")
 
 local M = {}
 
@@ -28,11 +28,13 @@ end
 --- @return integer|nil window id
 local function find_window_for_buf(bufnr)
   local wins = vim.api.nvim_list_wins()
+
   for _, w in ipairs(wins) do
     if vim.api.nvim_win_get_buf(w) == bufnr then
       return w
     end
   end
+
   return nil
 end
 
@@ -213,10 +215,16 @@ local function add_related_field(state)
         -- relationshipName is the __r suffix name; if nil, strip "Id" from the field name
         local rel_name = ref_field.relationshipName
         if not rel_name or rel_name == vim.NIL then
-          rel_name = ref_field.name
+          local fname = ref_field.name
 
-          if rel_name:sub(-2) == "Id" then
-            rel_name = rel_name:sub(1, -3)
+          if fname:sub(-3) == "__c" then
+            -- MyLookup__c -> MyLookup__r
+            rel_name = fname:sub(1, -4) .. "__r"
+          elseif fname:sub(-2) == "Id" then
+            -- AccountId -> Account
+            rel_name = fname:sub(1, -3)
+          else
+            rel_name = fname
           end
         end
 
@@ -292,7 +300,7 @@ local function add_where_condition(state)
     return
   end
 
-  -- Capture window to restore focus after picker closes
+  local connector = nil
   local win = find_window_for_buf(state.bufnr)
 
   local items = {}
@@ -303,53 +311,70 @@ local function add_where_condition(state)
     })
   end
 
-  -- Step 1: Pick field
-  if Snacks then
-    Snacks.picker({
-      items = items,
-      layout = { preset = "vscode" },
-      prompt = "Field",
-      format = function(item)
-        return { { item.text } }
-      end,
-      confirm = function(picker, item)
-        picker:close()
+  local function proceed_with_field_picker()
+    -- Step 1: Pick field
+    if Snacks then
+      Snacks.picker({
+        items = items,
+        layout = { preset = "vscode" },
+        prompt = "Field",
+        format = function(item)
+          return { { item.text } }
+        end,
+        confirm = function(picker, item)
+          picker:close()
 
-        -- Restore focus to builder window
-        if win and vim.api.nvim_win_is_valid(win) then
-          vim.api.nvim_set_current_win(win)
-        end
-
-        local selected_field = item.api_name
-
-        -- Step 2: Pick operator
-        vim.ui.select(Const.SOQL.WHERE_OPERATORS, {
-          prompt = "Operator for " .. selected_field,
-        }, function(op)
-          if not op then
-            return
+          -- Restore focus to builder window
+          if win and vim.api.nvim_win_is_valid(win) then
+            vim.api.nvim_set_current_win(win)
           end
 
-          -- Step 3: Enter value
-          vim.ui.input({
-            prompt = "Value for " .. selected_field .. " " .. op,
-          }, function(value)
-            if not value or value == "" then
+          local selected_field = item.api_name
+
+          -- Step 2: Pick operator
+          vim.ui.select(Const.SOQL.WHERE_OPERATORS, {
+            prompt = "Operator for " .. selected_field,
+          }, function(op)
+            if not op then
               return
             end
 
-            table.insert(state.where_clauses, State.new_where_condition(selected_field, op, value))
-            Render.render(state)
+            -- Step 3: Enter value
+            vim.ui.input({
+              prompt = "Value for " .. selected_field .. " " .. op,
+            }, function(value)
+              if not value or value == "" then
+                return
+              end
+
+              table.insert(state.where_clauses, State.new_where_condition(selected_field, op, value, connector))
+              Render.render(state)
+            end)
           end)
-        end)
-      end,
-    })
+        end,
+      })
+    else
+      Log.notify(Const.SOQL.MESSAGES.SNACKS_REQUIRED_FIELD_SEL, vim.log.levels.ERROR)
+    end
+  end
+
+  -- If there are existing conditions, ask for the logical connector first.
+  if #state.where_clauses > 0 then
+    vim.ui.select(Const.SOQL.LOGICAL_CONNECTORS, {
+      prompt = "Connect with",
+    }, function(selected)
+      if not selected then
+        return
+      end
+      connector = selected
+      proceed_with_field_picker()
+    end)
   else
-    Log.notify(Const.SOQL.MESSAGES.SNACKS_REQUIRED_FIELD_SEL, vim.log.levels.ERROR)
+    proceed_with_field_picker()
   end
 end
 
---- TODO: Finish this - Start the ORDER BY 2-step workflow (field -> direction).
+---
 --- @param state table QueryState
 local function add_order_by(state)
   local describe_data = describe_cache[state.sobject]
@@ -392,8 +417,18 @@ local function add_order_by(state)
           if not dir then
             return
           end
-          table.insert(state.order_by, State.new_order_by_clause(item.api_name, dir))
-          Render.render(state)
+
+          vim.ui.select(Const.SOQL.NULLS_OPTIONS, {
+            prompt = "NULLS handling for " .. item.api_name,
+          }, function(nulls)
+            if not nulls then
+              return
+            end
+
+            local nulls_val = nulls ~= "None" and nulls or nil
+            table.insert(state.order_by, State.new_order_by_clause(item.api_name, dir, nulls_val))
+            Render.render(state)
+          end)
         end)
       end,
     })
@@ -498,6 +533,11 @@ local function switch_sobject(state)
           state.order_by = {}
           state.limit = nil
           state.offset = nil
+          state.group_by = {}
+          state.having_clauses = {}
+          state.all_rows = false
+          state.use_tooling = false
+          state.result_format_override = nil
 
           -- Fetch describe for new sobject
           Schema.fetch_describe(state.sobject, function(describe_data)
@@ -564,61 +604,130 @@ end
 local function delete_item_at_cursor(state)
   local line = vim.api.nvim_get_current_line()
 
-  -- Check for WHERE conditions: pattern "   N. field op value"
-  for i, wc in ipairs(state.where_clauses) do
-    if line:match("^%s+" .. i .. "%.") then
-      table.remove(state.where_clauses, i)
+  -- Field: cursor on a "   • fieldname" line
+  local field = line:match("^%s+•%s+(.+)$")
+
+  if field then
+    -- SELECT field?
+    if state.selected_fields[field] then
+      if vim.tbl_contains(Const.SOQL.SYSTEM_FIELDS, field) then
+        Log.notify(Const.SOQL.MESSAGES.SYSTEM_FIELD_PROTECTED, vim.log.levels.WARN)
+        return
+      end
+
+      State.remove_fields(state, { field })
       Render.render(state)
+
+      return
+    end
+
+    -- GROUP BY field?
+    if state.group_by[field] then
+      state.group_by[field] = nil
+      Render.render(state)
+
+      return
+    end
+
+    return
+  end
+
+  -- WHERE: re-render each clause and compare exactly.
+  for i, wc in ipairs(state.where_clauses) do
+    local value = Util.quote_value(wc.value)
+    local cond = wc.field .. " " .. wc.op .. " " .. value
+
+    if i > 1 then
+      cond = (wc.connector or "AND") .. " " .. cond
+    end
+
+    local rendered = "   " .. i .. ". " .. cond
+
+    if line == rendered then
+      table.remove(state.where_clauses, i)
+
+      -- After removal, clear connector on the new first condition
+      if #state.where_clauses > 0 then
+        state.where_clauses[1].connector = nil
+      end
+      Render.render(state)
+
       return
     end
   end
 
-  -- Check for ORDER BY clauses: pattern "   N. field DIRECTION"
+  -- ORDER BY: re-render each clause (with the now-indexed N. prefix).
   for i, ob in ipairs(state.order_by) do
-    if line:match("^%s+" .. i .. "%.") then
+    local clause = ob.field .. " " .. ob.direction
+
+    if ob.nulls then
+      clause = clause .. " NULLS " .. ob.nulls
+    end
+
+    if line == "   " .. i .. ". " .. clause then
       table.remove(state.order_by, i)
       Render.render(state)
+
       return
     end
   end
 
-  -- Check for subqueries: pattern "     N. relationshipName "
+  -- HAVING: re-render each clause and compare exactly.
+  for i, hc in ipairs(state.having_clauses) do
+    local value = Util.quote_value(hc.value)
+    local cond = hc.field .. " " .. hc.op .. " " .. value
+
+    if i > 1 then
+      cond = (hc.connector or "AND") .. " " .. cond
+    end
+
+    if line == "   " .. i .. ". " .. cond then
+      table.remove(state.having_clauses, i)
+
+      if #state.having_clauses > 0 then
+        state.having_clauses[1].connector = nil
+      end
+      Render.render(state)
+
+      return
+    end
+  end
+
+  -- Subquery: re-render the compiled string and compare exactly.
   for i, sq in ipairs(state.subqueries) do
-    if line:match("^%s+" .. i .. "%.") then
+    local rendered = "   " .. i .. ". " .. Compiler.compile(sq, true)
+
+    if line == rendered then
       if sq.bufnr and vim.api.nvim_buf_is_valid(sq.bufnr) then
         vim.api.nvim_buf_delete(sq.bufnr, { force = true })
       end
+
       table.remove(state.subqueries, i)
       Render.render(state)
+
       return
     end
   end
-end
 
---- Delete the field under the cursor if the cursor is on a field bullet line.
---- No-op (with a notify) when not on a field line, or when the field is a
---- protected SYSTEM_FIELD.
---- @param state table QueryState
-local function delete_field_at_cursor(state)
-  local line = vim.api.nvim_get_current_line()
-  local field = line:match("^%s+•%s+(.+)$")
+  -- LIMIT: cursor on a " LIMIT: <value>" line where value is not [NA]
+  local limit_val = line:match("LIMIT:%s+(.+)$")
 
-  if not field then
-    Log.notify(Const.SOQL.MESSAGES.FIELD_CURSOR_HINT, vim.log.levels.INFO)
+  if limit_val and limit_val ~= "[NA]" then
+    state.limit = nil
+    Render.render(state)
+
     return
   end
 
-  if not state.selected_fields[field] then
+  -- OFFSET: cursor on a " OFFSET: <value>" line where value is not [NA]
+  local offset_val = line:match("OFFSET:%s+(.+)$")
+
+  if offset_val and offset_val ~= "[NA]" then
+    state.offset = nil
+    Render.render(state)
+
     return
   end
-
-  if vim.tbl_contains(Const.SOQL.SYSTEM_FIELDS, field) then
-    Log.notify(Const.SOQL.MESSAGES.SYSTEM_FIELD_PROTECTED, vim.log.levels.WARN)
-    return
-  end
-
-  State.remove_fields(state, { field })
-  Render.render(state)
 end
 --- Edit a subquery — picker when multiple, direct when one.
 --- @param state table QueryState
@@ -645,7 +754,7 @@ local function edit_subquery(state)
   local items = {}
   for i, sq in ipairs(state.subqueries) do
     table.insert(items, {
-      text = (sq.relationship_name or "?") .. " (" .. sq.sobject .. ")",
+      text = Compiler.compile(sq, true),
       index = i,
       state = sq,
     })
@@ -741,6 +850,314 @@ local function clear_fields(state)
   end
 end
 
+--- Edit the WHERE condition at a given index.
+--- @param state table QueryState
+--- @param index integer
+local function edit_where_condition(state, index)
+  local existing = state.where_clauses[index]
+  if not existing then
+    return
+  end
+
+  vim.ui.input({ prompt = "Field", default = existing.field }, function(field)
+    if not field or field == "" then
+      return
+    end
+
+    vim.ui.select(Const.SOQL.WHERE_OPERATORS, { prompt = "Operator for " .. field }, function(op)
+      if not op then
+        return
+      end
+
+      vim.ui.input({ prompt = "Value for " .. field .. " " .. op, default = existing.value }, function(value)
+        if not value or value == "" then
+          return
+        end
+
+        state.where_clauses[index] = State.new_where_condition(field, op, value, existing.connector)
+        Render.render(state)
+      end)
+    end)
+  end)
+end
+
+--- Edit the HAVING condition at a given index.
+--- @param state table QueryState
+--- @param index integer
+local function edit_having_condition(state, index)
+  local existing = state.having_clauses[index]
+  if not existing then
+    return
+  end
+
+  vim.ui.input({ prompt = "HAVING field", default = existing.field }, function(field)
+    if not field or field == "" then
+      return
+    end
+
+    vim.ui.select(Const.SOQL.WHERE_OPERATORS, { prompt = "Operator for " .. field }, function(op)
+      if not op then
+        return
+      end
+
+      vim.ui.input({ prompt = "Value for " .. field .. " " .. op, default = existing.value }, function(value)
+        if not value or value == "" then
+          return
+        end
+
+        state.having_clauses[index] = State.new_where_condition(field, op, value, existing.connector)
+        Render.render(state)
+      end)
+    end)
+  end)
+end
+
+--- Clear all WHERE conditions.
+local function clear_where(state)
+  if #state.where_clauses == 0 then
+    return
+  end
+  state.where_clauses = {}
+  Render.render(state)
+end
+
+--- Clear all ORDER BY clauses.
+local function clear_order_by(state)
+  if #state.order_by == 0 then
+    return
+  end
+  state.order_by = {}
+  Render.render(state)
+end
+
+--- Clear all GROUP BY fields.
+local function clear_group_by(state)
+  if vim.tbl_isempty(state.group_by) then
+    return
+  end
+  state.group_by = {}
+  Render.render(state)
+end
+
+--- Clear all HAVING conditions.
+local function clear_having(state)
+  if #state.having_clauses == 0 then
+    return
+  end
+  state.having_clauses = {}
+  Render.render(state)
+end
+
+--- Toggle ALL ROWS flag.
+local function toggle_all_rows(state)
+  state.all_rows = not state.all_rows
+  Log.notify(string.format(Const.SOQL.MESSAGES.ALL_ROWS_TOGGLED, state.all_rows and "On" or "Off"), vim.log.levels.INFO)
+  Render.render(state)
+end
+
+--- Toggle Tooling API flag.
+local function toggle_tooling(state)
+  state.use_tooling = not state.use_tooling
+  Log.notify(
+    string.format(Const.SOQL.MESSAGES.TOOLING_TOGGLED, state.use_tooling and "On" or "Off"),
+    vim.log.levels.INFO
+  )
+  Render.render(state)
+end
+
+--- Cycle through result formats (human -> csv -> json -> human).
+local function cycle_result_format(state)
+  local current = state.result_format_override or "human"
+  local formats = Const.SOQL.RESULT_FORMATS
+  local idx = 1
+
+  for i, f in ipairs(formats) do
+    if f == current then
+      idx = i
+      break
+    end
+  end
+
+  idx = idx % #formats + 1
+  local next_format = formats[idx]
+  state.result_format_override = next_format ~= "human" and next_format or nil
+
+  Log.notify(string.format(Const.SOQL.MESSAGES.RESULT_FORMAT_SET, next_format), vim.log.levels.INFO)
+  Render.render(state)
+end
+
+--- Edit an ORDER BY clause at a given index.
+--- @param state table QueryState
+--- @param index integer
+local function edit_order_by_clause(state, index)
+  local existing = state.order_by[index]
+  if not existing then
+    return
+  end
+
+  vim.ui.select(Const.SOQL.ORDER_DIRECTIONS, { prompt = "Direction for " .. existing.field }, function(dir)
+    if not dir then
+      return
+    end
+
+    local default_nulls = existing.nulls or "None"
+    vim.ui.select(Const.SOQL.NULLS_OPTIONS, { prompt = "NULLS handling for " .. existing.field }, function(nulls)
+      if not nulls then
+        return
+      end
+
+      local nulls_val = nulls ~= "None" and nulls or nil
+      state.order_by[index] = State.new_order_by_clause(existing.field, dir, nulls_val)
+      Render.render(state)
+    end)
+  end)
+end
+
+--- Edit the item under the cursor — dispatches to edit_where_condition,
+--- edit_order_by_clause, or edit_having_condition depending on the cursor line.
+--- @param state table QueryState
+local function edit_item_at_cursor(state)
+  local line = vim.api.nvim_get_current_line()
+
+  -- WHERE: re-render each clause and compare exactly.
+  for i, wc in ipairs(state.where_clauses) do
+    local value = Util.quote_value(wc.value)
+    local cond = wc.field .. " " .. wc.op .. " " .. value
+    if i > 1 then
+      cond = (wc.connector or "AND") .. " " .. cond
+    end
+    if line == "   " .. i .. ". " .. cond then
+      edit_where_condition(state, i)
+      return
+    end
+  end
+
+  -- ORDER BY: re-render each clause and compare exactly.
+  for i, ob in ipairs(state.order_by) do
+    local clause = ob.field .. " " .. ob.direction
+    if ob.nulls then
+      clause = clause .. " NULLS " .. ob.nulls
+    end
+    if line == "   " .. i .. ". " .. clause then
+      edit_order_by_clause(state, i)
+      return
+    end
+  end
+
+  -- HAVING: re-render each clause and compare exactly.
+  for i, hc in ipairs(state.having_clauses) do
+    local value = Util.quote_value(hc.value)
+    local cond = hc.field .. " " .. hc.op .. " " .. value
+    if i > 1 then
+      cond = (hc.connector or "AND") .. " " .. cond
+    end
+    if line == "   " .. i .. ". " .. cond then
+      edit_having_condition(state, i)
+      return
+    end
+  end
+end
+
+--- Add GROUP BY field.
+--- @param state table QueryState
+local function add_group_by_field(state)
+  local describe_data = describe_cache[state.sobject]
+  if not describe_data or not describe_data.fields then
+    Log.notify(Const.SOQL.MESSAGES.NO_FIELDS_GROUP_BY, vim.log.levels.ERROR)
+    return
+  end
+
+  local win = find_window_for_buf(state.bufnr)
+  local items = {}
+  for _, f in ipairs(describe_data.fields) do
+    table.insert(items, { text = f.name .. "  (" .. f.field_type .. ")  - " .. f.label, api_name = f.name })
+  end
+
+  Snacks.picker({
+    items = items,
+    layout = { preset = "vscode" },
+    multiselect = true,
+    prompt = "GROUP BY Field",
+    format = function(item)
+      return { { item.text } }
+    end,
+    confirm = function(picker, _)
+      local selected = picker:selected()
+      picker:close()
+      if win and vim.api.nvim_win_is_valid(win) then
+        vim.api.nvim_set_current_win(win)
+      end
+      for _, item in ipairs(selected) do
+        state.group_by[item.api_name] = true
+      end
+      Render.render(state)
+    end,
+  })
+end
+
+--- Add a HAVING condition.
+local function add_having_condition(state)
+  local connector = nil
+
+  local function proceed()
+    vim.ui.input({ prompt = "HAVING field (e.g. COUNT(Id), Amount)" }, function(field)
+      if not field or field == "" then
+        return
+      end
+      vim.ui.select(Const.SOQL.WHERE_OPERATORS, { prompt = "Operator for " .. field }, function(op)
+        if not op then
+          return
+        end
+        vim.ui.input({ prompt = "Value for " .. field .. " " .. op }, function(value)
+          if not value or value == "" then
+            return
+          end
+          table.insert(state.having_clauses, State.new_where_condition(field, op, value, connector))
+          Render.render(state)
+        end)
+      end)
+    end)
+  end
+
+  if #state.having_clauses > 0 then
+    vim.ui.select(Const.SOQL.LOGICAL_CONNECTORS, { prompt = "Connect with" }, function(selected)
+      if not selected then
+        return
+      end
+      connector = selected
+      proceed()
+    end)
+  else
+    proceed()
+  end
+end
+
+--- Add an aggregate field (e.g. COUNT(Id) total).
+local function add_aggregate_field(state)
+  vim.ui.select(Const.SOQL.AGGREGATE_FUNCTIONS, { prompt = "Aggregate function" }, function(func)
+    if not func then
+      return
+    end
+    vim.ui.input({ prompt = func .. "(field) — field name (empty for COUNT())" }, function(field)
+      if field == nil then
+        return
+      end
+      vim.ui.input({ prompt = "Alias (optional)" }, function(alias)
+        if alias == nil then
+          return
+        end
+        local expr = func .. "(" .. field .. ")"
+        if alias ~= "" then
+          expr = expr .. " " .. alias
+        end
+        state.selected_fields[expr] = true
+        Log.notify(string.format(Const.SOQL.MESSAGES.AGGREGATE_ADDED, expr), vim.log.levels.INFO)
+        Render.render(state)
+      end)
+    end)
+  end)
+end
+
 function M.create_builder_buffer(sobject_name, is_subquery, parent_state, relationship_name, existing_state)
   -- Create or reuse QueryState (bufnr nil—mutated after Snacks.win creates the buffer)
   local state = existing_state
@@ -753,6 +1170,7 @@ function M.create_builder_buffer(sobject_name, is_subquery, parent_state, relati
 
   if is_subquery and parent_state then
     local exists = false
+
     for _, sq in ipairs(parent_state.subqueries) do
       if sq == state then
         exists = true
@@ -829,6 +1247,12 @@ function M.create_builder_buffer(sobject_name, is_subquery, parent_state, relati
           add_where_condition(state)
         end,
       },
+      B = {
+        desc = "Add Order By",
+        function()
+          add_order_by(state)
+        end,
+      },
       S = {
         desc = "Add Subquery",
         function()
@@ -844,7 +1268,7 @@ function M.create_builder_buffer(sobject_name, is_subquery, parent_state, relati
         end,
       },
       x = {
-        desc = "Remove Fields",
+        desc = "Remove All Fields",
         function()
           open_remove_picker(state)
         end,
@@ -855,14 +1279,18 @@ function M.create_builder_buffer(sobject_name, is_subquery, parent_state, relati
           set_limit(state)
         end,
       },
-      O = {
-        desc = "Object / OFFSET",
+      o = {
+        desc = "Change Object",
         function()
-          if is_subquery then
-            set_offset(state)
-          else
+          if not is_subquery then
             switch_sobject(state)
           end
+        end,
+      },
+      O = {
+        desc = "Set OFFSET",
+        function()
+          set_offset(state)
         end,
       },
       A = {
@@ -899,13 +1327,8 @@ function M.create_builder_buffer(sobject_name, is_subquery, parent_state, relati
           delete_item_at_cursor(state)
         end,
       },
-      D = {
-        desc = "Delete Field",
-        function()
-          delete_field_at_cursor(state)
-        end,
-      },
-      q = "close",
+      -- d deletes fields, WHERE, ORDER BY, subqueries, LIMIT, OFFSET
+      q = { "q", "close", desc = "Close" },
       rf = {
         desc = "Refresh Schema",
         function()
@@ -917,7 +1340,7 @@ function M.create_builder_buffer(sobject_name, is_subquery, parent_state, relati
           end)
         end,
       },
-      { "?", "toggle_help", desc = "help" },
+      { "?", "toggle_help", desc = "Help" },
       e = {
         desc = "Edit Subquery",
         function()
@@ -948,6 +1371,78 @@ function M.create_builder_buffer(sobject_name, is_subquery, parent_state, relati
           if is_subquery then
             win:close()
           end
+        end,
+      },
+      G = {
+        desc = "Add Group By Field",
+        function()
+          add_group_by_field(state)
+        end,
+      },
+      H = {
+        desc = "Add HAVING Condition",
+        function()
+          add_having_condition(state)
+        end,
+      },
+      g = {
+        desc = "Add Aggregate Field",
+        function()
+          add_aggregate_field(state)
+        end,
+      },
+      T = {
+        desc = "Toggle ALL ROWS",
+        function()
+          if not is_subquery then
+            toggle_all_rows(state)
+          end
+        end,
+      },
+      t = {
+        desc = "Toggle Tooling",
+        function()
+          if not is_subquery then
+            toggle_tooling(state)
+          end
+        end,
+      },
+      f = {
+        desc = "Cycle Result Format",
+        function()
+          if not is_subquery then
+            cycle_result_format(state)
+          end
+        end,
+      },
+      ["<CR>"] = {
+        desc = "Edit Item",
+        function()
+          edit_item_at_cursor(state)
+        end,
+      },
+      cw = {
+        desc = "Clear WHERE",
+        function()
+          clear_where(state)
+        end,
+      },
+      cb = {
+        desc = "Clear ORDER BY",
+        function()
+          clear_order_by(state)
+        end,
+      },
+      cg = {
+        desc = "Clear GROUP BY",
+        function()
+          clear_group_by(state)
+        end,
+      },
+      ch = {
+        desc = "Clear HAVING",
+        function()
+          clear_having(state)
         end,
       },
     },
@@ -1144,6 +1639,9 @@ function M.resume()
       state.order_by = parsed.order_by
       state.limit = parsed.limit
       state.offset = parsed.offset
+      state.group_by = parsed.group_by or {}
+      state.having_clauses = parsed.having_clauses or {}
+      state.all_rows = parsed.all_rows or false
 
       -- Link subqueries to parent
       for _, sq in ipairs(parsed.subqueries) do
@@ -1156,5 +1654,9 @@ function M.resume()
     end,
   })
 end
+
+--- Edit the WHERE condition at a given index.
+--- @param state table QueryState
+--- @param index integer
 
 return M

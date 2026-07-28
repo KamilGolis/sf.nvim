@@ -133,6 +133,9 @@ describe("soql/compiler", function()
     has_match(result, "SELECT Id, Name, %(SELECT Email, Id")
     has_match(result, "FROM Contacts")
     has_match(result, "FROM Account")
+    -- Subquery must be on a single line (no newline inside the parens)
+    local first_line = result:match("^([^\n]+)")
+    eq(first_line:find("FROM Contacts") ~= nil, true, "subquery FROM must be on the SELECT line")
   end)
 
 
@@ -159,5 +162,51 @@ describe("soql/compiler", function()
     eq(order_pos > where_pos, true)
     eq(limit_pos > order_pos, true)
     eq(offset_pos > limit_pos, true)
+  end)
+
+  it("WHERE condition escapes embedded single quotes", function()
+    local state = State.QueryState:new({ sobject = "Account" })
+    state.selected_fields = { Id = true }
+    state.where_clauses = { State.new_where_condition("Name", "=", "O'Brien") }
+    local Compiler = require("sf.soql.compiler")
+    local result = Compiler.compile(state)
+    eq(result:find("'O\\'Brien'") ~= nil, true, "Expected escaped quote but got: " .. result)
+  end)
+
+  it("WHERE condition does not quote date literals", function()
+    local state = State.QueryState:new({ sobject = "Account" })
+    state.selected_fields = { Id = true }
+    state.where_clauses = { State.new_where_condition("CreatedDate", ">", "LAST_N_DAYS:4") }
+    local Compiler = require("sf.soql.compiler")
+    local result = Compiler.compile(state)
+    has_match(result, "CreatedDate > LAST_N_DAYS:4")
+    eq(result:find("'LAST_N_DAYS:4'"), nil)
+  end)
+
+  it("WHERE condition does not quote IN list values", function()
+    local state = State.QueryState:new({ sobject = "Account" })
+    state.selected_fields = { Id = true }
+    state.where_clauses = { State.new_where_condition("Industry", "IN", "('Technology','Finance')") }
+    local Compiler = require("sf.soql.compiler")
+    local result = Compiler.compile(state)
+    has_match(result, "IN %('Technology','Finance'%)")
+  end)
+
+  it("WHERE condition does not quote date format YYYY-MM-DD", function()
+    local state = State.QueryState:new({ sobject = "Account" })
+    state.selected_fields = { Id = true }
+    state.where_clauses = { State.new_where_condition("CreatedDate", ">", "2024-01-01") }
+    local Compiler = require("sf.soql.compiler")
+    local result = Compiler.compile(state)
+    has_match(result, "CreatedDate > 2024%-01%-01")
+  end)
+
+  it("WHERE condition does not quote null literal", function()
+    local state = State.QueryState:new({ sobject = "Account" })
+    state.selected_fields = { Id = true }
+    state.where_clauses = { State.new_where_condition("Field", "=", "null") }
+    local Compiler = require("sf.soql.compiler")
+    local result = Compiler.compile(state)
+    has_match(result, "Field = null")
   end)
 end)

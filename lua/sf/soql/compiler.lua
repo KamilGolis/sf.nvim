@@ -3,6 +3,8 @@
 
 local M = {}
 
+local Util = require("sf.soql.util")
+
 --- Compile a QueryState tree into a formatted SOQL string.
 --- @param state table QueryState The root state to compile
 --- @param is_subquery boolean Internal flag for recursive subquery formatting
@@ -23,6 +25,7 @@ function M.compile(state, is_subquery)
   -- Subqueries (inline after fields)
   if #state.subqueries > 0 then
     local sub_parts = {}
+
     for _, sq in ipairs(state.subqueries) do
       sub_parts[#sub_parts + 1] = M.compile(sq, true)
     end
@@ -44,17 +47,43 @@ function M.compile(state, is_subquery)
   if #state.where_clauses > 0 then
     local conditions = {}
 
-    for _, wc in ipairs(state.where_clauses) do
-      local value = wc.value
-      -- Quote string values that aren't numeric or boolean
-      if not tonumber(value) and value ~= "true" and value ~= "false" and value ~= "null" then
-        value = "'" .. value .. "'"
+    for i, wc in ipairs(state.where_clauses) do
+      local value = Util.quote_value(wc.value)
+      local cond = wc.field .. " " .. wc.op .. " " .. value
+
+      if i > 1 then
+        cond = (wc.connector or "AND") .. " " .. cond
       end
 
-      conditions[#conditions + 1] = wc.field .. " " .. wc.op .. " " .. value
+      conditions[#conditions + 1] = cond
     end
 
-    lines[#lines + 1] = "WHERE " .. table.concat(conditions, " AND ")
+    lines[#lines + 1] = "WHERE " .. table.concat(conditions, " ")
+  end
+
+  -- GROUP BY
+  if not vim.tbl_isempty(state.group_by) then
+    local group_fields = vim.tbl_keys(state.group_by)
+    table.sort(group_fields)
+    lines[#lines + 1] = "GROUP BY " .. table.concat(group_fields, ", ")
+  end
+
+  -- HAVING
+  if #state.having_clauses > 0 then
+    local conditions = {}
+
+    for i, hc in ipairs(state.having_clauses) do
+      local value = Util.quote_value(hc.value)
+      local cond = hc.field .. " " .. hc.op .. " " .. value
+
+      if i > 1 then
+        cond = (hc.connector or "AND") .. " " .. cond
+      end
+
+      conditions[#conditions + 1] = cond
+    end
+
+    lines[#lines + 1] = "HAVING " .. table.concat(conditions, " ")
   end
 
   -- ORDER BY
@@ -84,7 +113,12 @@ function M.compile(state, is_subquery)
     lines[#lines + 1] = "OFFSET " .. state.offset
   end
 
-  local result = table.concat(lines, "\n")
+  -- ALL ROWS
+  if state.all_rows then
+    lines[#lines + 1] = "ALL ROWS"
+  end
+
+  local result = table.concat(lines, is_subquery and " " or "\n")
 
   -- Wrap subquery in parentheses
   if is_subquery then

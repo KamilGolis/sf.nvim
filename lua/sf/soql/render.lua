@@ -3,6 +3,7 @@
 
 local Compiler = require("sf.soql.compiler")
 local Const = require("sf.const")
+local Util = require("sf.soql.util")
 
 local M = {}
 
@@ -64,7 +65,6 @@ function M.render_lines(state)
   local lines = {}
   local avail_w = display_width(state.bufnr)
   local divider = string.rep("─", avail_w)
-  local section_line = string.rep("╌", avail_w)
 
   -- Header
   if state.is_subquery then
@@ -93,13 +93,14 @@ function M.render_lines(state)
       lines[#lines + 1] = "   \u{2022} " .. f
     end
   end
+  lines[#lines + 1] = "     [F] Select Fields"
   -- Subqueries inline (root only, rendered under SELECT like real SOQL)
   if not state.is_subquery then
     for i, sq in ipairs(state.subqueries) do
-      lines[#lines + 1] = "   \u{2022} Subquery \u{2014} " .. (sq.relationship_name or "?")
-      lines[#lines + 1] = "      [e] Edit  [d] Delete  [" .. i .. "]"
+      lines[#lines + 1] = "   " .. i .. ". " .. Compiler.compile(sq, true)
+      lines[#lines + 1] = "        [e] Edit  [d] Delete"
     end
-    lines[#lines + 1] = "    [S] Add Subquery"
+    lines[#lines + 1] = "     [S] Add Subquery"
   end
   lines[#lines + 1] = ""
 
@@ -119,33 +120,69 @@ function M.render_lines(state)
 
   if #state.where_clauses > 0 then
     for i, wc in ipairs(state.where_clauses) do
-      local value = wc.value
+      local value = Util.quote_value(wc.value)
+      local cond = wc.field .. " " .. wc.op .. " " .. value
 
-      if not tonumber(value) and value ~= "true" and value ~= "false" and value ~= "null" then
-        value = "'" .. value .. "'"
+      if i > 1 then
+        cond = (wc.connector or "AND") .. " " .. cond
       end
 
-      lines[#lines + 1] = "   " .. i .. ". " .. wc.field .. " " .. wc.op .. " " .. value
+      lines[#lines + 1] = "   " .. i .. ". " .. cond
     end
   end
 
-  lines[#lines + 1] = "  " .. Const.ICONS.FILTER .. " [AND] "
+  lines[#lines + 1] = "      [W] Add WHERE  [cw] Clear"
+
+  -- GROUP BY
+  lines[#lines + 1] = ""
+  lines[#lines + 1] = " " .. Const.ICONS.SORT .. " GROUP BY"
+
+  if not vim.tbl_isempty(state.group_by) then
+    local group_fields = vim.tbl_keys(state.group_by)
+    table.sort(group_fields)
+    for _, f in ipairs(group_fields) do
+      lines[#lines + 1] = "   \u{2022} " .. f
+    end
+  end
+
+  lines[#lines + 1] = "      [G] Add Group By  [cg] Clear"
+
+  -- HAVING
+  lines[#lines + 1] = ""
+  lines[#lines + 1] = " " .. Const.ICONS.FILTER .. " HAVING"
+
+  if #state.having_clauses > 0 then
+    for i, hc in ipairs(state.having_clauses) do
+      local value = Util.quote_value(hc.value)
+      local cond = hc.field .. " " .. hc.op .. " " .. value
+
+      if i > 1 then
+        cond = (hc.connector or "AND") .. " " .. cond
+      end
+
+      lines[#lines + 1] = "   " .. i .. ". " .. cond
+    end
+  end
+
+  lines[#lines + 1] = "      [H] Add HAVING  [ch] Clear"
 
   -- ORDER BY
   lines[#lines + 1] = ""
   lines[#lines + 1] = " " .. Const.ICONS.SORT .. " ORDER BY"
 
   if #state.order_by > 0 then
-    for _, ob in ipairs(state.order_by) do
+    for i, ob in ipairs(state.order_by) do
       local clause = ob.field .. " " .. ob.direction
 
       if ob.nulls then
         clause = clause .. " NULLS " .. ob.nulls
       end
 
-      lines[#lines + 1] = "   " .. clause
+      lines[#lines + 1] = "   " .. i .. ". " .. clause
     end
   end
+
+  lines[#lines + 1] = "      [B] Add ORDER BY  [cb] Clear"
 
   -- LIMIT / OFFSET
   lines[#lines + 1] = ""
@@ -163,6 +200,20 @@ function M.render_lines(state)
 
   lines[#lines + 1] = " " .. Const.ICONS.STOP .. " LIMIT: " .. limit
   lines[#lines + 1] = " " .. Const.ICONS.STOP .. " OFFSET: " .. offset
+
+  -- TOGGLES (root only)
+  if not state.is_subquery then
+    lines[#lines + 1] = ""
+    lines[#lines + 1] = " " .. Const.ICONS.STATE .. " Query Options"
+
+    local all_rows_status = state.all_rows and "On" or "Off"
+    local tooling_status = state.use_tooling and "On" or "Off"
+    local format = state.result_format_override or "human (default)"
+
+    lines[#lines + 1] = "   ALL ROWS: " .. all_rows_status .. "  [T] Toggle"
+    lines[#lines + 1] = "   Tooling: " .. tooling_status .. "  [t] Toggle"
+    lines[#lines + 1] = "   Format: " .. format .. "  [f] Cycle"
+  end
 
   -- GENERATED SOQL
   lines[#lines + 1] = ""

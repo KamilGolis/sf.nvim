@@ -18,16 +18,7 @@ local function split_lines(raw)
   -- For single-line SOQL, split on keywords instead
   -- Heuristic: if there's no newline, the whole query is on one line
   if not raw:find("\n") then
-    -- Insert newlines before major keywords for uniform parsing
-    local parts = {}
-    local remaining = raw
-
-    -- Split on SELECT/FROM/WHERE/ORDER BY/LIMIT/OFFSET
-    for keyword in remaining:gmatch("(%u+%s+)[%(%u]") do
-      -- This is tricky. Let's use a simpler approach.
-    end
-
-    -- Simpler: just return as a single line
+    -- Single-line: return as-is (normalize_multiline handles splitting)
     return { raw }
   end
 
@@ -59,6 +50,9 @@ local function normalize_multiline(raw)
   result = result:gsub("%s+ORDER%s+BY%s+", "\nORDER BY ")
   result = result:gsub("%s+LIMIT%s+", "\nLIMIT ")
   result = result:gsub("%s+OFFSET%s+", "\nOFFSET ")
+  result = result:gsub("%s+GROUP%s+BY%s+", "\nGROUP BY ")
+  result = result:gsub("%s+HAVING%s+", "\nHAVING ")
+  result = result:gsub("%s+ALL%s+ROWS%s*$", "\nALL ROWS")
 
   return result
 end
@@ -88,13 +82,23 @@ local function parse_select(line)
 
     if ch == "(" then
       paren_depth = paren_depth + 1
+
+      if paren_depth == 1 then
+        local func_name = current:match("^%s*(%a+)%s*$")
+        local AGG_FUNCS = { COUNT = true, SUM = true, MAX = true, MIN = true, AVG = true }
+
+        if not (func_name and AGG_FUNCS[func_name:upper()]) then
+          in_subquery = true
+        end
+      end
       current = current .. ch
     elseif ch == ")" then
       paren_depth = paren_depth - 1
       current = current .. ch
 
       if paren_depth == 0 and in_subquery then
-        -- End of subquery
+        -- End of subquery — trim leading whitespace so parse_subquery works
+        current = current:match("^%s*(.-)%s*$") or current
         table.insert(subquery_texts, current)
         current = ""
         in_subquery = false
@@ -136,6 +140,77 @@ local function parse_subquery(text)
   return M.parse(inner)
 end
 
+--- Parse a condition string into individual clauses with connectors.
+--- Splits on " AND " and " OR " while tracking the connector for each condition.
+--- Reused by both parse_where and parse_having.
+--- @param text string The text after the WHERE/HAVING keyword
+--- @return table[] clauses with field, op, value, and connector fields
+local function parse_conditions(text)
+  local clauses = {}
+
+  -- Split on " AND " and " OR " manually, tracking connectors.
+  local parts = {}
+  local current = ""
+  local pos = 1
+  local connectors = {}
+
+  while pos <= #text do
+    local and_match = text:sub(pos):match("^%s+AND%s+")
+    local or_match = text:sub(pos):match("^%s+OR%s+")
+
+    if and_match then
+      table.insert(parts, current)
+      table.insert(connectors, "AND")
+      current = ""
+      pos = pos + #and_match
+    elseif or_match then
+      table.insert(parts, current)
+      table.insert(connectors, "OR")
+      current = ""
+      pos = pos + #or_match
+    else
+      current = current .. text:sub(pos, pos)
+      pos = pos + 1
+    end
+  end
+
+  if current ~= "" then
+    table.insert(parts, current)
+    table.insert(connectors, nil)
+  end
+
+  -- Parse each part as a field op value.
+  for ci, cond in ipairs(parts) do
+    local field = cond:match("^%s*([%w_().]+)%s+(.*)$")
+
+    if field then
+      local cond_rest = cond:match("^%s*" .. field .. "%s+(.*)$")
+
+      if cond_rest then
+        local ops = { "NOT%s+IN", "<=", ">=", "<>", "!=", "=", "<", ">", "LIKE", "IN", "INCLUDES", "EXCLUDES" }
+        local matched_op, value
+
+        for _, op_pattern in ipairs(ops) do
+          local v = cond_rest:match("^" .. op_pattern .. "%s+(.+)$")
+
+          if v then
+            matched_op = cond_rest:match("^(" .. op_pattern .. ")")
+            value = v
+            break
+          end
+        end
+
+        if matched_op and value then
+          value = value:match("^'(.*)'$") or value
+          table.insert(clauses, { field = field, op = matched_op, value = value, connector = connectors[ci] })
+        end
+      end
+    end
+  end
+
+  return clauses
+end
+
 --- Parse a WHERE clause line into individual conditions.
 --- @param line string e.g. "WHERE Name = 'Test' AND Industry != 'Technology'"
 --- @return table[] where_clauses
@@ -144,26 +219,36 @@ local function parse_where(line)
   if not rest then
     return {}
   end
+  return parse_conditions(rest)
+end
 
-  local clauses = {}
-  -- Split on " AND " (case-insensitive, whole word)
-  local conditions = vim.split(rest, "%s+AND%s+", { plain = false })
-
-  for _, cond in ipairs(conditions) do
-    -- Match: field op value pattern
-    -- Operators: =, !=, <, >, <=, >=, <>, LIKE, IN, NOT IN, INCLUDES, EXCLUDES
-    local field, op, value =
-      cond:match("^%s*([%w_.]+)%s+(=|!=|<>|<=|>=|<|>|LIKE|IN|NOT%s+IN|INCLUDES|EXCLUDES)%s+(.+)$")
-
-    if field and op and value then
-      -- Unquote string values
-      value = value:match("^'(.*)'$") or value
-
-      table.insert(clauses, { field = field, op = op, value = value })
+--- Parse a GROUP BY clause line into a field set.
+--- @param line string e.g. "GROUP BY Industry, Type"
+--- @return table<string, boolean>
+local function parse_group_by(line)
+  local rest = line:match("^GROUP%s+BY%s+(.*)$")
+  if not rest then
+    return {}
+  end
+  local fields = {}
+  for token in vim.gsplit(rest, ",", { plain = true }) do
+    local field = vim.trim(token)
+    if field ~= "" then
+      fields[field] = true
     end
   end
+  return fields
+end
 
-  return clauses
+--- Parse a HAVING clause line.
+--- @param line string e.g. "HAVING COUNT(Id) > 5"
+--- @return table[] having_clauses
+local function parse_having(line)
+  local rest = line:match("^HAVING%s+(.*)$")
+  if not rest then
+    return {}
+  end
+  return parse_conditions(rest)
 end
 
 --- Parse an ORDER BY clause line.
@@ -181,23 +266,42 @@ local function parse_order_by(line)
   for _, part in ipairs(parts) do
     part = part:match("^%s*(.-)%s*$") or ""
 
-    local field, direction, nulls = part:match("^([%w_.]+)%s+(ASC|DESC)%s+(NULLS%s+(FIRST|LAST))$")
+    -- 1. Full form: field DIRECTION NULLS NULLPOS
+    local field, nulls_part = part:match("^([%w_.]+)%s+(ASC)%s+(NULLS%s+%u+)$")
 
     if not field then
-      field, direction = part:match("^([%w_.]+)%s+(ASC|DESC)$")
+      field, nulls_part = part:match("^([%w_.]+)%s+(DESC)%s+(NULLS%s+%u+)$")
     end
 
+    if field and nulls_part then
+      local direction = nulls_part:match("^(ASC)") or nulls_part:match("^(DESC)") or "ASC"
+      local nulls = nulls_part:match("NULLS%s+(%u+)$")
+      nulls = nulls and "NULLS " .. nulls or nil
+
+      table.insert(clauses, { field = field, direction = direction, nulls = nulls })
+    end
+
+    -- 2. field DIRECTION (no nulls)
+    if not field then
+      local f, d = part:match("^([%w_.]+)%s+(ASC)$")
+
+      if not f then
+        f, d = part:match("^([%w_.]+)%s+(DESC)$")
+      end
+
+      if f then
+        table.insert(clauses, { field = f, direction = d, nulls = nil })
+        field = f
+      end
+    end
+
+    -- 3. Bare field, assume ASC
     if not field then
       field = part:match("^([%w_.]+)%s*$")
-      direction = "ASC"
-    end
 
-    if field then
-      table.insert(clauses, {
-        field = field,
-        direction = direction or "ASC",
-        nulls = nulls and nulls:match("(FIRST|LAST)$") or nil,
-      })
+      if field then
+        table.insert(clauses, { field = field, direction = "ASC", nulls = nil })
+      end
     end
   end
 
@@ -231,6 +335,43 @@ function M.parse(raw)
   local text = normalize_multiline(raw)
   local lines = split_lines(text)
 
+  -- Merge lines that are continuations of multi-line subqueries
+  -- (e.g. "FROM Contacts)" belongs with the SELECT line it continues).
+  local merged = {}
+  local pending = ""
+
+  for _, line in ipairs(lines) do
+    if pending ~= "" then
+      pending = pending .. " " .. line
+
+      -- If parens balanced, flush the merged line
+      local open_count = select(2, pending:gsub("%(", ""))
+      local close_count = select(2, pending:gsub("%)", ""))
+
+      if open_count == close_count then
+        merged[#merged + 1] = pending
+        pending = ""
+      end
+    elseif line:match("^SELECT%s") then
+      local open_count = select(2, line:gsub("%(", ""))
+      local close_count = select(2, line:gsub("%)", ""))
+
+      if open_count > close_count then
+        -- SELECT has unbalanced parens — subquery spans next lines
+        pending = line
+      else
+        merged[#merged + 1] = line
+      end
+    else
+      merged[#merged + 1] = line
+    end
+  end
+
+  -- Flush any remaining pending (shouldn't happen with valid SOQL)
+  if pending ~= "" then
+    merged[#merged + 1] = pending
+  end
+
   local result = {
     sobject = "",
     selected_fields = {},
@@ -239,9 +380,12 @@ function M.parse(raw)
     limit = nil,
     offset = nil,
     subqueries = {},
+    group_by = {},
+    having_clauses = {},
+    all_rows = false,
   }
 
-  for _, line in ipairs(lines) do
+  for _, line in ipairs(merged) do
     if line:match("^SELECT%s") then
       local parsed = parse_select(line)
 
@@ -267,10 +411,16 @@ function M.parse(raw)
       result.where_clauses = parse_where(line)
     elseif line:match("^ORDER%s+BY%s") then
       result.order_by = parse_order_by(line)
+    elseif line:match("^GROUP%s+BY%s") then
+      result.group_by = parse_group_by(line)
+    elseif line:match("^HAVING%s") then
+      result.having_clauses = parse_having(line)
     elseif line:match("^LIMIT%s") then
       result.limit = parse_limit(line)
     elseif line:match("^OFFSET%s") then
       result.offset = parse_offset(line)
+    elseif line:match("^ALL%s+ROWS$") then
+      result.all_rows = true
     end
   end
 

@@ -6,6 +6,7 @@ local Config = require("sf.config")
 local Const = require("sf.const")
 local OrgUtils = require("sf.org.utils")
 local PathUtils = require("sf.core.path_utils")
+local Util = require("sf.soql.util")
 
 local snacks_ok, Snacks = pcall(require, "snacks")
 
@@ -17,50 +18,6 @@ local M = {}
 
 --- Last compiled or entered SOQL string, for rerun.
 local last_soql = nil
-
---- Write results and SOQL source to disk under cache_path/soql/results/<ts>.*
---- @param soql string
---- @param result string
---- @param ts string|nil Timestamp to reuse (for editor pre-created file)
---- @return { soql_file: string, result_file: string }
-local function save_results(soql, result, ts)
-  local config = Config:get_options()
-  local results_dir = PathUtils.join(config.cache_path, "soql", "results")
-
-  vim.fn.mkdir(results_dir, "p")
-
-  ts = ts or tostring(os.time())
-  local soql_file = PathUtils.join(results_dir, ts .. ".soql")
-  local result_file = PathUtils.join(results_dir, ts .. ".result")
-
-  local stripped = (result or ""):gsub("\27%[[%d;]*m", "")
-
-  local f = io.open(soql_file, "w")
-  if f then
-    f:write(soql)
-    f:close()
-  end
-
-  f = io.open(result_file, "w")
-  if f then
-    f:write(stripped)
-    f:close()
-  end
-
-  return { soql_file = soql_file, result_file = result_file }
-end
-
---- Open a result file in current window (no split).
---- @param result_file string
---- @param result_format string "human" | "csv" | "json"
-local function open_result_file(result_file, result_format)
-  local escaped = vim.fn.fnameescape(result_file)
-  vim.cmd("noswapfile edit " .. escaped)
-
-  vim.bo.filetype = result_format
-
-  vim.bo.modifiable = false
-end
 
 --- Open a scratch-buffer editor, execute the query on <CR>, show results.
 function M.run()
@@ -129,8 +86,13 @@ function M.run()
           result = "Query failed with exit code " .. tostring(code) .. "\n\n" .. result
         end
 
-        local files = save_results(soql, result, ts)
-        open_result_file(files.result_file, result_format)
+        Util.save_and_open_result({
+          soql = soql,
+          result = result,
+          ts = ts,
+          result_format = result_format,
+          editable = false,
+        })
       end)
     end)()
   end
@@ -150,9 +112,9 @@ function M.run()
       },
     },
     keys = {
-      q = "close",
-      ["?"] = "toggle_help",
-      ["<CR>"] = { "<CR>", "execute_query", mode = "n", desc = "Execute query" },
+      q = { "q", "close", desc = "Close" },
+      ["?"] = { "?", "toggle_help", desc = "Help" },
+      ["<CR>"] = { "<CR>", "execute_query", mode = "n", desc = "Execute Query" },
     },
     footer_keys = { "q", "?", "<CR>" },
     on_win = function(self)
@@ -204,8 +166,12 @@ function M.run_last()
         result = "Query failed with exit code " .. tostring(code) .. "\n\n" .. result
       end
 
-      local files = save_results(last_soql, result)
-      open_result_file(files.result_file, result_format)
+      Util.save_and_open_result({
+        soql = last_soql,
+        result = result,
+        result_format = result_format,
+        editable = false,
+      })
     end)
   end)()
 end
