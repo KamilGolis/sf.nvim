@@ -63,6 +63,9 @@ local COMMANDS = {
     set = function()
       require("sf.org.connect"):select_default_org()
     end,
+    open = function()
+      require("sf.org.connect"):open_org()
+    end,
   },
   schema = {
     refresh = function()
@@ -224,6 +227,19 @@ local COMMANDS = {
     end,
     resume = function()
       require("sf.soql.builder").resume()
+    end,
+    clear = function()
+      local Config = require("sf.config")
+      local PathUtils = require("sf.core.path_utils")
+      local Log = require("sf.core.log").scoped("soql")
+      local results_dir = PathUtils.join(Config:get_options().cache_path, "soql", "results")
+
+      if vim.fn.isdirectory(results_dir) == 1 then
+        vim.fn.delete(results_dir, "rf")
+        Log.notify("Cleared SOQL result files", vim.log.levels.INFO)
+      else
+        Log.notify("No SOQL results to clear", vim.log.levels.INFO)
+      end
     end,
   },
 }

@@ -112,20 +112,6 @@ M.TRACE_FLAG_PICKLIST_FIELDS = {
   "Workflow",
 }
 
---- String format templates for displaying Salesforce org details
-M.ORG_DETAILS_FORMAT = {
-  HEADER = "Selected Org Information:",
-  ALIAS = "Alias: %s",
-  INSTANCE_URL = "Instance URL: %s",
-  USERNAME = "Username: %s",
-  ORG_ID = "Org ID: %s",
-  CONNECTED_STATUS = "Connected Status: %s",
-  IS_DEFAULT = "Is Default: %s",
-  IS_DEVHUB = "Is DevHub: %s",
-  IS_SANDBOX = "Is Sandbox: %s",
-  API_VERSION = "API Version: %s",
-}
-
 --- Messages for SF CLI connection and org operations
 M.SF_CLI_MESSAGES = {
   NOT_FOUND = "SF CLI not found. Please install it.",
@@ -464,16 +450,6 @@ M.SF_CLI = {
     CMD = "--version",
   },
   PROJECT = {
-    GENERATE = {
-      CMD = "project generate",
-      ARGS = {
-        NAME = "-n",
-        OUTPUT_DIR = "-d",
-        API_VERSION = "--api-version",
-        TEMPLATE = "-t",
-        TEMPLATE_TYPE = "empty",
-      },
-    },
     DEPLOY = {
       CMD = "project deploy start",
       ARGS = {
@@ -678,7 +654,6 @@ M.GIT = {
   },
 }
 
---- TODO: Not used, implement in future.
 --- Generates formatted lines for org details preview
 --- Generates formatted preview lines for org details display
 --- @param org table The org object containing details (alias, instanceUrl, username, etc.)
@@ -686,16 +661,18 @@ M.GIT = {
 --- @usage local lines = Const.generate_org_preview_lines(org_data)
 function M.generate_org_preview_lines(org)
   return {
-    M.ORG_DETAILS_FORMAT.HEADER,
-    string.format(M.ORG_DETAILS_FORMAT.ALIAS, org.alias or "N/A"),
-    string.format(M.ORG_DETAILS_FORMAT.INSTANCE_URL, org.instanceUrl),
-    string.format(M.ORG_DETAILS_FORMAT.USERNAME, org.username),
-    string.format(M.ORG_DETAILS_FORMAT.ORG_ID, org.orgId),
-    string.format(M.ORG_DETAILS_FORMAT.CONNECTED_STATUS, org.connectedStatus),
-    string.format(M.ORG_DETAILS_FORMAT.IS_DEFAULT, org.isDefaultUsername and "Yes" or "No"),
-    string.format(M.ORG_DETAILS_FORMAT.IS_DEVHUB, org.isDevHub and "Yes" or "No"),
-    string.format(M.ORG_DETAILS_FORMAT.IS_SANDBOX, org.isSandbox and "Yes" or "No"),
-    string.format(M.ORG_DETAILS_FORMAT.API_VERSION, org.instanceApiVersion),
+    "                    " .. M.ICONS.LOG_INFO .. " Org Information",
+    "===========================================================",
+    "",
+    M.ICONS.USER .. " Alias:           " .. (org.alias or "N/A"),
+    M.ICONS.URL .. " Instance URL:    " .. (org.instanceUrl or "N/A"),
+    M.ICONS.USER .. " Username:        " .. (org.username or "N/A"),
+    M.ICONS.LOG_ID .. " Org ID:          " .. (org.orgId or "N/A"),
+    M.ICONS.STATE .. " Connected:       " .. (org.connectedStatus or "N/A"),
+    M.ICONS.SUCCESS .. " Is Default:      " .. (org.isDefaultUsername and "Yes" or "No"),
+    M.ICONS.DATABASE .. " Is DevHub:       " .. (org.isDevHub and "Yes" or "No"),
+    M.ICONS.TYPE .. " Is Sandbox:      " .. (org.isSandbox and "Yes" or "No"),
+    M.ICONS.API .. " API Version:     " .. (org.instanceApiVersion or "N/A"),
   }
 end
 
@@ -705,31 +682,6 @@ end
 --- @usage local parts = split_cmd("sf project generate") -- returns {"sf", "project", "generate"}
 local function split_cmd(cmd)
   return vim.split(cmd, " ")
-end
-
---- Constructs arguments for SF CLI project generation command
---- @param options table Configuration options containing temp_project_name, cache_path, and api_version
---- @return table Complete argument list for sf project generate command
---- @usage local args = Const.get_project_generate_args({temp_project_name = "temp", cache_path = "/tmp"})
-function M.get_project_generate_args(options)
-  local args = {}
-
-  -- Add the base command
-  vim.list_extend(args, split_cmd(M.SF_CLI.PROJECT.GENERATE.CMD))
-
-  -- Add the required arguments
-  vim.list_extend(args, {
-    M.SF_CLI.PROJECT.GENERATE.ARGS.NAME,
-    options.temp_project_name,
-    M.SF_CLI.PROJECT.GENERATE.ARGS.OUTPUT_DIR,
-    options.cache_path,
-    M.SF_CLI.PROJECT.GENERATE.ARGS.API_VERSION,
-    options.api_version,
-    M.SF_CLI.PROJECT.GENERATE.ARGS.TEMPLATE,
-    M.SF_CLI.PROJECT.GENERATE.ARGS.TEMPLATE_TYPE,
-  })
-
-  return args
 end
 
 --- Constructs arguments for SF CLI current file deployment command
@@ -1133,20 +1085,6 @@ end
 --- @param target_org string|nil The target org username
 --- @param api_version string|nil The Salesforce API version (optional)
 --- @return table Complete argument list for sf data query command
-function M.get_data_query_args(query, target_org, api_version)
-  local args = {}
-  vim.list_extend(args, split_cmd(M.SF_CLI.DATA.QUERY.CMD))
-  vim.list_extend(args, { M.SF_CLI.DATA.QUERY.ARGS.QUERY, query })
-  if target_org then
-    vim.list_extend(args, { M.SF_CLI.DATA.QUERY.ARGS.TARGET_ORG, target_org })
-  end
-  if api_version then
-    vim.list_extend(args, { M.SF_CLI.DATA.QUERY.ARGS.API_VERSION, api_version })
-  end
-  vim.list_extend(args, { M.SF_CLI.DATA.QUERY.ARGS.JSON })
-  return args
-end
-
 --- Constructs arguments for sf data query command WITHOUT --json flag.
 --- Defaults to human-readable table output; pass a non-nil format
 --- (e.g. "csv", "json") to produce structured output.

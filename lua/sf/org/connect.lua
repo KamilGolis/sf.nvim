@@ -149,6 +149,34 @@ function Connect:select_default_org()
   end)
 end
 
+--- Open the default org in a browser via `sf org open`
+function Connect:open_org()
+  check_sf_cli(function(_)
+    local cli_valid, executable_path, error_msg = JobUtils.validate_cli_installation(Config:get_options().sf_cli_path)
+    if not cli_valid or not executable_path then
+      Log.notify(error_msg or Const.SF_CLI_MESSAGES.NOT_FOUND, vim.log.levels.ERROR)
+      return
+    end
+
+    local has_org, _, org_error = OrgUtils.check_default_org()
+    if not has_org then
+      Log.notify(org_error or Const.SF_CLI_MESSAGES.NO_DEFAULT_ORG, vim.log.levels.ERROR)
+      return
+    end
+
+    local job = JobUtils.create_cli_job(executable_path, { "org", "open" }, {
+      on_success = function()
+        Log.notify("Opening org in browser...", vim.log.levels.INFO)
+      end,
+      on_error = function(_, return_val)
+        Log.notify("Failed to open org in browser", vim.log.levels.ERROR)
+      end,
+    })
+
+    job:start()
+  end)
+end
+
 --- Create and return a singleton Connect instance for org connection operations
 --- @type Connect
 local connect = Connect:new()

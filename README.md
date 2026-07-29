@@ -18,11 +18,11 @@ As a Salesforce developer, I’ve mostly used VS Code and WebStorm with Illumina
 - 🧪 **Apex Test Execution** - Run tests at class or method level with detailed results
 - ⚡ **LSP Code Actions** - Run tests via `vim.lsp.buf.code_action()` with integrated test actions, no Apex LSP required
 - 📊 **Code Coverage** - Visual coverage indicators with detailed statistics
-- 🔌 **Org Management** - Easy switching between Salesforce orgs
+- 🔌 **Org Management** - Easy switching between Salesforce orgs with rich detail preview
 - 📝 **Debug Logs** - List, fetch, and analyze debug logs with rich per-token highlighting and tree view
 :- 📝 **Anonymous Apex** - Execute anonymous Apex scripts from files with log saving and error diagnostics
-- 🔧 **Debug Level Management** - Create, edit, and delete debug levels with an interactive buffer and syntax highlighting
-- 🏷️ **Trace Flag Management** - Create new trace flags with interactive buffer, debug level picker with preview, and auto-conflict resolution
+- 🔧 **Debug Level Management** - Create, edit, and delete debug levels with an interactive floating window and syntax highlighting
+- 🏷️ **Trace Flag Management** - Create new trace flags with interactive floating window, debug level picker with preview, and auto-conflict resolution
 - 📦 **Schema Management** - Refresh org metadata type index and retrieve type details
 - ⬇️  **Metadata Retrieval** - Retrieve metadata individually, by type, or refresh the current buffer from org
 - ↔️  **Server Diff** - Diff local metadata against the server version in a dedicated tab with scroll-synced views
@@ -215,7 +215,8 @@ All commands are available under the `:Sf` command with subcommands:
 ### Org Management
 
 ```vim
-:Sf org set          " Select and set default org via picker
+:Sf org set          " Select and set default org via picker (with org details preview)
+:Sf org open         " Open default org in browser
 ```
 
 ### Schema
@@ -280,22 +281,29 @@ All commands are available under the `:Sf` command with subcommands:
 :Sf apex execute new      " Create new blank Apex script in `scripts/`
 :Sf apex execute list     " Browse and execute scripts from `scripts/`
 :Sf apex execute cleanup  " Delete temp .apex files from cache
+:Sf apex cache status     " Show sObject cache status
+:Sf apex cache clear      " Clear sObject cache files
+:Sf apex cache rebuild    " Rebuild sObject cache from org
 ```
 
 ### Debug Levels
 
 ```vim
-:Sf debug level new      " Create a new debug level with interactive editor
-:Sf debug level edit     " Edit an existing debug level
+:Sf debug level new      " Create a new debug level with interactive floating window editor
+:Sf debug level edit     " Edit an existing debug level in a floating window
 :Sf debug level delete   " Delete a debug level
 ```
+
+![Debug Level editor floating window](doc/screenshots/debug-levels.png)
 
 ### Debug Trace Flags
 
 ```vim
-:Sf debug trace new     " Create a new trace flag with interactive editor
+:Sf debug trace new     " Create a new trace flag with interactive floating window editor
 :Sf debug trace delete  " Delete a trace flag
 ```
+
+![Trace Flag editor floating window](doc/screenshots/debug-trace.png)
 
 ### Code Analyzer
 
@@ -313,6 +321,7 @@ All commands are available under the `:Sf` command with subcommands:
 :Sf soql run      " Open a scratch buffer to write and execute raw SOQL
 :Sf soql rerun    " Re-execute the last SOQL query
 :Sf soql resume   " Browse saved .soql files and resume editing
+:Sf soql clear    " Clear SOQL result files (keeps saved queries)
 ```
 
 ## 📖 Usage Examples
@@ -346,6 +355,7 @@ Add these to your Neovim configuration for quick access:
 
 ```lua
 vim.keymap.set("n", "<leader>so", ":Sf org set<CR>", { desc = "Set Salesforce org" })
+vim.keymap.set("n", "<leader>sO", ":Sf org open<CR>", { desc = "Open org in browser" })
 vim.keymap.set("n", "<leader>sd", ":Sf deploy metadata<CR>", { desc = "Deploy current file" })
 vim.keymap.set("n", "<leader>sD", ":Sf deploy changed<CR>", { desc = "Deploy changed files" })
 vim.keymap.set("n", "<leader>st", ":Sf test class<CR>", { desc = "Run test class" })
@@ -368,6 +378,7 @@ vim.keymap.set("n", "<leader>sq", ":Sf soql open<CR>", { desc = "Open SOQL query
 vim.keymap.set("n", "<leader>sqq", ":Sf soql run<CR>", { desc = "Run raw SOQL query" })
 vim.keymap.set("n", "<leader>sqr", ":Sf soql rerun<CR>", { desc = "Re-run last SOQL query" })
 vim.keymap.set("n", "<leader>sqs", ":Sf soql resume<CR>", { desc = "Resume saved SOQL query" })
+vim.keymap.set("n", "<leader>sqc", ":Sf soql clear<CR>", { desc = "Clear SOQL results" })
 ```
 
 ## 🎨 Features in Detail
@@ -430,6 +441,10 @@ When enabled (`:Sf coverage on`), coverage signs appear in the gutter:
 
 The SOQL Query Builder provides an interactive, schema-aware interface for constructing SOQL queries without memorizing field names or syntax.
 
+![SOQL Query Builder main view](doc/screenshots/soql-builder-1.png)
+
+![SOQL Query Builder with query clauses](doc/screenshots/soql-builder-2.png)
+
 **Schema-Aware Field Selection:** Browse all fields of your selected sObject with type annotations and labels. Pick multiple fields at once via the multi-select picker. Build parent-relationship dotted fields (e.g. `Owner.Name`, `MyLookup__r.Custom__c`) through a guided 2-step picker.
 
 **Visual Query Builder Buffer:** A dedicated floating window with the `sfsoqlbuilder` filetype and custom syntax highlighting. Each query clause has its own section with live updates:
@@ -439,19 +454,34 @@ The SOQL Query Builder provides an interactive, schema-aware interface for const
 | `F` | Select fields (multi-select picker with schema data) |
 | `R` | Add parent-relationship dotted field |
 | `W` | Add WHERE condition (field → operator → value) |
-| `B` | Add ORDER BY clause (field → direction) |
+| `B` | Add ORDER BY clause (field → direction → NULLS) |
 | `S` | Add child-relationship subquery (nested builder) |
+| `G` | Add GROUP BY field (multi-select picker) |
+| `H` | Add HAVING condition (field → operator → value) |
+| `g` | Add aggregate field (function → field → alias) |
 | `A` | Compile and execute the query (results in new buffer) |
 | `C` | Copy compiled SOQL to system clipboard |
-| `L` / `O` | Set LIMIT / OFFSET |
+| `L` | Set LIMIT |
+| `O` | Set OFFSET |
+| `o` | Switch to a different sObject |
+| `T` | Toggle ALL ROWS |
+| `t` | Toggle Tooling API |
+| `f` | Cycle result format (human/csv/json) |
 | `X` / `x` | Clear all fields / Remove selected fields |
 | `E` | Bulk-edit fields in a floating text buffer |
 | `s` | Save query to disk for later resumption |
-| `d` | Delete the item at cursor (field/WHERE/ORDER BY/subquery) |
+| `d` | Delete the item at cursor (field/WHERE/ORDER BY/subquery/LIMIT/OFFSET) |
+| `<CR>` | Edit item at cursor (WHERE/ORDER BY/HAVING) |
+| `cw` | Clear all WHERE conditions |
+| `cb` | Clear all ORDER BY clauses |
+| `cg` | Clear all GROUP BY fields |
+| `ch` | Clear all HAVING conditions |
 | `e` | Re-open a subquery builder for editing |
-| `o` | Switch to a different sObject |
 | `rf` | Refresh schema describe data |
+| `?` | Toggle help overlay |
 | `q` | Close the builder |
+
+![SOQL Query Builder keybindings](doc/screenshots/soql-builder-keys.png)
 
 **Child Subqueries:** Add nested subqueries on child relationships. Each subquery opens its own builder window with independent field selection, WHERE conditions, ORDER BY, and LIMIT. Save with `<BS>` to return to the parent builder.
 
