@@ -1,17 +1,8 @@
---- Apply basic syntax highlights to sftraceflag filetype buffers
+--- sftraceflag filetype buffer settings
 -- @license MIT
-
-vim.cmd([[
-  syntax clear
-  syntax match SfTraceFlagLabel /^\s\+\w.*$/ contains=@NoSpell
-  syntax match SfTraceFlagAccordion /^\s*>/ contained
-  syntax match SfTraceFlagValue /^\s*> \zs.*$/ contains=@NoSpell
-  syntax match SfTraceFlagSeparator /^.*───.*$/
-  syntax match SfTraceFlagFooter /^  Press.*$/
-
-  highlight default link SfTraceFlagLabel Identifier
-  highlight default link SfTraceFlagAccordion Special
-  highlight default link SfTraceFlagValue String
-  highlight default link SfTraceFlagSeparator Comment
-  highlight default link SfTraceFlagFooter Comment
-]])
+--
+-- NOTE: Syntax highlighting rules are defined in syntax/sftraceflag.vim,
+-- not here. Keeping this ftplugin free of :syntax commands ensures that
+-- Snacks.win's internal `vim.bo.syntax = ft` (win.lua:881) sources the
+-- syntax file once during :show() and that subsequent :update() calls
+-- (which re-fire FileType) do not re-clear the syntax rules.

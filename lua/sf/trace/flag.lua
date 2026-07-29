@@ -157,58 +157,6 @@ local function delete_conflicting_and_retry(
   delete_job:start()
 end
 
---- Render the trace flag buffer.
---- @param buf number Buffer handle
---- @param state table Current buffer state
-local function render_trace_buffer(buf, state)
-  local lines = {}
-  local line_map = {}
-
-  -- Traced Entity Type
-  table.insert(lines, "  Traced Entity Type")
-  table.insert(lines, "  > " .. (state.traced_entity_type or "User"))
-  table.insert(lines, "")
-
-  -- Traced Entity Name
-  table.insert(lines, "  Traced Entity Name")
-  table.insert(lines, "  > " .. (state.traced_entity_name or ""))
-  table.insert(lines, "")
-
-  -- Start Date
-  table.insert(lines, "  Start Date")
-  table.insert(lines, "  > " .. state.start_date)
-  line_map[#lines] = "start_date"
-  table.insert(lines, "")
-
-  -- Expiration Date
-  table.insert(lines, "  Expiration Date")
-  table.insert(lines, "  > " .. state.exp_date)
-  line_map[#lines] = "exp_date"
-  table.insert(lines, "")
-
-  -- Debug Level
-  table.insert(lines, "  Debug Level")
-  local dl_label = "none selected"
-  if state.selected_dl then
-    dl_label = state.selected_dl.DeveloperName or "selected"
-  end
-  table.insert(lines, "  > " .. dl_label)
-  line_map[#lines] = "debug_level"
-  table.insert(lines, "")
-
-  -- Footer
-  table.insert(
-    lines,
-    "  ────────────────────────────────────────────────────────────────"
-  )
-  table.insert(lines, "  Press <Enter> on a field to edit its value")
-  table.insert(lines, "  Press <C-s> to save changes")
-  table.insert(lines, "  Press q to close this buffer")
-
-  Buffer.render_accordion(buf, lines, line_map, "trace_line_map")
-  vim.b[buf].trace_state = state
-end
-
 --- Save the trace flag buffer: validate, build CLI args, run command.
 --- @param buf number Buffer handle
 local function save_trace_buffer(buf)
@@ -394,8 +342,6 @@ end
 --- @param existing_tf table|nil Existing TraceFlag record for refresh mode, or nil for new
 --- @param extra table { target_org, user_id, user_name, debug_levels, executable_path, api_version }
 local function open_trace_buffer(existing_tf, extra)
-  local buf = vim.api.nvim_create_buf(false, true)
-
   local state = {
     traced_entity_type = "User",
     traced_entity_name = extra.user_name or "",
@@ -425,7 +371,6 @@ local function open_trace_buffer(existing_tf, extra)
       state.exp_date = exp_formatted
     end
 
-    -- Find matching DebugLevel by DebugLevelId
     if existing_tf.DebugLevelId and extra.debug_levels then
       for _, dl in ipairs(extra.debug_levels) do
         if dl.Id == existing_tf.DebugLevelId then
@@ -436,23 +381,65 @@ local function open_trace_buffer(existing_tf, extra)
     end
   end
 
-  -- Set buffer name for display
-  local buf_name = existing_tf and ("trace-flag://" .. existing_tf.Id) or ("trace-flag://new-" .. os.time())
+  local buf
 
-  -- Set buffer-local variables
-  vim.b[buf].trace_state = state
-  vim.b[buf].trace_line_map = {}
+  local function get_render_lines()
+    local lines = {}
+    local line_map = {}
 
-  -- Configure buffer
-  vim.bo[buf].buftype = "nofile"
-  vim.bo[buf].bufhidden = "wipe"
-  vim.bo[buf].filetype = "sftraceflag"
-  vim.bo[buf].modifiable = false
+    local width = math.min(70, vim.o.columns - 4)
+    local divider = string.rep("─", width)
 
-  render_trace_buffer(buf, state)
-  vim.bo[buf].readonly = true
+    -- Header
+    lines[#lines + 1] = divider
+    lines[#lines + 1] = " "
+      .. Const.ICONS.STATE
+      .. " Trace Flag — "
+      .. (state.is_refresh and (state.trace_flag_id or "?") or "New")
+    lines[#lines + 1] = divider
+    lines[#lines + 1] = ""
 
-  -- Set up keymaps
+    -- Traced Entity (non-editable info)
+    lines[#lines + 1] = " " .. Const.ICONS.USER .. " Traced Entity"
+    lines[#lines + 1] = "   " .. (state.traced_entity_type or "User")
+    lines[#lines + 1] = "   \u{2022} " .. (state.traced_entity_name or "")
+    lines[#lines + 1] = ""
+
+    -- Start Date
+    lines[#lines + 1] = " " .. Const.ICONS.TIME .. " Start Date"
+    lines[#lines + 1] = "   \u{2022} " .. state.start_date
+    line_map[#lines] = "start_date"
+    lines[#lines + 1] = ""
+
+    -- Expiration Date
+    lines[#lines + 1] = " " .. Const.ICONS.TIME .. " Expiration Date"
+    lines[#lines + 1] = "   \u{2022} " .. state.exp_date
+    line_map[#lines] = "exp_date"
+    lines[#lines + 1] = ""
+
+    -- Debug Level
+    lines[#lines + 1] = " " .. Const.ICONS.TECHNICAL .. " Debug Level"
+    local dl_label = "none selected"
+    if state.selected_dl then
+      dl_label = state.selected_dl.DeveloperName or "selected"
+    end
+    lines[#lines + 1] = "   \u{2022} " .. dl_label
+    line_map[#lines] = "debug_level"
+    lines[#lines + 1] = ""
+
+    lines[#lines + 1] = divider
+
+    return lines, line_map
+  end
+
+  local function re_render()
+    if buf and vim.api.nvim_buf_is_valid(buf) then
+      local lines, line_map = get_render_lines()
+      Buffer.render_accordion(buf, lines, line_map, "trace_line_map")
+      vim.b[buf].trace_state = state
+    end
+  end
+
   local function on_enter()
     local line = vim.fn.line(".")
     local line_map = vim.b[buf].trace_line_map
@@ -466,39 +453,26 @@ local function open_trace_buffer(existing_tf, extra)
       return
     end
 
-    local current_state = vim.b[buf].trace_state
-    if not current_state then
-      return
-    end
-
     if field_key == "start_date" then
-      show_date_input(current_state.start_date, function(new_value)
+      show_date_input(state.start_date, function(new_value)
         if not new_value then
           return
         end
-
-        current_state.start_date = new_value
-        vim.b[buf].trace_state = current_state
-
-        render_trace_buffer(buf, current_state)
+        state.start_date = new_value
+        re_render()
       end)
     elseif field_key == "exp_date" then
-      show_date_input(current_state.exp_date, function(new_value)
+      show_date_input(state.exp_date, function(new_value)
         if not new_value then
           return
         end
-
-        current_state.exp_date = new_value
-
-        vim.b[buf].trace_state = current_state
-        render_trace_buffer(buf, current_state)
+        state.exp_date = new_value
+        re_render()
       end)
     elseif field_key == "debug_level" then
-      DebugPicker.create_debug_level_picker(current_state.debug_levels, function(selected_dl)
-        current_state.selected_dl = selected_dl
-        vim.b[buf].trace_state = current_state
-
-        render_trace_buffer(buf, current_state)
+      DebugPicker.create_debug_level_picker(state.debug_levels, function(selected_dl)
+        state.selected_dl = selected_dl
+        re_render()
         local win = vim.fn.bufwinid(buf)
         if win ~= -1 then
           vim.api.nvim_set_current_win(win)
@@ -507,22 +481,47 @@ local function open_trace_buffer(existing_tf, extra)
     end
   end
 
-  -- Map Enter key to edit field under cursor
-  vim.keymap.set("n", "<CR>", function()
-    pcall(on_enter)
-  end, { buffer = buf, silent = true, desc = "Edit trace flag field" })
+  local title = state.is_refresh and (" Trace Flag — " .. (state.trace_flag_id or "?") .. " ") or " New Trace Flag "
 
-  -- Map Ctrl+S to save
-  vim.keymap.set("n", "<C-s>", function()
-    pcall(save_trace_buffer, buf)
-  end, { buffer = buf, silent = true, desc = "Save trace flag" })
-
-  -- Map q to close
-  vim.keymap.set("n", "q", ":bdelete<CR>", { buffer = buf, silent = true, desc = "Close trace flag buffer" })
-
-  -- Open the buffer at 40% right vertical split
-  vim.api.nvim_command("vertical rightbelow sbuffer " .. tostring(buf))
-  vim.api.nvim_command("vertical resize " .. math.floor(vim.o.columns * 0.25))
+  local Snacks = require("snacks")
+  Snacks.win({
+    title = title,
+    title_pos = "center",
+    position = "float",
+    width = math.min(70, vim.o.columns - 4),
+    height = 24,
+    border = "single",
+    ft = "sftraceflag",
+    bo = { filetype = "sftraceflag" },
+    enter = true,
+    footer_keys = { "q", "<CR>", "<C-s>" },
+    text = function()
+      local lines, _ = get_render_lines()
+      return lines
+    end,
+    keys = {
+      ["<CR>"] = {
+        desc = "Edit Field",
+        function()
+          pcall(on_enter)
+        end,
+      },
+      ["<C-s>"] = {
+        desc = "Save",
+        function(self)
+          vim.b[self.buf].trace_state = state
+          pcall(save_trace_buffer, self.buf)
+        end,
+      },
+      q = { "q", "close", desc = "Close" },
+    },
+    on_win = function(self)
+      buf = self.buf
+      local _, line_map = get_render_lines()
+      vim.b[buf].trace_line_map = line_map
+      vim.b[buf].trace_state = state
+    end,
+  })
 end
 
 --- Sf debug trace new — runs workflow then opens interactive buffer with defaults.
