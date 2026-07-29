@@ -1,6 +1,7 @@
 --- sf-nvim log analysis module
 -- @license MIT
 
+local Config = require("sf.config")
 local Const = require("sf.const")
 local PathUtils = require("sf.core.path_utils")
 
@@ -16,7 +17,7 @@ vim.api.nvim_set_hl(0, "SfLogEvent", { default = true, link = "String" })
 vim.api.nvim_set_hl(0, "SfLogLineNr", { default = true, link = "Number" })
 
 --- Dedicated namespace for analysis buffer highlights
-local NS = vim.api.nvim_create_namespace("sf.nvim.log.analysis")
+local NS = Config:get_options().namespaces.log_analysis
 
 -- Tag classification data for highlight group assignment
 
@@ -166,7 +167,6 @@ end
 --- checks for cached rendered output, then displays the tree view.
 function Analyze.basic()
   local LogList = require("sf.log.list")
-  local Config = require("sf.config")
   local log_dir = Config:get_options().log_dir
 
   LogList.pick_cached_logs(function(item)

@@ -299,7 +299,7 @@ function TestResultsBuffer.open_test_source(class_name, method_name, line_number
   end
 
   -- Open the file
-  vim.cmd("edit " .. vim.fn.fnameescape(class_file))
+  vim.cmd("noswapfile edit " .. vim.fn.fnameescape(class_file))
 
   -- Navigate to specific line number if provided (from stack trace)
   if line_number then

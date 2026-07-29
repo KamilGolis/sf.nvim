@@ -1,19 +1,8 @@
---- Apply basic syntax highlights to sfdebuglevel filetype buffers
+--- sfdebuglevel filetype buffer settings
 -- @license MIT
-
-vim.cmd([[
-  syntax clear
-  syntax match SfDebugLevelLabel /^\s\+\w.*$/ contains=@NoSpell
-  syntax match SfDebugLevelAccordion /^\s*>/ contained
-  syntax match SfDebugLevelValue /^\s*> \zs.*$/ contains=@NoSpell
-  syntax match SfDebugLevelReadOnly /(read-only)$/ contained
-  syntax match SfDebugLevelSeparator /^.*───.*$/
-  syntax match SfDebugLevelFooter /^  Press.*$/
-
-  highlight default link SfDebugLevelLabel Identifier
-  highlight default link SfDebugLevelAccordion Special
-  highlight default link SfDebugLevelValue String
-  highlight default link SfDebugLevelReadOnly Comment
-  highlight default link SfDebugLevelSeparator Comment
-  highlight default link SfDebugLevelFooter Comment
-]])
+--
+-- NOTE: Syntax highlighting rules are defined in syntax/sfdebuglevel.vim,
+-- not here. Keeping this ftplugin free of :syntax commands ensures that
+-- Snacks.win's internal `vim.bo.syntax = ft` (win.lua:881) sources the
+-- syntax file once during :show() and that subsequent :update() calls
+-- (which re-fire FileType) do not re-clear the syntax rules.

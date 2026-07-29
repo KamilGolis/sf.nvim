@@ -1,5 +1,93 @@
 # CHANGELOG
 
+## Release v0.4
+
+### 🎉 New Features
+
+#### Code Analyzer Integration
+
+- Code Analyzer Wrapper: Scan metadata files with `sf code-analyzer` and display violations as inline diagnostics
+- Four new commands for the scan workflow:
+  - `:Sf scan all` — Scan entire project directory
+  - `:Sf scan metadata` — Scan current buffer's file
+  - `:Sf scan resume` — Recreate diagnostics from last cached scan results
+  - `:Sf scan clear` — Clear all scan diagnostics
+- Rich violation display with rule name, severity, engine, and resource info per diagnostic
+- Async execution with LSP progress spinner and graceful error handling
+
+#### SOQL Query Builder
+
+- Interactive schema-aware query builder (`:Sf soql open`) with custom `sfsoqlbuilder` filetype and syntax highlighting
+- Multi-select field picker with type annotations and labels from org schema
+- Parent-relationship dotted fields (e.g. `Owner.Name`, `MyLookup__r.Custom__c`) via guided 2-step picker
+- WHERE, ORDER BY, GROUP BY, and HAVING clause support with field-guided operators
+- Child-relationship subqueries with independent nested builder windows
+- Save queries to `.soql` files with auto-dedup naming; resume with `:Sf soql resume`
+- Live compiled SOQL preview at the bottom of the builder buffer
+- Result format cycling (human-readable table, CSV, JSON) via `f` key
+- ALL ROWS (`T`) and Tooling API (`t`) toggles
+- Help overlay (`?`) showing all keybindings
+- Raw SOQL runner (`:Sf soql run`), re-execute last query (`:Sf soql rerun`), clear results (`:Sf soql clear`)
+
+#### Apex Cache Management
+
+- sObject cache status, clear, and rebuild commands:
+  - `:Sf apex cache status` — Show cache file count and disk usage
+  - `:Sf apex cache clear` — Delete all cached sObject describe files
+  - `:Sf apex cache rebuild` — Rebuild sObject cache from org (~10x faster with curl)
+
+#### UI Improvements
+
+- Debug Levels and Trace Flags windows migrated to `Snacks.win` for consistent floating-window behavior
+- Syntax highlighting for debug level and trace flag buffers moved from ftplugin to dedicated `syntax/` files
+- Org picker preview redesigned with icon-decorated details (alias, instance URL, username, org ID, connected status, devhub/sandbox flags, API version)
+- Screenshots added to README for SOQL builder, debug levels, and trace flags
+
+### 🐛 Bug Fixes
+
+- Fixed LIMIT and OFFSET keybindings: split combined `L / O` into separate `L` and `O` keys
+- Fixed `d` key: now deletes LIMIT/OFFSET items in addition to fields, WHERE, ORDER BY, and subqueries
+- Fixed `:Sf soql resume` parsing: restored GROUP BY and HAVING clauses from saved queries
+- Fixed `:Sf soql run` result buffer: now opens in a new window instead of replacing the query buffer
+
+### ♻️ Code Quality
+
+- Multi-namespace diagnostic support: `Diagnostics:clear_diagnostics(ns)` and `Diagnostics:apply(ns, buf, diagnostics)` replace the hardcoded single-namespace approach
+- Namespace configuration refactored into `options.namespaces` table (`deploy`, `scan`, `log_analysis`)
+- Removed unused code: `M.ORG_DETAILS_FORMAT`, `M.SF_CLI.PROJECT.GENERATE`, `get_project_generate_args`, old `get_data_query_args`
+- Org preview lines inlined with `Const.ICONS` instead of the removed `M.ORG_DETAILS_FORMAT` table
+- `.gitignore` updated with `.codegraph/`, `.omp/`, `.reasonix/`, `reasonix.toml` entries
+
+### 📝 Configuration Updates
+
+- New config options:
+  - `scan_dir` — Directory for code-analyzer scan results (default: `"scan"` under `cache_path`)
+  - `scan_results_file` — Filename for code-analyzer JSON output (default: `"metadata.json"`)
+
+### 🔧 Commands
+
+- New commands added:
+  - `:Sf scan all` — Scan entire project
+  - `:Sf scan metadata` — Scan current file
+  - `:Sf scan resume` — Reload cached scan results
+  - `:Sf scan clear` — Clear scan diagnostics
+  - `:Sf soql open` — Open SOQL query builder
+  - `:Sf soql run` — Run raw SOQL query
+  - `:Sf soql rerun` — Re-execute last query
+  - `:Sf soql resume` — Resume saved query
+  - `:Sf soql clear` — Clear SOQL result files
+  - `:Sf apex cache status` — Show sObject cache status
+  - `:Sf apex cache clear` — Clear sObject cache
+  - `:Sf apex cache rebuild` — Rebuild sObject cache
+
+### 📚 Documentation
+
+- Added `doc/snacks-win.md` — Complete reference for `Snacks.win` integration
+- README updated with SOQL builder, code analyzer, and apex cache command documentation
+- Screenshots added for all major features
+
+---
+
 ## Release v0.3
 
 ### 🎉 New Features

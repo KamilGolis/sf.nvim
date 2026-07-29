@@ -45,47 +45,6 @@ local function record_to_fields(dl)
   return fields
 end
 
---- Render the debug level edit buffer.
---- @param buf number Buffer handle
---- @param fields table Current field values
---- @param is_edit boolean True if editing existing level (DeveloperName read-only)
-local function render_buffer(buf, fields, is_edit)
-  local lines = {}
-  local line_map = {}
-
-  for i, fd in ipairs(Const.DEBUG_LEVEL_FIELDS) do
-    local label = fd.label
-    local value = fields[fd.name] or fd.default
-
-    table.insert(lines, "  " .. label)
-
-    local value_line
-    if fd.readonly_edit and is_edit then
-      value_line = "  > " .. value .. " (read-only)"
-    else
-      value_line = "  > " .. value
-    end
-    table.insert(lines, value_line)
-    line_map[#lines] = i
-
-    if fd.name == "DeveloperName" then
-      table.insert(lines, "")
-    end
-  end
-
-  -- Footer
-  table.insert(lines, "")
-  table.insert(
-    lines,
-    "  ────────────────────────────────────────────────────────────────"
-  )
-  table.insert(lines, "  Press <Enter> on a field to edit its value")
-  table.insert(lines, "  Press <C-s> to save changes")
-  table.insert(lines, "  Press q to close this buffer")
-
-  Buffer.render_accordion(buf, lines, line_map, "debug_level_line_map")
-end
-
 --- Save the debug level buffer: serialize fields, persist JSON, run CLI create/update.
 --- @param buf number Buffer handle
 local function save_buffer(buf)
@@ -184,8 +143,6 @@ end
 --- @param existing_dl table|nil Existing DebugLevel record for edit mode, or nil for new
 --- @param extra table|nil { target_org, executable_path }
 local function open_level_buffer(existing_dl, extra)
-  local buf = vim.api.nvim_create_buf(false, true)
-
   local is_edit = existing_dl ~= nil
   local fields
   local name
@@ -198,28 +155,64 @@ local function open_level_buffer(existing_dl, extra)
     name = "new"
   end
 
-  -- Set buffer name for display
-  vim.api.nvim_buf_set_name(buf, "debug-level://" .. (is_edit and name or "new-" .. os.time()))
+  local buf
 
-  -- Set buffer-local variables
-  vim.b[buf].debug_level_fields = fields
-  vim.b[buf].debug_level_mode = is_edit and "edit" or "new"
-  vim.b[buf].debug_level_record_id = is_edit and existing_dl.Id or nil
-  vim.b[buf].debug_level_target_org = extra and extra.target_org or nil
-  vim.b[buf].debug_level_executable_path = extra and extra.executable_path or nil
-  vim.b[buf].debug_level_api_version = extra and extra.api_version or nil
+  -- Build render lines + line_map (replaces the deleted render_buffer function).
+  local function get_render_lines()
+    local lines = {}
+    local line_map = {}
 
-  -- Configure buffer
-  vim.bo[buf].buftype = "nofile"
-  vim.bo[buf].bufhidden = "wipe"
-  vim.bo[buf].filetype = "sfdebuglevel"
-  vim.bo[buf].modifiable = false
+    -- Header with divider (same as SOQL builder)
+    local width = math.min(70, vim.o.columns - 4)
+    local divider = string.rep("─", width)
 
-  -- Render content
-  render_buffer(buf, fields, is_edit)
-  vim.bo[buf].readonly = true
+    lines[#lines + 1] = divider
+    lines[#lines + 1] = " " .. Const.ICONS.TECHNICAL .. " Debug Level — " .. (is_edit and name or "New")
+    lines[#lines + 1] = divider
+    lines[#lines + 1] = ""
 
-  -- Set up keymaps
+    -- Log Level Name field (special: has its own section with blank line after)
+    lines[#lines + 1] = " " .. Const.ICONS.EDIT .. " Log Level Name"
+    local name_value = fields["DeveloperName"] or "Default"
+
+    if Const.DEBUG_LEVEL_FIELDS[1].readonly_edit and is_edit then
+      lines[#lines + 1] = "   " .. name_value .. " (read-only)"
+    else
+      lines[#lines + 1] = "   \u{2022} " .. name_value
+    end
+
+    line_map[#lines] = 1
+    lines[#lines + 1] = ""
+
+    -- Log Categories section header
+    lines[#lines + 1] = " " .. Const.ICONS.LOG_INFO .. " Log Categories"
+    lines[#lines + 1] = ""
+
+    -- Remaining fields (ApexCode through Workflow)
+    for i = 2, #Const.DEBUG_LEVEL_FIELDS do
+      local fd = Const.DEBUG_LEVEL_FIELDS[i]
+      local value = fields[fd.name] or fd.default
+
+      lines[#lines + 1] = "   " .. fd.label
+      lines[#lines + 1] = "   \u{2022} " .. value
+      line_map[#lines] = i
+    end
+
+    lines[#lines + 1] = ""
+    lines[#lines + 1] = divider
+
+    return lines, line_map
+  end
+
+  -- Re-render after a field value changes.
+  local function re_render()
+    if buf and vim.api.nvim_buf_is_valid(buf) then
+      local lines, line_map = get_render_lines()
+      Buffer.render_accordion(buf, lines, line_map, "debug_level_line_map")
+    end
+  end
+
+  -- Edit field under cursor.
   local function on_enter()
     local line = vim.fn.line(".")
     local line_map = vim.b[buf].debug_level_line_map
@@ -230,30 +223,25 @@ local function open_level_buffer(existing_dl, extra)
 
     local field_index = line_map[line]
     if not field_index then
-      -- Not on an actionable line (label, empty, footer)
       return
     end
 
     local field_def = Const.DEBUG_LEVEL_FIELDS[field_index]
-    local current_fields = vim.b[buf].debug_level_fields
 
     if field_def.readonly_edit and is_edit then
-      -- Read-only in edit mode
       Log.notify(Const.SF_CLI_MESSAGES.DEBUG_LEVEL_READONLY_WARN, vim.log.levels.WARN)
       return
     end
 
     if field_def.name == "DeveloperName" then
-      DebugPicker.create_name_input(current_fields[field_def.name] or field_def.default, function(new_value)
-        current_fields[field_def.name] = new_value
-        vim.b[buf].debug_level_fields = current_fields
-        render_buffer(buf, current_fields, is_edit)
+      DebugPicker.create_name_input(fields[field_def.name] or field_def.default, function(new_value)
+        fields[field_def.name] = new_value
+        re_render()
       end)
     elseif field_def.values and #field_def.values > 0 then
       DebugPicker.create_field_value_picker(field_def, function(new_value)
-        current_fields[field_def.name] = new_value
-        vim.b[buf].debug_level_fields = current_fields
-        render_buffer(buf, current_fields, is_edit)
+        fields[field_def.name] = new_value
+        re_render()
         local win = vim.fn.bufwinid(buf)
         if win ~= -1 then
           vim.api.nvim_set_current_win(win)
@@ -262,22 +250,51 @@ local function open_level_buffer(existing_dl, extra)
     end
   end
 
-  -- Map Enter key to edit field under cursor
-  vim.keymap.set("n", "<CR>", function()
-    pcall(on_enter)
-  end, { buffer = buf, silent = true, desc = "Edit debug level field" })
+  local title = is_edit and (" Debug Level — " .. name .. " ") or " New Debug Level "
 
-  -- Map Ctrl+S to save
-  vim.keymap.set("n", "<C-s>", function()
-    pcall(save_buffer, buf)
-  end, { buffer = buf, silent = true, desc = "Save debug level" })
-
-  -- Map q to close
-  vim.keymap.set("n", "q", ":bdelete<CR>", { buffer = buf, silent = true, desc = "Close debug level buffer" })
-
-  -- Open the buffer at 40% right vertical split
-  vim.api.nvim_command("vertical rightbelow sbuffer " .. tostring(buf))
-  vim.api.nvim_command("vertical resize " .. math.floor(vim.o.columns * 0.25))
+  local Snacks = require("snacks")
+  Snacks.win({
+    title = title,
+    title_pos = "center",
+    position = "float",
+    width = math.min(70, vim.o.columns - 4),
+    height = math.max(#Const.DEBUG_LEVEL_FIELDS * 2 + 10, 24),
+    border = "single",
+    ft = "sfdebuglevel",
+    bo = { filetype = "sfdebuglevel" },
+    enter = true,
+    footer_keys = { "q", "<CR>", "<C-s>" },
+    text = function()
+      local lines, _ = get_render_lines()
+      return lines
+    end,
+    keys = {
+      ["<CR>"] = {
+        desc = "Edit Field",
+        function()
+          pcall(on_enter)
+        end,
+      },
+      ["<C-s>"] = {
+        desc = "Save",
+        function(self)
+          vim.b[self.buf].debug_level_fields = fields
+          vim.b[self.buf].debug_level_mode = is_edit and "edit" or "new"
+          vim.b[self.buf].debug_level_record_id = is_edit and existing_dl.Id or nil
+          vim.b[self.buf].debug_level_target_org = extra and extra.target_org or nil
+          vim.b[self.buf].debug_level_executable_path = extra and extra.executable_path or nil
+          vim.b[self.buf].debug_level_api_version = extra and extra.api_version or nil
+          pcall(save_buffer, self.buf)
+        end,
+      },
+      q = { "q", "close", desc = "Close" },
+    },
+    on_win = function(self)
+      buf = self.buf
+      local _, line_map = get_render_lines()
+      vim.b[buf].debug_level_line_map = line_map
+    end,
+  })
 end
 
 --- Sf debug level new — runs workflow then opens interactive buffer with defaults.

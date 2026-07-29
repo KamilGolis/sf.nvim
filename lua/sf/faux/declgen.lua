@@ -92,7 +92,7 @@ local function generate_field(field)
   end
 
   -- No reference targets → normal field
-  if not field.referenceTo or #field.referenceTo == 0 then
+  if type(field.referenceTo) ~= "table" or #field.referenceTo == 0 then
     local gen_type
     if field.extraTypeInfo == "externallookup" then
       gen_type = "String"
@@ -105,7 +105,7 @@ local function generate_field(field)
 
   -- Reference field → two declarations: reference type + raw Id
   local ref_type
-  if #field.referenceTo > 1 then
+  if type(field.referenceTo) == "table" and #field.referenceTo > 1 then
     ref_type = "SObject"
   else
     ref_type = field.referenceTo[1]

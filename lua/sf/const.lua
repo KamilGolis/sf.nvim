@@ -62,6 +62,15 @@ M.ICONS = {
   STATE = "\u{f013}",
   FILE = "\u{f07b}",
   LINK = "\u{f0c1}",
+  TABLE = "\u{f0ce}",
+  FILTER = "\u{f0b0}",
+  SORT = "\u{f0dc}",
+  STOP = "\u{f04d}",
+  EDIT = "\u{f044}",
+  COPY = "\u{f0c5}",
+  REMOVE = "\u{f00d}",
+  SEARCH = "\u{f002}",
+  DATABASE = "\u{f1c0}",
 }
 
 --- Debug level field definitions with valid values and defaults.
@@ -101,20 +110,6 @@ M.TRACE_FLAG_PICKLIST_FIELDS = {
   "Validation",
   "Visualforce",
   "Workflow",
-}
-
---- String format templates for displaying Salesforce org details
-M.ORG_DETAILS_FORMAT = {
-  HEADER = "Selected Org Information:",
-  ALIAS = "Alias: %s",
-  INSTANCE_URL = "Instance URL: %s",
-  USERNAME = "Username: %s",
-  ORG_ID = "Org ID: %s",
-  CONNECTED_STATUS = "Connected Status: %s",
-  IS_DEFAULT = "Is Default: %s",
-  IS_DEVHUB = "Is DevHub: %s",
-  IS_SANDBOX = "Is Sandbox: %s",
-  API_VERSION = "API Version: %s",
 }
 
 --- Messages for SF CLI connection and org operations
@@ -234,6 +229,15 @@ M.SF_CLI_MESSAGES = {
   APEX_EXECUTE_CLEANUP_SUCCESS = "Temp files cleaned up.",
   APEX_LIST_NO_SCRIPTS = "No Apex scripts found in scripts directory.",
   APEX_LIST_DIR_MISSING = "Scripts directory does not exist.",
+  -- Code analyzer scan messages
+  SCAN_ALREADY_RUNNING = "Scan is already running",
+  SCAN_NO_FILE = "No file in current buffer to scan",
+  SCAN_FAILED_EXIT = "Code analyzer scan failed with exit code %d",
+  SCAN_FILE_NOT_FOUND = "Scan completed but results file not found: %s",
+  SCAN_JSON_PARSE_FAILED = "Failed to parse scan results JSON",
+  SCAN_COMPLETE_FORMAT = "Code analyzer scan complete: %d violations found",
+  SCAN_CLEARED = "Scan diagnostics cleared",
+  SCAN_NO_CACHED_RESULTS = "No cached scan results found. Run :Sf scan metadata or :Sf scan all first.",
   -- Faux class cache messages
   SOBJECT_REBUILD_TITLE = "Rebuilding sObject cache",
   SOBJECT_REBUILD_SUCCESS = "sObject cache rebuild complete.",
@@ -370,6 +374,60 @@ M.TYPE_MAPPING = {
 
 M.MANIFEST_THRESHOLD = 10
 
+M.SOQL = {
+  SYSTEM_FIELDS = { "Id", "CreatedById", "CreatedDate", "LastModifiedById", "LastModifiedDate" },
+  COMMON_STANDARD_FIELDS = { "Name", "OwnerId" },
+  WHERE_OPERATORS = { "=", "!=", "<>", "<", ">", "<=", ">=", "LIKE", "IN", "NOT IN", "INCLUDES", "EXCLUDES" },
+  ORDER_DIRECTIONS = { "ASC", "DESC" },
+  AGGREGATE_FUNCTIONS = { "COUNT", "SUM", "MAX", "MIN", "AVG" },
+  NULLS_OPTIONS = { "FIRST", "LAST", "None" },
+  RESULT_FORMATS = { "human", "csv", "json" },
+  LOGICAL_CONNECTORS = { "AND", "OR" },
+  BUF_FILETYPE = "sfsoqlbuilder",
+  MESSAGES = {
+    SNACKS_REQUIRED_PICKER = "Snacks.nvim is required for the field picker",
+    SNACKS_REQUIRED_REMOVER = "Snacks.nvim is required for the field remover",
+    SNACKS_REQUIRED_FIELD_SEL = "Snacks.nvim is required for field selection",
+    SNACKS_REQUIRED_SOBJECT = "Snacks.nvim is required for SObject selection",
+    SNACKS_REQUIRED_RELATIONSHIP = "Snacks.nvim is required for relationship selection",
+    NO_SCHEMA_DATA = "No schema data available",
+    NO_SCHEMA_DATA_FOR = "No schema data for %s",
+    NO_FIELDS_WHERE = "No fields available for WHERE condition",
+    NO_FIELDS_ORDERBY = "No fields available for ORDER BY",
+    NO_RELATIONSHIP_FIELDS = "No relationship fields available on %s",
+    NO_CHILD_RELATIONSHIPS = "No child relationships available for %s",
+    LIMIT_BAD = "LIMIT must be a positive integer",
+    OFFSET_BAD = "OFFSET must be a positive integer",
+    FIELD_CURSOR_HINT = "Move the cursor onto a field to delete it",
+    SYSTEM_FIELD_PROTECTED = "System fields cannot be removed",
+    REMOVED_NONE = "No fields removed (system fields are kept)",
+    REMOVED_COUNT = "Removed %d field(s)",
+    SOQL_COPIED = "SOQL copied to clipboard",
+    NO_PREV_QUERY = "No previous query to re-run. Run a query first with :Sf soql run or use the SOQL builder.",
+    SCHEMA_LOAD_FAILED = "Failed to load schema for %s",
+    FETCH_SOBJECT_FAILED = "Failed to fetch SObject list: %s",
+    DESCRIBE_FAILED = "Failed to describe %s: %s",
+    SNACKS_REQUIRED_BUILDER = "Snacks.nvim is required for SOQL builder",
+    SAVE_SUCCESS = "Query saved to %s",
+    SAVE_NO_SOBJECT = "No sObject selected — cannot save query",
+    NO_SAVED_QUERIES = "No saved queries found. Build a query and press s to save it.",
+    RESUME_PARSE_FAILED = "Failed to parse saved query file",
+    ALL_ROWS_TOGGLED = "ALL ROWS: %s",
+    TOOLING_TOGGLED = "Tooling API: %s",
+    RESULT_FORMAT_SET = "Result format: %s",
+    WHERE_CLEARED = "WHERE conditions cleared",
+    ORDER_BY_CLEARED = "ORDER BY clauses cleared",
+    GROUP_BY_CLEARED = "GROUP BY fields cleared",
+    HAVING_CLEARED = "HAVING conditions cleared",
+    NO_FIELDS_GROUP_BY = "No fields available for GROUP BY",
+    NO_FIELDS_HAVING = "No fields available for HAVING condition",
+    NO_FIELDS_AGGREGATE = "No fields available for aggregate function",
+    AGGREGATE_ADDED = "Aggregate added: %s",
+    WHERE_EDITED = "WHERE condition updated",
+    ORDER_BY_EDITED = "ORDER BY clause updated",
+  },
+}
+
 --- Salesforce CLI commands and their arguments
 --- Supported commands:
 --- - sf --version
@@ -379,6 +437,7 @@ M.MANIFEST_THRESHOLD = 10
 --- - sf project retrieve start -m [type:name [type:name ...]] --json -a [version] -c [-o target-org]
 --- - sf project retrieve start -x [manifest] --json -a [version] -c [-o target-org]
 --- - sf org list --json
+--- - sf code-analyzer run -v detail -f [file] -t [target]
 --- - sf config set target-org [target-org]
 --- - sf org list metadata-types --json [-o target-org]
 --- - sf org list metadata -m [type] --json [-o target-org]
@@ -391,16 +450,6 @@ M.SF_CLI = {
     CMD = "--version",
   },
   PROJECT = {
-    GENERATE = {
-      CMD = "project generate",
-      ARGS = {
-        NAME = "-n",
-        OUTPUT_DIR = "-d",
-        API_VERSION = "--api-version",
-        TEMPLATE = "-t",
-        TEMPLATE_TYPE = "empty",
-      },
-    },
     DEPLOY = {
       CMD = "project deploy start",
       ARGS = {
@@ -553,6 +602,7 @@ M.SF_CLI = {
         TARGET_ORG = "-o",
         TOOLING = "-t",
         JSON = "--json",
+        RESULT_FORMAT = "-r",
         API_VERSION = "--api-version",
       },
     },
@@ -604,7 +654,6 @@ M.GIT = {
   },
 }
 
---- TODO: Not used, implement in future.
 --- Generates formatted lines for org details preview
 --- Generates formatted preview lines for org details display
 --- @param org table The org object containing details (alias, instanceUrl, username, etc.)
@@ -612,16 +661,18 @@ M.GIT = {
 --- @usage local lines = Const.generate_org_preview_lines(org_data)
 function M.generate_org_preview_lines(org)
   return {
-    M.ORG_DETAILS_FORMAT.HEADER,
-    string.format(M.ORG_DETAILS_FORMAT.ALIAS, org.alias or "N/A"),
-    string.format(M.ORG_DETAILS_FORMAT.INSTANCE_URL, org.instanceUrl),
-    string.format(M.ORG_DETAILS_FORMAT.USERNAME, org.username),
-    string.format(M.ORG_DETAILS_FORMAT.ORG_ID, org.orgId),
-    string.format(M.ORG_DETAILS_FORMAT.CONNECTED_STATUS, org.connectedStatus),
-    string.format(M.ORG_DETAILS_FORMAT.IS_DEFAULT, org.isDefaultUsername and "Yes" or "No"),
-    string.format(M.ORG_DETAILS_FORMAT.IS_DEVHUB, org.isDevHub and "Yes" or "No"),
-    string.format(M.ORG_DETAILS_FORMAT.IS_SANDBOX, org.isSandbox and "Yes" or "No"),
-    string.format(M.ORG_DETAILS_FORMAT.API_VERSION, org.instanceApiVersion),
+    "                    " .. M.ICONS.LOG_INFO .. " Org Information",
+    "===========================================================",
+    "",
+    M.ICONS.USER .. " Alias:           " .. (org.alias or "N/A"),
+    M.ICONS.URL .. " Instance URL:    " .. (org.instanceUrl or "N/A"),
+    M.ICONS.USER .. " Username:        " .. (org.username or "N/A"),
+    M.ICONS.LOG_ID .. " Org ID:          " .. (org.orgId or "N/A"),
+    M.ICONS.STATE .. " Connected:       " .. (org.connectedStatus or "N/A"),
+    M.ICONS.SUCCESS .. " Is Default:      " .. (org.isDefaultUsername and "Yes" or "No"),
+    M.ICONS.DATABASE .. " Is DevHub:       " .. (org.isDevHub and "Yes" or "No"),
+    M.ICONS.TYPE .. " Is Sandbox:      " .. (org.isSandbox and "Yes" or "No"),
+    M.ICONS.API .. " API Version:     " .. (org.instanceApiVersion or "N/A"),
   }
 end
 
@@ -631,31 +682,6 @@ end
 --- @usage local parts = split_cmd("sf project generate") -- returns {"sf", "project", "generate"}
 local function split_cmd(cmd)
   return vim.split(cmd, " ")
-end
-
---- Constructs arguments for SF CLI project generation command
---- @param options table Configuration options containing temp_project_name, cache_path, and api_version
---- @return table Complete argument list for sf project generate command
---- @usage local args = Const.get_project_generate_args({temp_project_name = "temp", cache_path = "/tmp"})
-function M.get_project_generate_args(options)
-  local args = {}
-
-  -- Add the base command
-  vim.list_extend(args, split_cmd(M.SF_CLI.PROJECT.GENERATE.CMD))
-
-  -- Add the required arguments
-  vim.list_extend(args, {
-    M.SF_CLI.PROJECT.GENERATE.ARGS.NAME,
-    options.temp_project_name,
-    M.SF_CLI.PROJECT.GENERATE.ARGS.OUTPUT_DIR,
-    options.cache_path,
-    M.SF_CLI.PROJECT.GENERATE.ARGS.API_VERSION,
-    options.api_version,
-    M.SF_CLI.PROJECT.GENERATE.ARGS.TEMPLATE,
-    M.SF_CLI.PROJECT.GENERATE.ARGS.TEMPLATE_TYPE,
-  })
-
-  return args
 end
 
 --- Constructs arguments for SF CLI current file deployment command
@@ -1053,6 +1079,39 @@ function M.get_query_args(query, target_org, api_version)
   return args
 end
 
+--- Constructs arguments for sf data query command WITHOUT tooling API flag.
+--- Unlike get_query_args, this does NOT include -t, suitable for standard SOQL queries.
+--- @param query string The SOQL query
+--- @param target_org string|nil The target org username
+--- @param api_version string|nil The Salesforce API version (optional)
+--- @return table Complete argument list for sf data query command
+--- Constructs arguments for sf data query command WITHOUT --json flag.
+--- Defaults to human-readable table output; pass a non-nil format
+--- (e.g. "csv", "json") to produce structured output.
+--- @param query string The SOQL query
+--- @param target_org string|nil The target org username
+--- @param api_version string|nil The Salesforce API version (optional)
+--- @param format string|nil Output format flag value ("csv", "json", or nil/"human" for text table)
+--- @return table Complete argument list for sf data query command
+function M.get_data_query_raw_args(query, target_org, api_version, format, tooling)
+  local args = {}
+  vim.list_extend(args, split_cmd(M.SF_CLI.DATA.QUERY.CMD))
+  vim.list_extend(args, { M.SF_CLI.DATA.QUERY.ARGS.QUERY, query })
+  if target_org then
+    vim.list_extend(args, { M.SF_CLI.DATA.QUERY.ARGS.TARGET_ORG, target_org })
+  end
+  if tooling then
+    vim.list_extend(args, { M.SF_CLI.DATA.QUERY.ARGS.TOOLING })
+  end
+  if api_version then
+    vim.list_extend(args, { M.SF_CLI.DATA.QUERY.ARGS.API_VERSION, api_version })
+  end
+  if format and format ~= "human" then
+    vim.list_extend(args, { M.SF_CLI.DATA.QUERY.ARGS.RESULT_FORMAT, format })
+  end
+  return args
+end
+
 --- Constructs arguments for SF CLI data create record command
 --- @param target_org string The target org username
 --- @param sobject string The SObject name (e.g. "DebugLevel")
@@ -1184,6 +1243,28 @@ function M.get_apex_run_args(file_path, api_version, target_org)
   if target_org then
     vim.list_extend(args, { M.SF_CLI.APEX.ANONYMOUS.ARGS.TARGET_ORG, target_org })
   end
+  return args
+end
+
+--- Constructs arguments for sf code-analyzer run command.
+--- @param metadata_path string The path to the metadata file to scan
+--- @param output_file string The path to write the JSON results
+--- @return table Complete argument list
+--- @usage local args = Const.get_code_analyzer_args("force-app/main/default/classes/Test.cls", "/tmp/scan.json")
+function M.get_code_analyzer_args(metadata_path, output_file)
+  local args = {}
+  vim.list_extend(args, split_cmd("code-analyzer run"))
+  vim.list_extend(args, { "-v", "detail", "-f", output_file, "-t", metadata_path })
+  return args
+end
+
+--- Constructs arguments for sf code-analyzer run without a target (scans entire project).
+--- @param output_file string The path to write the JSON results
+--- @return table Complete argument list
+function M.get_code_analyzer_all_args(output_file)
+  local args = {}
+  vim.list_extend(args, split_cmd("code-analyzer run"))
+  vim.list_extend(args, { "-v", "detail", "-f", output_file })
   return args
 end
 

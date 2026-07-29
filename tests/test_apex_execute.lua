@@ -232,6 +232,7 @@ describe("apex-execute", function()
         f:close()
       end
       -- Also set current buffer to return this file's content
+      vim.bo[0].swapfile = false
       vim.api.nvim_buf_set_lines(0, 0, -1, false, { "System.debug('outside');" })
 
       Execute:execute_file(file_path)

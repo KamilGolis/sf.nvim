@@ -42,9 +42,14 @@ luac.out
 
 # Sample data directory
 data/
+
+# AI
 .codegraph/
 .omp/
+.reasonix/*
+/reasonix.toml
 
 # Test dependencies
 deps/
 .sf/
+/nvim.log
