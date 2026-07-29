@@ -18,7 +18,7 @@ As a Salesforce developer, I’ve mostly used VS Code and WebStorm with Illumina
 - 🧪 **Apex Test Execution** - Run tests at class or method level with detailed results
 - ⚡ **LSP Code Actions** - Run tests via `vim.lsp.buf.code_action()` with integrated test actions, no Apex LSP required
 - 📊 **Code Coverage** - Visual coverage indicators with detailed statistics
-- 🔌 **Org Management** - Easy switching between Salesforce orgs
+- 🔌 **Org Management** - Easy switching between Salesforce orgs with rich detail preview
 - 📝 **Debug Logs** - List, fetch, and analyze debug logs with rich per-token highlighting and tree view
 :- 📝 **Anonymous Apex** - Execute anonymous Apex scripts from files with log saving and error diagnostics
 - 🔧 **Debug Level Management** - Create, edit, and delete debug levels with an interactive buffer and syntax highlighting
@@ -215,7 +215,8 @@ All commands are available under the `:Sf` command with subcommands:
 ### Org Management
 
 ```vim
-:Sf org set          " Select and set default org via picker
+:Sf org set          " Select and set default org via picker (with org details preview)
+:Sf org open         " Open default org in browser
 ```
 
 ### Schema
@@ -280,6 +281,9 @@ All commands are available under the `:Sf` command with subcommands:
 :Sf apex execute new      " Create new blank Apex script in `scripts/`
 :Sf apex execute list     " Browse and execute scripts from `scripts/`
 :Sf apex execute cleanup  " Delete temp .apex files from cache
+:Sf apex cache status     " Show sObject cache status
+:Sf apex cache clear      " Clear sObject cache files
+:Sf apex cache rebuild    " Rebuild sObject cache from org
 ```
 
 ### Debug Levels
@@ -313,6 +317,7 @@ All commands are available under the `:Sf` command with subcommands:
 :Sf soql run      " Open a scratch buffer to write and execute raw SOQL
 :Sf soql rerun    " Re-execute the last SOQL query
 :Sf soql resume   " Browse saved .soql files and resume editing
+:Sf soql clear    " Clear SOQL result files (keeps saved queries)
 ```
 
 ## 📖 Usage Examples
@@ -346,6 +351,7 @@ Add these to your Neovim configuration for quick access:
 
 ```lua
 vim.keymap.set("n", "<leader>so", ":Sf org set<CR>", { desc = "Set Salesforce org" })
+vim.keymap.set("n", "<leader>sO", ":Sf org open<CR>", { desc = "Open org in browser" })
 vim.keymap.set("n", "<leader>sd", ":Sf deploy metadata<CR>", { desc = "Deploy current file" })
 vim.keymap.set("n", "<leader>sD", ":Sf deploy changed<CR>", { desc = "Deploy changed files" })
 vim.keymap.set("n", "<leader>st", ":Sf test class<CR>", { desc = "Run test class" })
@@ -368,6 +374,7 @@ vim.keymap.set("n", "<leader>sq", ":Sf soql open<CR>", { desc = "Open SOQL query
 vim.keymap.set("n", "<leader>sqq", ":Sf soql run<CR>", { desc = "Run raw SOQL query" })
 vim.keymap.set("n", "<leader>sqr", ":Sf soql rerun<CR>", { desc = "Re-run last SOQL query" })
 vim.keymap.set("n", "<leader>sqs", ":Sf soql resume<CR>", { desc = "Resume saved SOQL query" })
+vim.keymap.set("n", "<leader>sqc", ":Sf soql clear<CR>", { desc = "Clear SOQL results" })
 ```
 
 ## 🎨 Features in Detail

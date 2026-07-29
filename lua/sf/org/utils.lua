@@ -58,20 +58,40 @@ function M.create_org_selection_picker(orgs, callback)
   Snacks.picker({
     items = orgs,
     layout = {
-      preset = "vscode",
+      preset = "telescope",
+      width = 0.8,
+      height = 0.7,
     },
     format = function(item, _)
-      local ret = {}
-      ret[#ret + 1] = {
-        item.org_data.alias .. " (" .. item.org_data.username .. ")",
+      local alias = item.org_data.alias or item.org_data.username or "Unknown"
+      local username = item.org_data.username or ""
+      local is_default = item.org_data.isDefaultUsername and " (default)" or ""
+
+      return {
+        { Const.ICONS.DATABASE .. " ", "SnacksPickerNormal" },
+        { alias .. is_default .. " ", "SnacksPickerNormal" },
+        { "(" .. username .. ")", "SnacksPickerComment" },
       }
-      return ret
     end,
     confirm = function(picker, item)
       picker:close()
       if callback then
         callback(item)
       end
+    end,
+    preview = function(ctx)
+      local item = ctx.item
+      if not item or not item.org_data then
+        return
+      end
+
+      local lines = Const.generate_org_preview_lines(item.org_data)
+
+      vim.bo[ctx.buf].modifiable = true
+      vim.api.nvim_buf_set_lines(ctx.buf, 0, -1, false, lines)
+      vim.bo[ctx.buf].modifiable = false
+
+      return true
     end,
   })
 end
